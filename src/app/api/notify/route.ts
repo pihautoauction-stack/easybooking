@@ -5,7 +5,7 @@ export async function POST(request: Request) {
   try {
     const { masterId, serviceId, clientName, clientPhone, startTime } = await request.json();
 
-    // 1. ПРОВЕРКА НА ПЕРЕКРЫТИЕ: ОДИН мастер — ОДИН клиент на это время
+    // 1. Проверка на занятое время
     const { data: existing } = await supabase
       .from("appointments")
       .select("id")
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
     }
 
-    // 2. ЗАПИСЬ
+    // 2. Запись в базу
     const { data: booking, error: bookingError } = await supabase
       .from("appointments")
       .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime })
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     if (bookingError) throw bookingError;
 
-    // 3. УВЕДОМЛЕНИЕ В ТГ
+    // 3. Отправка в Telegram
     const { data: master } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
     const chatId = master?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -39,7 +39,6 @@ export async function POST(request: Request) {
         body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
       });
     }
-
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

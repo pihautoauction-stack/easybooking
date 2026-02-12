@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, AtSign, Plus, Clock, Edit2 } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, AtSign, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -68,25 +68,6 @@ export default function Dashboard() {
         if (!error) { setProfileUrl(`${window.location.origin}/book/${username}`); alert("Настройки сохранены!"); }
     };
 
-    const updateService = async (id: string, updates: any) => {
-        await supabase.from("services").update(updates).eq("id", id);
-        fetchServices(user.id);
-    };
-
-    const deleteAppointment = async (id: string) => {
-        if (confirm("Удалить запись?")) {
-            await supabase.from("appointments").delete().eq("id", id);
-            fetchAppointments(user.id);
-        }
-    };
-
-    const clearAll = async () => {
-        if (confirm("ОЧИСТИТЬ ВСЕ ЗАПИСИ?")) {
-            await supabase.from("appointments").delete().eq("master_id", user.id);
-            fetchAppointments(user.id);
-        }
-    };
-
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Загрузка...</div>;
 
     return (
@@ -108,8 +89,8 @@ export default function Dashboard() {
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold flex items-center gap-2"><Calendar className="text-blue-400 w-5 h-5" /> Ближайшие записи</h2>
-                            <button onClick={clearAll} className="text-[10px] text-red-400 border border-red-500/30 px-2 py-1 rounded uppercase font-bold">Очистить всё</button>
+                            <h2 className="text-lg font-bold">Записи</h2>
+                            <button onClick={async () => { if (confirm("Очистить всё?")) { await supabase.from("appointments").delete().eq("master_id", user.id); fetchAppointments(user.id); } }} className="text-[10px] text-red-400 border border-red-500/30 px-2 py-1 rounded uppercase font-bold">Очистить всё</button>
                         </div>
                         <div className="space-y-3">
                             {appointments.map(app => (
@@ -117,9 +98,8 @@ export default function Dashboard() {
                                     <div>
                                         <div className="text-emerald-400 font-bold">{format(new Date(app.start_time), "HH:mm — d MMM", { locale: ru })}</div>
                                         <div className="text-sm text-slate-200">{app.client_name}</div>
-                                        <div className="text-[10px] text-slate-500 uppercase">{app.service?.name}</div>
                                     </div>
-                                    <button onClick={() => deleteAppointment(app.id)} className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
+                                    <button onClick={async () => { await supabase.from("appointments").delete().eq("id", app.id); fetchAppointments(user.id); }} className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             ))}
                         </div>
@@ -127,17 +107,24 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-6">
-                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                        <h2 className="text-lg font-bold mb-6 text-blue-400">Настройки кабинета</h2>
+                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                        <h2 className="text-lg font-bold mb-6 text-blue-400">Настройки</h2>
                         <div className="space-y-4">
                             <div><label className="text-[10px] uppercase text-slate-500 block mb-1">Никнейм для ссылки</label>
-                            <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-blue-500" /></div>
+                            <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none" /></div>
                             <div><label className="text-[10px] uppercase text-slate-500 block mb-1">Telegram Chat ID</label>
-                            <input value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-blue-500" /></div>
+                            <input value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none" /></div>
                             
                             <div className="pt-4 border-t border-slate-700">
-                                <label className="text-[10px] uppercase text-slate-500 block mb-3">Часы работы и выходные</label>
-                                <div className="flex gap-2 mb-4">
+                                <label className="text-[10px] uppercase text-slate-500 block mb-3">График</label>
+                                <div className="flex gap-1 mb-4">
+                                    {DAYS_OF_WEEK.map((day) => (
+                                        <button key={day.id} onClick={() => { setDisabledDays(prev => prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]); }} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${disabledDays.includes(day.id) ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-slate-700 text-slate-300"}`}>
+                                            {day.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
                                     <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-xs">
                                         {[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}
                                     </select>
@@ -145,40 +132,28 @@ export default function Dashboard() {
                                         {[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}
                                     </select>
                                 </div>
-                                <div className="flex justify-between gap-1">
-                                    {DAYS_OF_WEEK.map((day) => (
-                                        <button key={day.id} onClick={() => {
-                                            setDisabledDays(prev => prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]);
-                                        }} className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${disabledDays.includes(day.id) ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-slate-700 text-slate-300"}`}>
-                                            {day.label}
-                                        </button>
-                                    ))}
-                                </div>
                             </div>
-                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Сохранить изменения</button>
+                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all">Сохранить всё</button>
                         </div>
                     </div>
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                        <h2 className="text-lg font-bold mb-4 text-emerald-400">Мои услуги</h2>
+                        <h2 className="text-lg font-bold mb-4 text-emerald-400">Услуги</h2>
                         <div className="space-y-3 mb-6 bg-slate-900/40 p-4 rounded-xl border border-slate-700">
-                            <input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="Название услуги" className="w-full bg-slate-800 border-none rounded p-2 text-sm" />
+                            <input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="Название" className="w-full bg-slate-800 border-none rounded p-2 text-sm" />
                             <div className="flex gap-2">
                                 <input value={newServicePrice} onChange={(e) => setNewServicePrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
                                 <input value={newServiceDuration} onChange={(e) => setNewServiceDuration(e.target.value)} placeholder="Мин" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
                             </div>
-                            <button onClick={async () => {
-                                await supabase.from("services").insert({ user_id: user.id, name: newServiceName, price: Number(newServicePrice), duration: Number(newServiceDuration) || 60 });
-                                setNewServiceName(""); setNewServicePrice(""); fetchServices(user.id);
-                            }} className="w-full bg-emerald-600 py-2 rounded text-sm font-bold transition-colors">+ Добавить</button>
+                            <button onClick={async () => { await supabase.from("services").insert({ user_id: user.id, name: newServiceName, price: Number(newServicePrice), duration: Number(newServiceDuration) || 60 }); setNewServiceName(""); setNewServicePrice(""); fetchServices(user.id); }} className="w-full bg-emerald-600 py-2 rounded text-sm font-bold">+ Добавить</button>
                         </div>
                         <div className="space-y-2">
                             {services.map(s => (
                                 <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-lg border border-slate-600 group">
                                     <div className="flex-1">
-                                        <input className="bg-transparent border-none p-0 text-sm font-medium w-full focus:ring-0" defaultValue={s.name} onBlur={(e) => updateService(s.id, { name: e.target.value })} />
-                                        <div className="flex gap-2 text-xs text-emerald-400 mt-1">
-                                            <input type="number" className="bg-transparent border-none p-0 w-12 focus:ring-0" defaultValue={s.price} onBlur={(e) => updateService(s.id, { price: Number(e.target.value) })} /> ₽
+                                        <input className="bg-transparent border-none p-0 text-sm font-medium w-full focus:ring-0 outline-none" defaultValue={s.name} onBlur={async (e) => { await supabase.from("services").update({ name: e.target.value }).eq("id", s.id); fetchServices(user.id); }} />
+                                        <div className="text-xs text-emerald-400 mt-1">
+                                            <input type="number" className="bg-transparent border-none p-0 w-12 focus:ring-0 outline-none" defaultValue={s.price} onBlur={async (e) => { await supabase.from("services").update({ price: Number(e.target.value) }).eq("id", s.id); fetchServices(user.id); }} /> ₽
                                         </div>
                                     </div>
                                     <button onClick={async () => { await supabase.from("services").delete().eq("id", s.id); fetchServices(user.id); }} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
