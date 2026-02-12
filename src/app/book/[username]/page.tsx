@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { format, setHours, setMinutes, startOfToday, isBefore } from "date-fns";
+import { format, setHours, setMinutes, startOfToday, addMinutes, isBefore } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { CheckCircle, Loader2 } from "lucide-react";
+import { CheckCircle, Loader2, Clock } from "lucide-react";
 
 export default function BookingPage({ params }: { params: Promise<{ username: string }> }) {
     const { username } = use(params);
@@ -13,6 +13,7 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
     const [services, setServices] = useState<any[]>([]);
     const [selectedService, setSelectedService] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+    const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
@@ -27,9 +28,24 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
         });
     }, [username]);
 
+    useEffect(() => {
+        if (!selectedDate || !profile) return;
+        const slots: string[] = [];
+        const now = new Date();
+        // Генерация слотов на основе настроек мастера
+        let current = setMinutes(setHours(selectedDate, profile.work_start_hour || 9), 0);
+        const end = setMinutes(setHours(selectedDate, profile.work_end_hour || 21), 0);
+        
+        while (isBefore(current, end)) {
+            if (isBefore(now, current)) slots.push(format(current, "HH:mm"));
+            current = addMinutes(current, 30);
+        }
+        setAvailableSlots(slots);
+    }, [selectedDate, profile]);
+
     const handleBooking = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!profile || !selectedTime) return;
+        if (!selectedTime || !profile) return;
         setStatus("submitting");
         const [h, m] = selectedTime.split(":").map(Number);
         const startTime = setMinutes(setHours(selectedDate!, h), m).toISOString();
@@ -44,25 +60,25 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
         else setStatus("error");
     };
 
-    if (!profile) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">Загрузка...</div>;
+    if (!profile) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center font-bold">Загрузка мастера...</div>;
 
     if (status === "success") return (
         <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4 text-center">
             <CheckCircle className="w-16 h-16 text-emerald-400 mb-4" />
-            <h1 className="text-2xl font-bold text-emerald-400">Запись подтверждена!</h1>
-            <p className="mt-2 text-slate-400">Ждем вас {format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}.</p>
-            <button onClick={() => window.location.reload()} className="mt-8 bg-slate-800 px-8 py-3 rounded-full font-bold">Назад</button>
+            <h1 className="text-2xl font-bold mb-2">Запись подтверждена!</h1>
+            <p className="text-slate-400">Ждем вас {format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}.</p>
+            <button onClick={() => window.location.reload()} className="bg-slate-800 px-8 py-3 rounded-full font-bold mt-8">Вернуться назад</button>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-4">
+        <div className="min-h-screen bg-slate-900 text-white p-4 font-sans">
             <div className="max-w-md mx-auto">
-                <h1 className="text-xl font-bold mb-6 text-center text-blue-400 uppercase">{profile.business_name || profile.username}</h1>
+                <h1 className="text-xl font-bold mb-6 text-center text-blue-400 uppercase tracking-widest">{profile.business_name || profile.username}</h1>
                 {!selectedService ? (
                     <div className="space-y-4">
                         {services.map(s => (
-                            <div key={s.id} onClick={() => setSelectedService(s)} className="bg-slate-800 p-5 rounded-2xl border border-slate-700 hover:border-blue-500 cursor-pointer transition-all">
+                            <div key={s.id} onClick={() => setSelectedService(s)} className="bg-slate-800 p-5 rounded-2xl border border-slate-700 hover:border-blue-500 cursor-pointer shadow-lg transition-all active:scale-95">
                                 <h3 className="font-bold text-lg">{s.name}</h3>
                                 <p className="text-sm text-slate-400">{s.price} ₽</p>
                             </div>
@@ -70,13 +86,17 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
                     </div>
                 ) : (
                     <div className="space-y-6">
+                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                            <span className="font-bold text-blue-400">{selectedService.name}</span>
+                            <button onClick={() => setSelectedService(null)} className="text-[10px] uppercase text-slate-500 font-bold">Изменить</button>
+                        </div>
                         <div className="flex justify-center bg-slate-800 p-4 rounded-2xl border border-slate-700">
                             <DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ru} disabled={[{ before: startOfToday() }, { dayOfWeek: profile.disabled_days?.split(',').map(Number) || [] }]} />
                         </div>
                         {selectedDate && (
                             <div className="grid grid-cols-4 gap-2">
-                                {["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"].map(t => (
-                                    <button key={t} onClick={() => setSelectedTime(t)} className={`py-2 rounded-lg text-xs font-bold ${selectedTime === t ? "bg-blue-600" : "bg-slate-800 border border-slate-700 text-slate-400"}`}>{t}</button>
+                                {availableSlots.map(t => (
+                                    <button key={t} onClick={() => setSelectedTime(t)} className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedTime === t ? "bg-blue-600 shadow-lg shadow-blue-900/40" : "bg-slate-800 border border-slate-700 text-slate-400"}`}>{t}</button>
                                 ))}
                             </div>
                         )}
@@ -84,8 +104,8 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
                             <form onSubmit={handleBooking} className="space-y-4">
                                 <input required value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 outline-none focus:border-blue-500" placeholder="Ваше имя" />
                                 <input required value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 outline-none focus:border-blue-500" placeholder="Телефон" />
-                                <button type="submit" disabled={status === "submitting"} className="w-full bg-blue-600 py-4 rounded-xl font-bold shadow-lg">
-                                    {status === "submitting" ? <Loader2 className="animate-spin mx-auto" /> : "Записаться"}
+                                <button type="submit" disabled={status === "submitting"} className="w-full bg-blue-600 py-4 rounded-xl font-bold shadow-lg shadow-blue-600/20 flex justify-center">
+                                    {status === "submitting" ? <Loader2 className="animate-spin" /> : "Записаться"}
                                 </button>
                             </form>
                         )}

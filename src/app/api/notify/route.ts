@@ -5,9 +5,11 @@ export async function POST(request: Request) {
   try {
     const { masterId, serviceId, clientName, clientPhone, startTime } = await request.json();
 
-    if (!masterId || masterId === "undefined") return NextResponse.json({ error: "Master ID is missing" }, { status: 400 });
+    if (!masterId || masterId === "undefined") {
+        return NextResponse.json({ error: "Master ID missing" }, { status: 400 });
+    }
 
-    // 1. Проверка на занятость времени (Мастер один!)
+    // 1. Проверка на занятое время у ОДНОГО мастера
     const { data: existing } = await supabase
       .from("appointments")
       .select("id")
@@ -15,9 +17,11 @@ export async function POST(request: Request) {
       .eq("start_time", startTime)
       .maybeSingle();
 
-    if (existing) return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
+    if (existing) {
+      return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
+    }
 
-    // 2. Запись в базу
+    // 2. Запись в базу (RLS должен быть выключен или настроен)
     const { data: booking, error: bError } = await supabase
       .from("appointments")
       .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime })
@@ -40,6 +44,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (e: any) {
+    console.error("Critical API Error:", e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
