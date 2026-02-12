@@ -57,7 +57,7 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                masterId: profile.id, // ТЕПЕРЬ ПЕРЕДАЕМ ПРАВИЛЬНЫЙ ID
+                masterId: profile.id, // ID ТЕПЕРЬ ПЕРЕДАЕТСЯ
                 serviceId: selectedService.id,
                 clientName, clientPhone,
                 startTime: startDate.toISOString(),
@@ -75,7 +75,7 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
     if (bookingStatus === "success") return (
         <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4 text-center">
             <CheckCircle className="w-16 h-16 text-emerald-400 mb-4" />
-            <h1 className="text-2xl font-bold mb-2 text-emerald-400">Запись подтверждена!</h1>
+            <h1 className="text-2xl font-bold mb-2">Запись подтверждена!</h1>
             <p className="text-slate-400">Ждем вас {format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}.</p>
             <button onClick={() => window.location.reload()} className="mt-8 bg-slate-800 px-8 py-3 rounded-full font-bold">Вернуться назад</button>
         </div>
@@ -84,23 +84,23 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 font-sans">
             <div className="max-w-md mx-auto">
-                <h1 className="text-xl font-bold mb-6 text-center text-blue-400">{profile.business_name || profile.username}</h1>
+                <h1 className="text-xl font-bold mb-6 text-center text-blue-400 uppercase tracking-widest">{profile.business_name || profile.username}</h1>
                 {!selectedService ? (
                     <div className="space-y-4">
                         {services.map(s => (
-                            <div key={s.id} onClick={() => setSelectedService(s)} className="bg-slate-800 p-5 rounded-2xl border border-slate-700 hover:border-blue-500 cursor-pointer">
+                            <div key={s.id} onClick={() => setSelectedService(s)} className="bg-slate-800 p-5 rounded-2xl border border-slate-700 hover:border-blue-500 cursor-pointer shadow-lg transition-all active:scale-95">
                                 <h3 className="font-bold text-lg">{s.name}</h3>
                                 <p className="text-sm text-slate-400">{s.price} ₽ • {s.duration} мин</p>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="space-y-6">
+                    <div className="space-y-6 animate-in fade-in duration-500">
                         <DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ru} disabled={[{ before: startOfToday() }, { dayOfWeek: profile.disabled_days?.split(',').map(Number) || [] }]} />
                         {selectedDate && (
                             <div className="grid grid-cols-4 gap-2">
                                 {availableTimeSlots.map(t => (
-                                    <button key={t} onClick={() => setSelectedTime(t)} className={`py-2 rounded-lg text-xs font-bold ${selectedTime === t ? "bg-blue-600" : "bg-slate-800 border border-slate-700 text-slate-400"}`}>{t}</button>
+                                    <button key={t} onClick={() => setSelectedTime(t)} className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedTime === t ? "bg-blue-600 shadow-lg shadow-blue-900/40" : "bg-slate-800 border border-slate-700 text-slate-400"}`}>{t}</button>
                                 ))}
                             </div>
                         )}

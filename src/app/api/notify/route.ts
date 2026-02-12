@@ -6,11 +6,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { masterId, serviceId, clientName, clientPhone, startTime } = body;
 
+    // ПРОВЕРКА ДАННЫХ
     if (!masterId || masterId === "undefined") {
       return NextResponse.json({ error: "Мастер не определен" }, { status: 400 });
     }
 
-    // 1. Проверка на занятое время (защита от наслоения)
+    // 1. Проверка на занятое время
     const { data: existing } = await supabase
       .from("appointments")
       .select("id")
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
+    console.error("API Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
