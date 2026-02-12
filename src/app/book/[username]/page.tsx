@@ -11,10 +11,10 @@ import "react-day-picker/dist/style.css";
 interface Profile {
     id: string;
     business_name: string;
-    telegram_username: string;
+    username: string; // Изменил с telegram_username на username
     work_start_hour: number;
     work_end_hour: number;
-    disabled_days: string; // "0,6"
+    disabled_days: string;
 }
 
 interface Service {
@@ -37,7 +37,6 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
     const [services, setServices] = useState<Service[]>([]);
     const [error, setError] = useState<string | null>(null);
 
-    // Booking State
     const [selectedService, setSelectedService] = useState<Service | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
@@ -46,19 +45,18 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
-    const [bookingStatus, setBookingStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+    const [bookingStatus, setBookingStatus] = useState<"idle" | "submitting" | "success" | "error" | "conflict">("idle");
 
-    // 1. Загрузка профиля и услуг
+    // 1. Загрузка профиля по username
     useEffect(() => {
         const fetchData = async () => {
             if (!username) return;
 
             try {
-                // Загружаем профиль + настройки графика
                 const { data: profileData, error: profileError } = await supabase
                     .from("profiles")
-                    .select("id, business_name, telegram_username, work_start_hour, work_end_hour, disabled_days")
-                    .eq("telegram_username", username)
+                    .select("id, business_name, username, work_start_hour, work_end_hour, disabled_days")
+                    .eq("username", username) // Фильтруем по нашему полю ника
                     .single();
 
                 if (profileError || !profileData) {
@@ -78,16 +76,15 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
                 setServices(servicesData || []);
             } catch (err) {
                 console.error(err);
-                setError("Произошла ошибка при загрузке данных");
+                setError("Ошибка загрузки");
             } finally {
                 setLoading(false);
             }
         };
-
         fetchData();
     }, [username]);
 
-    // 2. Логика расчета свободного времени
+    // 2. Расчет свободных слотов
     useEffect(() => {
         const fetchAvailability = async () => {
             if (!selectedDate || !profile || !selectedService) return;
@@ -97,22 +94,15 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
 
             const startOfDay = new Date(selectedDate);
             startOfDay.setHours(0, 0, 0, 0);
-            
             const endOfDay = new Date(selectedDate);
             endOfDay.setHours(23, 59, 59, 999);
 
-            const { data: appointments, error } = await supabase
+            const { data: appointments } = await supabase
                 .from("appointments")
                 .select("start_time, end_time")
                 .eq("master_id", profile.id)
                 .gte("start_time", startOfDay.toISOString())
                 .lte("end_time", endOfDay.toISOString());
-
-            if (error) {
-                console.error("Ошибка получения расписания", error);
-                setSlotsLoading(false);
-                return;
-            }
 
             const busySlots: BusySlot[] = (appointments || []).map(app => ({
                 start: new Date(app.start_time),
@@ -123,18 +113,13 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
             setAvailableTimeSlots(slots);
             setSlotsLoading(false);
         };
-
         fetchAvailability();
     }, [selectedDate, selectedService, profile]);
 
-    // Умная функция генерации слотов (с учетом настроек профиля)
     const generateSmartSlots = (date: Date, serviceDuration: number, busySlots: BusySlot[]) => {
         if (!profile) return [];
-
         const slots: string[] = [];
         const now = new Date();
-
-        // Берем настройки из профиля (или дефолтные 9-21)
         const startHour = profile.work_start_hour ?? 9;
         const endHour = profile.work_end_hour ?? 21;
 
@@ -143,38 +128,22 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
 
         while (isBefore(currentTime, endTime)) {
             const potentialEnd = addMinutes(currentTime, serviceDuration);
+            if (isBefore(endTime, potentialEnd)) break;
+            if (isBefore(currentTime, now)) { currentTime = addMinutes(currentTime, 30); continue; }
 
-            if (isBefore(endTime, potentialEnd)) {
-                break; 
-            }
+            const isOverlapping = busySlots.some(busy => 
+                (currentTime >= busy.start && currentTime < busy.end) ||
+                (potentialEnd > busy.start && potentialEnd <= busy.end) ||
+                (currentTime <= busy.start && potentialEnd >= busy.end)
+            );
 
-            if (isBefore(currentTime, now)) {
-                currentTime = addMinutes(currentTime, 30);
-                continue;
-            }
-
-            let isOverlapping = false;
-            for (const busy of busySlots) {
-                if (
-                    (currentTime >= busy.start && currentTime < busy.end) ||
-                    (potentialEnd > busy.start && potentialEnd <= busy.end) ||
-                    (currentTime <= busy.start && potentialEnd >= busy.end)
-                ) {
-                    isOverlapping = true;
-                    break;
-                }
-            }
-
-            if (!isOverlapping) {
-                slots.push(format(currentTime, "HH:mm"));
-            }
-
+            if (!isOverlapping) slots.push(format(currentTime, "HH:mm"));
             currentTime = addMinutes(currentTime, 30);
         }
-
         return slots;
     };
 
+    // 3. ОТПРАВКА ЗАПИСИ ЧЕРЕЗ API
     const handleBooking = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedService || !selectedDate || !selectedTime || !profile) return;
@@ -183,54 +152,34 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
 
         const [hours, minutes] = selectedTime.split(":").map(Number);
         const startDate = setMinutes(setHours(selectedDate, hours), minutes);
-        const endDate = addMinutes(startDate, selectedService.duration);
 
-        const { error } = await supabase.from("appointments").insert({
-            master_id: profile.id,
-            service_id: selectedService.id,
-            client_name: clientName,
-            client_phone: clientPhone,
-            start_time: startDate.toISOString(),
-            end_time: endDate.toISOString(),
-            status: "pending",
-        });
+        try {
+            const response = await fetch('/api/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    masterId: profile.id,       // ТЕПЕРЬ ПЕРЕДАЕМ ПРАВИЛЬНО
+                    serviceId: selectedService.id,
+                    clientName: clientName,
+                    clientPhone: clientPhone,
+                    startTime: startDate.toISOString(),
+                }),
+            });
 
-        if (error) {
-            console.error("Booking error:", error);
-            setBookingStatus("error");
-        } else {
-            try {
-                await fetch('/api/notify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: clientName,
-                        phone: clientPhone,
-                        service: selectedService.name,
-                        date: format(startDate, 'dd.MM.yyyy', { locale: ru }),
-                        time: selectedTime
-                    }),
-                });
-            } catch (notifyError) {
-                console.error(notifyError);
+            if (response.status === 409) {
+                setBookingStatus("conflict");
+                return;
             }
-            setBookingStatus("success");
+
+            if (response.ok) {
+                setBookingStatus("success");
+            } else {
+                setBookingStatus("error");
+            }
+        } catch (err) {
+            console.error(err);
+            setBookingStatus("error");
         }
-    };
-
-    const resetBooking = () => {
-        setSelectedService(null);
-        setSelectedDate(undefined);
-        setSelectedTime(null);
-        setBookingStatus("idle");
-        setClientName("");
-        setClientPhone("");
-    };
-
-    // Определяем выходные дни для календаря
-    const getDisabledDays = () => {
-        if (!profile || !profile.disabled_days) return [];
-        return profile.disabled_days.split(',').map(Number);
     };
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><Loader2 className="w-8 h-8 text-blue-500 animate-spin" /></div>;
@@ -238,43 +187,31 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
 
     if (bookingStatus === "success") {
         return (
-            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4 text-center">
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4 text-center animate-in zoom-in-95 duration-300">
                 <div className="bg-emerald-500/20 p-6 rounded-full mb-6">
                     <CheckCircle className="w-16 h-16 text-emerald-400" />
                 </div>
                 <h1 className="text-3xl font-bold mb-4">Запись подтверждена!</h1>
                 <p className="text-slate-400 max-w-xs mb-8">Ждем вас {selectedDate && format(selectedDate, "d MMMM", { locale: ru })} в {selectedTime}.</p>
-                <button onClick={resetBooking} className="px-8 py-3 bg-slate-800 hover:bg-slate-700 rounded-full font-medium transition-colors">Вернуться назад</button>
+                <button onClick={() => window.location.reload()} className="px-8 py-3 bg-slate-800 hover:bg-slate-700 rounded-full font-medium transition-colors">Вернуться назад</button>
             </div>
         );
     }
 
-    const css = `
-    .rdp { --rdp-cell-size: 40px; --rdp-accent-color: #2563eb; --rdp-background-color: #1e293b; margin: 0; }
-    .rdp-day_selected:not([disabled]) { background-color: var(--rdp-accent-color); font-weight: bold; }
-    .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #334155; }
-    .rdp-day_today { color: #3b82f6; font-weight: bold; }
-    .rdp-day_disabled { opacity: 0.2; cursor: not-allowed; color: #ef4444; }
-  `;
-
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-4">
-            <style>{css}</style>
+        <div className="min-h-screen bg-slate-900 text-white p-4 font-sans">
             <main className="max-w-md mx-auto pt-4 pb-12">
-                
-                {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                     {selectedService && (
                         <button onClick={() => setSelectedService(null)} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><ChevronLeft className="w-6 h-6" /></button>
                     )}
                     <div>
-                        <h1 className="text-xl font-bold">{profile.business_name || `@${profile.telegram_username}`}</h1>
+                        <h1 className="text-xl font-bold">{profile.business_name || `@${profile.username}`}</h1>
                         <p className="text-sm text-slate-400">{selectedService ? "Запись на услугу" : "Выберите услугу"}</p>
                     </div>
                 </div>
 
-                {/* Step 1: Services */}
-                {!selectedService && (
+                {!selectedService ? (
                     <div className="space-y-4">
                         {services.map((service) => (
                             <div key={service.id} onClick={() => setSelectedService(service)} className="bg-slate-800 rounded-2xl p-5 border border-slate-700 hover:border-blue-500 cursor-pointer transition-all active:scale-[0.98]">
@@ -291,96 +228,49 @@ export default function BookingPage({ params }: { params: Promise<{ username: st
                             </div>
                         ))}
                     </div>
-                )}
-
-                {/* Step 2: Date & Time */}
-                {selectedService && (
+                ) : (
                     <div className="space-y-6">
                         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-medium">{selectedService.name}</h3>
-                                <p className="text-sm text-slate-400">{selectedService.duration} мин • {selectedService.price} ₽</p>
-                            </div>
-                            <button onClick={() => setSelectedService(null)} className="text-xs text-blue-400 hover:text-blue-300">Изменить</button>
+                            <div><h3 className="font-medium text-blue-400">{selectedService.name}</h3></div>
+                            <button onClick={() => setSelectedService(null)} className="text-xs text-slate-500 uppercase font-bold">Изменить</button>
                         </div>
 
-                        {/* Calendar */}
                         <div className="flex justify-center bg-slate-800 rounded-2xl p-4 border border-slate-700">
                             <DayPicker
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 locale={ru}
-                                // Блокируем прошедшие дни И ВЫХОДНЫЕ
-                                disabled={[
-                                    { before: startOfToday() },
-                                    { dayOfWeek: getDisabledDays() }
-                                ]}
-                                styles={{
-                                    head_cell: { color: "#94a3b8" },
-                                    cell: { color: "#e2e8f0" },
-                                    nav_button: { color: "#e2e8f0" },
-                                    caption: { color: "#e2e8f0" }
-                                }}
+                                disabled={[{ before: startOfToday() }, { dayOfWeek: profile.disabled_days ? profile.disabled_days.split(',').map(Number) : [] }]}
                             />
                         </div>
 
-                        {/* Time Slots */}
                         {selectedDate && (
-                            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-                                <h3 className="font-medium mb-3 flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-emerald-400" />
-                                    Доступное время
-                                </h3>
-                                
+                            <div className="space-y-4">
+                                <h3 className="font-medium flex items-center gap-2"><Clock className="w-4 h-4 text-blue-400" /> Доступное время</h3>
                                 {slotsLoading ? (
-                                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-500" /></div>
+                                    <div className="flex justify-center py-4"><Loader2 className="animate-spin text-blue-500" /></div>
                                 ) : availableTimeSlots.length > 0 ? (
-                                    <div className="grid grid-cols-4 gap-3">
+                                    <div className="grid grid-cols-4 gap-2">
                                         {availableTimeSlots.map((time) => (
-                                            <button
-                                                key={time}
-                                                onClick={() => setSelectedTime(time)}
-                                                className={`py-2 px-1 rounded-lg text-sm font-medium border transition-all ${selectedTime === time
-                                                    ? "bg-emerald-600 border-emerald-500 text-white"
-                                                    : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
-                                                    }`}
-                                            >
-                                                {time}
-                                            </button>
+                                            <button key={time} onClick={() => setSelectedTime(time)} className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedTime === time ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 border border-slate-700"}`}>{time}</button>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl text-center text-sm flex flex-col items-center gap-2">
-                                        <AlertCircle className="w-5 h-5" />
-                                        Нет свободного времени на этот день
-                                    </div>
+                                    <p className="text-red-400 text-sm text-center">Нет свободных окон</p>
                                 )}
                             </div>
                         )}
 
-                        {/* Form */}
-                        {selectedDate && selectedTime && (
-                            <form onSubmit={handleBooking} className="animate-in fade-in slide-in-from-top-4 duration-300 pt-4 border-t border-slate-800">
-                                <h3 className="font-medium mb-4">Ваши данные</h3>
-                                <div className="space-y-4 mb-6">
-                                    <div>
-                                        <div className="relative">
-                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                            <input required type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ваше имя" />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="relative">
-                                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                            <input required type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="+7 (999) 000-00-00" />
-                                        </div>
-                                    </div>
-                                </div>
-                                <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center justify-center gap-2">
-                                    {bookingStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Подтвердить запись"}
+                        {selectedTime && (
+                            <form onSubmit={handleBooking} className="space-y-4 pt-4 border-t border-slate-800">
+                                <input required type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Ваше имя" />
+                                <input required type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 outline-none focus:border-blue-500" placeholder="Телефон" />
+                                <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-blue-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                                    {bookingStatus === "submitting" ? <Loader2 className="animate-spin" /> : "Подтвердить запись"}
                                 </button>
-                                {bookingStatus === "error" && <p className="text-red-400 text-sm text-center mt-3">Ошибка при создании записи.</p>}
+                                {bookingStatus === "conflict" && <p className="text-orange-400 text-sm text-center mt-2">Это время только что заняли. Выберите другое.</p>}
+                                {bookingStatus === "error" && <p className="text-red-400 text-sm text-center mt-2">Ошибка при записи. Попробуйте снова.</p>}
                             </form>
                         )}
                     </div>
