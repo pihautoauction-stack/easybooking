@@ -65,7 +65,7 @@ export default function Dashboard() {
     const handleSaveProfile = async () => {
         const updates = { id: user.id, business_name: businessName, username: username.toLowerCase().trim(), telegram_chat_id: telegramChatId.trim(), work_start_hour: workStart, work_end_hour: workEnd, disabled_days: disabledDays.join(','), updated_at: new Date() };
         const { error } = await supabase.from("profiles").upsert(updates);
-        if (!error) { setProfileUrl(`${window.location.origin}/book/${username}`); alert("Настройки сохранены!"); }
+        if (!error) { setProfileUrl(`${window.location.origin}/book/${username}`); alert("Сохранено!"); }
     };
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Загрузка...</div>;
@@ -89,7 +89,7 @@ export default function Dashboard() {
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Записи</h2>
+                            <h2 className="text-lg font-bold">Ближайшие записи</h2>
                             <button onClick={async () => { if (confirm("Очистить всё?")) { await supabase.from("appointments").delete().eq("master_id", user.id); fetchAppointments(user.id); } }} className="text-[10px] text-red-400 border border-red-500/30 px-2 py-1 rounded uppercase font-bold">Очистить всё</button>
                         </div>
                         <div className="space-y-3">
@@ -98,6 +98,7 @@ export default function Dashboard() {
                                     <div>
                                         <div className="text-emerald-400 font-bold">{format(new Date(app.start_time), "HH:mm — d MMM", { locale: ru })}</div>
                                         <div className="text-sm text-slate-200">{app.client_name}</div>
+                                        <div className="text-xs text-slate-500">{app.service?.name}</div>
                                     </div>
                                     <button onClick={async () => { await supabase.from("appointments").delete().eq("id", app.id); fetchAppointments(user.id); }} className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
                                 </div>
@@ -108,15 +109,15 @@ export default function Dashboard() {
 
                 <div className="space-y-6">
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                        <h2 className="text-lg font-bold mb-6 text-blue-400">Настройки</h2>
+                        <h2 className="text-lg font-bold mb-6 text-blue-400">Настройки кабинета</h2>
                         <div className="space-y-4">
                             <div><label className="text-[10px] uppercase text-slate-500 block mb-1">Никнейм для ссылки</label>
-                            <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none" /></div>
+                            <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-blue-500" /></div>
                             <div><label className="text-[10px] uppercase text-slate-500 block mb-1">Telegram Chat ID</label>
-                            <input value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none" /></div>
+                            <input value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-blue-500" /></div>
                             
                             <div className="pt-4 border-t border-slate-700">
-                                <label className="text-[10px] uppercase text-slate-500 block mb-3">График</label>
+                                <label className="text-[10px] uppercase text-slate-500 block mb-3">График работы</label>
                                 <div className="flex gap-1 mb-4">
                                     {DAYS_OF_WEEK.map((day) => (
                                         <button key={day.id} onClick={() => { setDisabledDays(prev => prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]); }} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${disabledDays.includes(day.id) ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-slate-700 text-slate-300"}`}>
@@ -133,14 +134,14 @@ export default function Dashboard() {
                                     </select>
                                 </div>
                             </div>
-                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all">Сохранить всё</button>
+                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Сохранить изменения</button>
                         </div>
                     </div>
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                        <h2 className="text-lg font-bold mb-4 text-emerald-400">Услуги</h2>
+                        <h2 className="text-lg font-bold mb-4 text-emerald-400 uppercase">Мои услуги</h2>
                         <div className="space-y-3 mb-6 bg-slate-900/40 p-4 rounded-xl border border-slate-700">
-                            <input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="Название" className="w-full bg-slate-800 border-none rounded p-2 text-sm" />
+                            <input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="Название услуги" className="w-full bg-slate-800 border-none rounded p-2 text-sm" />
                             <div className="flex gap-2">
                                 <input value={newServicePrice} onChange={(e) => setNewServicePrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
                                 <input value={newServiceDuration} onChange={(e) => setNewServiceDuration(e.target.value)} placeholder="Мин" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
