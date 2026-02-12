@@ -6,56 +6,39 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { masterId, serviceId, clientName, clientPhone, startTime } = body;
 
-    // 1. Записываем клиента в таблицу appointments
-    const { data: booking, error: bookingError } = await supabase
+    if (!masterId) return NextResponse.json({ error: "Master ID Error" }, { status: 400 });
+
+    // 1. ПРОВЕРКА НА ЗАНЯТОСТЬ
+    const { data: busy } = await supabase
       .from("appointments")
-      .insert({
-        master_id: masterId,
-        service_id: serviceId,
-        client_name: clientName,
-        client_phone: clientPhone,
-        start_time: startTime,
-      })
-      .select()
-      .single();
+      .select("id")
+      .eq("master_id", masterId)
+      .eq("start_time", startTime)
+      .maybeSingle();
 
-    if (bookingError) throw bookingError;
+    if (busy) return NextResponse.json({ error: "Busy" }, { status: 409 });
 
-    // 2. Ищем в базе telegram_chat_id именно этого мастера
-    const { data: masterProfile } = await supabase
-      .from("profiles")
-      .select("telegram_chat_id, business_name")
-      .eq("id", masterId)
-      .single();
+    // 2. ЗАПИСЬ
+    const { error: insertError } = await supabase
+      .from("appointments")
+      .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime });
 
-    // 3. Определяем, куда слать уведомление
-    // Если мастер ввел свой ID — шлем ему. Если нет — берем твой ID из настроек Vercel (запасной).
-    const chatId = masterProfile?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
+    if (insertError) throw insertError;
+
+    // 3. УВЕДОМЛЕНИЕ
+    const { data: m } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    if (chatId && botToken) {
-      const message = 
-        `🔔 *Новая запись к мастеру: ${masterProfile?.business_name || "Без названия"}*\n\n` +
-        `👤 Клиент: ${clientName}\n` +
-        `📞 Тел: ${clientPhone}\n` +
-        `📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}`;
-
-      // Отправляем запрос в Telegram
+    if (m?.telegram_chat_id && botToken) {
+      const msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 ${clientName}\n📞 ${clientPhone}\n📅 ${new Date(startTime).toLocaleString('ru-RU')}`;
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: "Markdown",
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: m.telegram_chat_id, text: msg, parse_mode: "Markdown" })
       });
     }
 
-    return NextResponse.json({ success: true, booking });
-
-  } catch (error: any) {
-    console.error("Ошибка API:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
