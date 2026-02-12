@@ -1,50 +1,29 @@
-import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const { masterId, serviceId, clientName, clientPhone, startTime } = await request.json();
+    const { name, phone, service, date, time } = await req.json();
+    
+    // Эти ключи уже есть в твоем .env.local
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
 
-    if (!masterId || masterId === "undefined") {
-        return NextResponse.json({ error: "Master ID missing" }, { status: 400 });
-    }
+    const text = `🔥 *Новая запись!*\n\n👤 Клиент: ${name}\n📞 Тел: ${phone}\n✂️ Услуга: ${service}\n📅 Дата: ${date}\n⏰ Время: ${time}`;
 
-    // 1. Проверка на занятое время у ОДНОГО мастера
-    const { data: existing } = await supabase
-      .from("appointments")
-      .select("id")
-      .eq("master_id", masterId)
-      .eq("start_time", startTime)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
-    }
-
-    // 2. Запись в базу (RLS должен быть выключен или настроен)
-    const { data: booking, error: bError } = await supabase
-      .from("appointments")
-      .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime })
-      .select().single();
-
-    if (bError) throw bError;
-
-    // 3. Telegram уведомление
-    const { data: m } = await supabase.from("profiles").select("telegram_chat_id, business_name").eq("id", masterId).single();
-    const chatId = m?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-
-    if (chatId && botToken) {
-      const msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 Клиент: ${clientName}\n📞 Тел: ${clientPhone}\n📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}`;
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
-      });
-    }
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown',
+      }),
+    });
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    console.error("Critical API Error:", e.message);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
