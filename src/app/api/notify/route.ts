@@ -3,15 +3,11 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { masterId, serviceId, clientName, clientPhone, startTime } = body;
+    const { masterId, serviceId, clientName, clientPhone, startTime } = await request.json();
 
-    // ПРОВЕРКА ДАННЫХ
-    if (!masterId || masterId === "undefined") {
-      return NextResponse.json({ error: "Мастер не определен" }, { status: 400 });
-    }
+    if (!masterId || masterId === "undefined") return NextResponse.json({ error: "Master ID is missing" }, { status: 400 });
 
-    // 1. Проверка на занятое время
+    // 1. Проверка на занятость времени (Мастер один!)
     const { data: existing } = await supabase
       .from("appointments")
       .select("id")
@@ -19,21 +15,19 @@ export async function POST(request: Request) {
       .eq("start_time", startTime)
       .maybeSingle();
 
-    if (existing) {
-      return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
-    }
+    if (existing) return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
 
     // 2. Запись в базу
-    const { data: booking, error: bookingError } = await supabase
+    const { data: booking, error: bError } = await supabase
       .from("appointments")
       .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime })
       .select().single();
 
-    if (bookingError) throw bookingError;
+    if (bError) throw bError;
 
-    // 3. Уведомление в Telegram
-    const { data: master } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
-    const chatId = master?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
+    // 3. Telegram уведомление
+    const { data: m } = await supabase.from("profiles").select("telegram_chat_id, business_name").eq("id", masterId).single();
+    const chatId = m?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
     if (chatId && botToken) {
@@ -45,8 +39,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error("API Error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
