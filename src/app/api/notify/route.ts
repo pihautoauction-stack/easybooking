@@ -1,29 +1,61 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { name, phone, service, date, time } = await req.json();
-    
-    // Эти ключи уже есть в твоем .env.local
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const body = await request.json();
+    const { masterId, serviceId, clientName, clientPhone, startTime } = body;
 
-    const text = `🔥 *Новая запись!*\n\n👤 Клиент: ${name}\n📞 Тел: ${phone}\n✂️ Услуга: ${service}\n📅 Дата: ${date}\n⏰ Время: ${time}`;
+    // 1. Записываем клиента в таблицу appointments
+    const { data: booking, error: bookingError } = await supabase
+      .from("appointments")
+      .insert({
+        master_id: masterId,
+        service_id: serviceId,
+        client_name: clientName,
+        client_phone: clientPhone,
+        start_time: startTime,
+      })
+      .select()
+      .single();
 
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown',
-      }),
-    });
+    if (bookingError) throw bookingError;
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ success: false }, { status: 500 });
+    // 2. Ищем в базе telegram_chat_id именно этого мастера
+    const { data: masterProfile } = await supabase
+      .from("profiles")
+      .select("telegram_chat_id, business_name")
+      .eq("id", masterId)
+      .single();
+
+    // 3. Определяем, куда слать уведомление
+    // Если мастер ввел свой ID — шлем ему. Если нет — берем твой ID из настроек Vercel (запасной).
+    const chatId = masterProfile?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (chatId && botToken) {
+      const message = 
+        `🔔 *Новая запись к мастеру: ${masterProfile?.business_name || "Без названия"}*\n\n` +
+        `👤 Клиент: ${clientName}\n` +
+        `📞 Тел: ${clientPhone}\n` +
+        `📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}`;
+
+      // Отправляем запрос в Telegram
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: "Markdown",
+        }),
+      });
+    }
+
+    return NextResponse.json({ success: true, booking });
+
+  } catch (error: any) {
+    console.error("Ошибка API:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
