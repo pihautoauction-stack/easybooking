@@ -3,23 +3,21 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { masterId, serviceId, clientName, clientPhone, startTime } = body;
+    const { masterId, serviceId, clientName, clientPhone, startTime } = await request.json();
 
-    // 1. ПРОВЕРКА НА ПЕРЕКРЫТИЕ (Мастер один!)
+    // 1. ЗАЩИТА ОТ НАСЛОЕНИЯ: Проверяем, нет ли уже записи на это время у мастера
     const { data: existing } = await supabase
       .from("appointments")
       .select("id")
       .eq("master_id", masterId)
       .eq("start_time", startTime)
-      .eq("status", "confirmed") // Считаем только живые записи
       .maybeSingle();
 
     if (existing) {
-      return NextResponse.json({ error: "Это время уже занято другим клиентом" }, { status: 409 });
+      return NextResponse.json({ error: "Это время уже занято" }, { status: 409 });
     }
 
-    // 2. ЗАПИСЬ
+    // 2. ЗАПИСЬ В БАЗУ
     const { data: booking, error: bookingError } = await supabase
       .from("appointments")
       .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime })
@@ -27,21 +25,23 @@ export async function POST(request: Request) {
 
     if (bookingError) throw bookingError;
 
-    // 3. УВЕДОМЛЕНИЕ В ТГ
+    // 3. УВЕДОМЛЕНИЕ
     const { data: master } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
     const chatId = master?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
-    const cancelLink = `${new URL(request.url).origin}/cancel/${booking.id}`;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    if (chatId && process.env.TELEGRAM_BOT_TOKEN) {
-      const msg = `🔔 *Новая запись!*\n\n👤 Клиент: ${clientName}\n📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}\n\n❌ [Отменить запись](${cancelLink})`;
-      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    if (chatId && botToken) {
+      const cancelLink = `${new URL(request.url).origin}/cancel/${booking.id}`;
+      const msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 Клиент: ${clientName}\n📞 Тел: ${clientPhone}\n📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}\n\n❌ [ОТМЕНИТЬ ЗАПИСЬ](${cancelLink})`;
+      
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
       });
     }
 
-    return NextResponse.json({ success: true, booking });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
