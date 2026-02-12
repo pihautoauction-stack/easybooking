@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, AtSign, Plus, Clock } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, AtSign, Plus, Clock, Edit2 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -68,19 +68,20 @@ export default function Dashboard() {
         if (!error) { setProfileUrl(`${window.location.origin}/book/${username}`); alert("Настройки сохранены!"); }
     };
 
-    const addService = async () => {
-        if (!newServiceName || !newServicePrice) return;
-        await supabase.from("services").insert({ user_id: user.id, name: newServiceName, price: Number(newServicePrice), duration: Number(newServiceDuration) || 60 });
-        setNewServiceName(""); setNewServicePrice(""); fetchServices(user.id);
-    };
-
-    const deleteService = async (id: string) => {
-        await supabase.from("services").delete().eq("id", id);
+    const updateService = async (id: string, updates: any) => {
+        await supabase.from("services").update(updates).eq("id", id);
         fetchServices(user.id);
     };
 
+    const deleteAppointment = async (id: string) => {
+        if (confirm("Удалить запись?")) {
+            await supabase.from("appointments").delete().eq("id", id);
+            fetchAppointments(user.id);
+        }
+    };
+
     const clearAll = async () => {
-        if (confirm("УДАЛИТЬ ВООБЩЕ ВСЕ ЗАПИСИ?")) {
+        if (confirm("ОЧИСТИТЬ ВСЕ ЗАПИСИ?")) {
             await supabase.from("appointments").delete().eq("master_id", user.id);
             fetchAppointments(user.id);
         }
@@ -92,7 +93,7 @@ export default function Dashboard() {
         <div className="min-h-screen bg-slate-900 text-white p-6">
             <header className="max-w-6xl mx-auto flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-2xl border border-slate-700">
                 <h1 className="text-xl font-bold flex items-center gap-2"><Settings className="text-blue-500" /> Панель мастера</h1>
-                <button onClick={() => {supabase.auth.signOut(); router.push("/");}} className="text-slate-400 hover:text-red-400 flex items-center gap-2"><LogOut className="w-4 h-4" /> Выйти</button>
+                <button onClick={() => {supabase.auth.signOut(); router.push("/");}} className="text-slate-400 hover:text-red-400 flex items-center gap-2 transition-colors"><LogOut className="w-4 h-4" /> Выйти</button>
             </header>
 
             <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -107,7 +108,7 @@ export default function Dashboard() {
 
                     <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Ближайшие записи</h2>
+                            <h2 className="text-lg font-bold flex items-center gap-2"><Calendar className="text-blue-400 w-5 h-5" /> Ближайшие записи</h2>
                             <button onClick={clearAll} className="text-[10px] text-red-400 border border-red-500/30 px-2 py-1 rounded uppercase font-bold">Очистить всё</button>
                         </div>
                         <div className="space-y-3">
@@ -118,7 +119,7 @@ export default function Dashboard() {
                                         <div className="text-sm text-slate-200">{app.client_name}</div>
                                         <div className="text-[10px] text-slate-500 uppercase">{app.service?.name}</div>
                                     </div>
-                                    <button onClick={async () => { await supabase.from("appointments").delete().eq("id", app.id); fetchAppointments(user.id); }} className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
+                                    <button onClick={() => deleteAppointment(app.id)} className="text-slate-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             ))}
                         </div>
@@ -135,8 +136,8 @@ export default function Dashboard() {
                             <input value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-blue-500" /></div>
                             
                             <div className="pt-4 border-t border-slate-700">
-                                <label className="text-[10px] uppercase text-slate-500 block mb-3">Часы работы</label>
-                                <div className="flex gap-2">
+                                <label className="text-[10px] uppercase text-slate-500 block mb-3">Часы работы и выходные</label>
+                                <div className="flex gap-2 mb-4">
                                     <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-xs">
                                         {[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}
                                     </select>
@@ -144,8 +145,17 @@ export default function Dashboard() {
                                         {[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}
                                     </select>
                                 </div>
+                                <div className="flex justify-between gap-1">
+                                    {DAYS_OF_WEEK.map((day) => (
+                                        <button key={day.id} onClick={() => {
+                                            setDisabledDays(prev => prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]);
+                                        }} className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${disabledDays.includes(day.id) ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-slate-700 text-slate-300"}`}>
+                                            {day.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all">Сохранить изменения</button>
+                            <button onClick={handleSaveProfile} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Сохранить изменения</button>
                         </div>
                     </div>
 
@@ -157,13 +167,21 @@ export default function Dashboard() {
                                 <input value={newServicePrice} onChange={(e) => setNewServicePrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
                                 <input value={newServiceDuration} onChange={(e) => setNewServiceDuration(e.target.value)} placeholder="Мин" type="number" className="w-1/2 bg-slate-800 border-none rounded p-2 text-sm" />
                             </div>
-                            <button onClick={addService} className="w-full bg-emerald-600 py-2 rounded text-sm font-bold transition-colors">+ Добавить</button>
+                            <button onClick={async () => {
+                                await supabase.from("services").insert({ user_id: user.id, name: newServiceName, price: Number(newServicePrice), duration: Number(newServiceDuration) || 60 });
+                                setNewServiceName(""); setNewServicePrice(""); fetchServices(user.id);
+                            }} className="w-full bg-emerald-600 py-2 rounded text-sm font-bold transition-colors">+ Добавить</button>
                         </div>
                         <div className="space-y-2">
                             {services.map(s => (
-                                <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-lg border border-slate-600">
-                                    <div className="text-sm font-medium">{s.name} — <span className="text-emerald-400">{s.price} ₽</span></div>
-                                    <button onClick={() => deleteService(s.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                                <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-lg border border-slate-600 group">
+                                    <div className="flex-1">
+                                        <input className="bg-transparent border-none p-0 text-sm font-medium w-full focus:ring-0" defaultValue={s.name} onBlur={(e) => updateService(s.id, { name: e.target.value })} />
+                                        <div className="flex gap-2 text-xs text-emerald-400 mt-1">
+                                            <input type="number" className="bg-transparent border-none p-0 w-12 focus:ring-0" defaultValue={s.price} onBlur={(e) => updateService(s.id, { price: Number(e.target.value) })} /> ₽
+                                        </div>
+                                    </div>
+                                    <button onClick={async () => { await supabase.from("services").delete().eq("id", s.id); fetchServices(user.id); }} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             ))}
                         </div>
