@@ -34,12 +34,14 @@ export async function POST(request: Request) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
     if (chatId && botToken) {
-      const message = 
-        `🔔 *Новая запись к мастеру: ${masterProfile?.business_name || "Без названия"}*\n\n` +
-        `👤 Клиент: ${clientName}\n` +
-        `📞 Тел: ${clientPhone}\n` +
-        `📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}`;
+      const cancelLink = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://' + request.headers.get('host')}/cancel/${booking.id}`;
 
+const message = 
+    `🔔 *Новая запись!*\n\n` +
+    `👤 Клиент: ${clientName}\n` +
+    `📞 Тел: ${clientPhone}\n` +
+    `📅 Время: ${new Date(startTime).toLocaleString('ru-RU')}\n\n` +
+    `📍 [Ссылка для отмены клиентом](${cancelLink})`;
       // Отправляем запрос в Telegram
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST",
