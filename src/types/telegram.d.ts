@@ -5,6 +5,7 @@ interface TelegramWebApp {
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
   showPopup: (params: { title?: string; message: string; buttons?: any[] }) => void;
+  showConfirm: (message: string, callback: (confirmed: boolean) => void) => void; // <--- ВОТ ЭТО МЫ ДОБАВИЛИ
   initDataUnsafe: {
     user?: {
       id: number;
