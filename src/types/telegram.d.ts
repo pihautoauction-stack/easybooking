@@ -12,7 +12,7 @@ interface TelegramWebApp {
       last_name?: string;
       username?: string;
     };
-    start_param?: string; // Добавили для фикса ошибки в логе e7950a
+    start_param?: string;
   };
   themeParams: {
     bg_color?: string;
