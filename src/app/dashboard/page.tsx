@@ -13,7 +13,7 @@ export default function Dashboard() {
     const [user, setUser] = useState<any>(null);
     const [isBrowser, setIsBrowser] = useState(false);
     const [returnLink, setReturnLink] = useState<string | null>(null);
-    const [debugInfo, setDebugInfo] = useState<string>("Инициализация...");
+    const [debug, setDebug] = useState("Инициализация...");
 
     // Данные профиля
     const [businessName, setBusinessName] = useState("");
@@ -21,16 +21,10 @@ export default function Dashboard() {
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     
-    // Состояния кнопок
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
-
-    const DAYS = [
-        { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
-        { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
-    ];
 
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
@@ -40,42 +34,48 @@ export default function Dashboard() {
                 // 1. ПРОВЕРКА ПЛАТФОРМЫ
                 if (!tg?.initData) {
                     setIsBrowser(true);
-                    setDebugInfo("Режим: Safari. Проверка сессии...");
+                    setDebug("Safari: Проверка сессии...");
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.refresh_token) {
-                        const botName = "my_cool_booking_bot";
-                        setReturnLink(`https://t.me/${botName}?startapp=${session.refresh_token}`);
+                        const botName = "my_cool_booking_bot"; // Твой бот
+                        setReturnLink(`https://t.me/${botName}/app?startapp=${session.refresh_token}`);
                     }
                     setLoading(false);
                     return;
                 }
 
-                // 2. НАСТРОЙКА TELEGRAM
+                // 2. TELEGRAM SETUP
                 tg.ready();
                 tg.expand();
-                setDebugInfo("Режим: Telegram. Обработка входа...");
+                setDebug("Telegram: Обработка входа...");
 
-                // 3. ОБРАБОТКА ТОКЕНА (startapp)
+                // 3. ОБРАБОТКА ТОКЕНА (ОБЯЗАТЕЛЬНО ПЕРЕД ЗАГРУЗКОЙ ДАННЫХ)
                 const startParam = tg?.initDataUnsafe?.start_param;
                 if (startParam && startParam.length > 30) {
+                    setDebug("Вход по токену...");
                     const { error } = await supabase.auth.refreshSession({ refresh_token: startParam });
                     if (!error) {
+                        // Очищаем URL от токена, чтобы он не воспринимался как ID мастера
                         window.history.replaceState({}, document.title, window.location.pathname);
-                        setDebugInfo("Вход по токену успешен.");
+                        setDebug("Вход успешен.");
+                    } else {
+                        setDebug("Ошибка токена: " + error.message);
                     }
                 }
 
                 // 4. ПРОВЕРКА АВТОРИЗАЦИИ
                 const { data: { user: authUser } } = await supabase.auth.getUser();
                 if (!authUser) {
+                    setDebug("Юзер не найден, иду на логин...");
                     router.push("/login");
                     return;
                 }
 
                 setUser(authUser);
                 await loadData(authUser.id);
+                setDebug("Данные загружены.");
             } catch (err: any) {
-                setDebugInfo("Ошибка инициализации: " + err.message);
+                setDebug("Ошибка: " + err.message);
             } finally {
                 setLoading(false);
             }
@@ -103,21 +103,14 @@ export default function Dashboard() {
         setAppointments(a || []);
     };
 
-    // ФУНКЦИИ УПРАВЛЕНИЯ
+    // ФУНКЦИИ (Сохранение, добавление, удаление)
     const handleSaveProfile = async () => {
         setSaving(true);
         const { error } = await supabase.from("profiles").upsert({
-            id: user.id,
-            business_name: businessName,
-            telegram_chat_id: telegramChatId.trim(),
-            updated_at: new Date(),
+            id: user.id, business_name: businessName, telegram_chat_id: telegramChatId.trim(), updated_at: new Date()
         });
         setSaving(false);
-        if (window.Telegram?.WebApp?.showPopup) {
-            window.Telegram.WebApp.showPopup({ message: error ? error.message : "Сохранено! ✅" });
-        } else {
-            alert(error ? error.message : "Сохранено!");
-        }
+        alert(error ? error.message : "Сохранено! ✅");
     };
 
     const handleAddService = async () => {
@@ -129,13 +122,6 @@ export default function Dashboard() {
         setAddingService(false);
     };
 
-    const handleDeleteService = async (id: string) => {
-        if (confirm("Удалить услугу?")) {
-            await supabase.from("services").delete().eq("id", id);
-            await loadData(user.id);
-        }
-    };
-
     const handleDeleteRecord = async (id: string) => {
         if (confirm("Удалить запись?")) {
             await supabase.from("appointments").delete().eq("id", id);
@@ -143,19 +129,20 @@ export default function Dashboard() {
         }
     };
 
-    const profileUrl = user ? `${window.location.origin}/book/${user.id}` : "";
+    // ПРАВИЛЬНАЯ ССЫЛКА ДЛЯ КЛИЕНТОВ (Внутри Mini App)
+    const clientBookingUrl = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
 
-    if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
+    if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white font-sans"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
     if (isBrowser) {
         return (
             <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white font-sans">
                 <Bot className="w-16 h-16 text-blue-500 mb-6" />
-                <h1 className="text-2xl font-bold mb-2">Вход выполнен!</h1>
-                <p className="text-slate-400 mb-8 max-w-xs">Чтобы управлять кабинетом, перейдите в Telegram.</p>
+                <h1 className="text-2xl font-bold mb-2">Вход подтвержден!</h1>
+                <p className="text-slate-400 mb-8 max-w-xs">Нажмите кнопку, чтобы открыть ваш личный кабинет в Telegram.</p>
                 {returnLink && (
-                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
-                        <ExternalLink className="w-5 h-5" /> Открыть в ТГ
+                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
+                        <ExternalLink className="w-5 h-5" /> Открыть Кабинет
                     </a>
                 )}
             </div>
@@ -171,18 +158,19 @@ export default function Dashboard() {
 
             <main className="grid gap-6">
                 <div className="bg-gradient-to-br from-blue-900/40 to-slate-800 p-5 rounded-2xl border border-blue-500/30">
-                    <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider"><LinkIcon className="w-3 h-3" /> Ваша ссылка</h2>
+                    <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider"><LinkIcon className="w-3 h-3" /> Ссылка для клиентов</h2>
                     <div className="flex gap-2">
-                        <input readOnly value={profileUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-xs outline-none" />
-                        <button onClick={() => { navigator.clipboard.writeText(profileUrl); alert("Скопировано!"); }} className="bg-blue-600 px-4 rounded-xl"><Copy className="w-4 h-4 text-white" /></button>
+                        <input readOnly value={clientBookingUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-[10px] text-slate-300 outline-none font-mono" />
+                        <button onClick={() => { navigator.clipboard.writeText(clientBookingUrl); alert("Ссылка скопирована!"); }} className="bg-blue-600 px-4 rounded-xl active:scale-90 transition-transform"><Copy className="w-4 h-4 text-white" /></button>
                     </div>
+                    <p className="text-[9px] text-slate-500 mt-2">Отправьте эту ссылку клиентам, чтобы они могли записаться через Telegram.</p>
                 </div>
 
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
                     <h2 className="text-lg font-bold mb-5 flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
                         <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Название бизнеса" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
-                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 py-4 rounded-xl font-bold">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить настройки"}</button>
+                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 py-4 rounded-xl font-bold">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить изменения"}</button>
                     </div>
                 </div>
 
@@ -197,7 +185,7 @@ export default function Dashboard() {
                         {services.map(s => (
                             <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl border border-slate-600/50">
                                 <span className="text-sm font-medium">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
-                                <button onClick={() => handleDeleteService(s.id)} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={async () => { if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); } }} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
@@ -213,14 +201,14 @@ export default function Dashboard() {
                                     <div className="text-slate-300 text-sm">{app.client_name}</div>
                                     <div className="text-slate-500 text-xs">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
                                 </div>
-                                <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="mt-4 p-3 bg-black/20 border border-yellow-500/30 rounded-xl text-[10px] font-mono text-yellow-500/50">
-                    <Bug className="w-3 h-3 inline mr-1" /> DEBUG: {debugInfo}
+                <div className="mt-4 p-2 bg-black/20 rounded-lg text-[8px] font-mono text-slate-600 flex items-center gap-2">
+                    <Bug className="w-2 h-2" /> DEBUG: {debug}
                 </div>
             </main>
         </div>
