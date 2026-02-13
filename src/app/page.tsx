@@ -9,25 +9,36 @@ export default function MiniAppEntry() {
   const [status, setStatus] = useState("Загрузка...");
 
   useEffect(() => {
-    // Проверяем, открыто ли в Telegram
     if (typeof window !== "undefined" && window.Telegram?.WebApp) {
       const tg = window.Telegram.WebApp;
       tg.ready();
       tg.expand();
 
-      // Проверяем start_param (например, ?startapp=user-uuid-123)
       const startParam = tg.initDataUnsafe?.start_param;
 
       if (startParam) {
-        setStatus("Переход к записи...");
-        router.replace(`/book/${startParam}`);
+        // У тебя в базе ID мастера (UUID) имеет длину 36 символов
+        // Токен авторизации всегда гораздо длиннее (обычно больше 100 символов)
+        
+        if (startParam.length > 40) {
+          // ЭТО МАСТЕР (Токен входа)
+          setStatus("Авторизация мастера...");
+          // Отправляем в дашборд, он сам подхватит токен из Telegram WebApp
+          router.replace("/dashboard");
+        } else {
+          // ЭТО КЛИЕНТ (ID мастера)
+          setStatus("Переход к записи...");
+          router.replace(`/book/${startParam}`);
+        }
       } else {
+        // Нет параметров — просто идем в кабинет
         setStatus("Вход в кабинет...");
         router.replace("/dashboard");
       }
     } else {
-      // Если открыли в обычном браузере
-      router.replace("/login");
+      // Если открыли не в Telegram (например, подтверждение почты в Safari)
+      // Мы отправляем на dashboard, где сработает наша "ловушка Safari"
+      router.replace("/dashboard");
     }
   }, [router]);
 

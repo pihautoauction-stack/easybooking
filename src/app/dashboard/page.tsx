@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ExternalLink, Bug } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ExternalLink, Bug, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -26,6 +26,13 @@ export default function Dashboard() {
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
 
+    // Дни недели для отображения (если понадобятся в будущем)
+    const DAYS = [
+        { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
+        { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
+    ];
+    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
+
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
 
@@ -39,13 +46,13 @@ export default function Dashboard() {
                     
                     if (session?.refresh_token) {
                         const botUsername = "my_cool_booking_bot"; 
-                        const shortName = "app"; // ТО САМОЕ ИМЯ ИЗ ШАГА 1
+                        const shortName = "app"; 
                         
-                        // ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРИЛОЖЕНИЯ
+                        // Используем tg:// протокол для принудительного открытия Mini App
                         setReturnLink(`tg://resolve?domain=${botUsername}&appname=${shortName}&startapp=${session.refresh_token}`);
                         setDebug("Сессия найдена. Ссылка готова.");
                     } else {
-                        setDebug("Сессия не найдена. Войдите заново.");
+                        setDebug("Сессия не найдена. Нужно войти.");
                     }
                     setLoading(false);
                     return;
@@ -54,21 +61,33 @@ export default function Dashboard() {
                 // 2. МЫ В TELEGRAM
                 tg.ready();
                 tg.expand();
-                setDebug("Telegram: Проверка входа...");
+                if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
+                setDebug("Telegram: Обработка параметров...");
 
-                // 3. ОБРАБОТКА ТОКЕНА (Убираем ошибку "Мастер не найден")
+                // 3. РАЗДЕЛЯЕМ КЛИЕНТА И МАСТЕРА (Фикс ошибки "Мастер не найден")
                 const startParam = tg?.initDataUnsafe?.start_param;
-                if (startParam && startParam.length > 30) {
-                    setDebug("Вход по токену...");
-                    const { error } = await supabase.auth.refreshSession({ refresh_token: startParam });
-                    if (!error) {
-                        // Очищаем URL, чтобы приложение не думало, что токен - это ID мастера
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                        setDebug("Вход успешен.");
+                
+                if (startParam) {
+                    if (startParam.length > 40) {
+                        // ЭТО ТОКЕН ВХОДА (МАСТЕР)
+                        setDebug("Вхожу по токену...");
+                        const { data, error } = await supabase.auth.refreshSession({ refresh_token: startParam });
+                        if (!error && data.session) {
+                            // Очищаем URL, чтобы приложение не считало токен за ID мастера
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            setDebug("Вход выполнен успешно.");
+                        } else if (error) {
+                            setDebug("Ошибка токена: " + error.message);
+                        }
+                    } else if (startParam.length === 36) {
+                        // ЭТО UUID (КЛИЕНТ ПРИШЕЛ ПО ССЫЛКЕ)
+                        setDebug("Клиентская ссылка. Редирект на бронирование...");
+                        router.push(`/book/${startParam}`);
+                        return;
                     }
                 }
 
-                // 4. ПРОВЕРКА АВТОРИЗАЦИИ
+                // 4. ПРОВЕРКА ТЕКУЩЕЙ АВТОРИЗАЦИИ
                 const { data: { user: authUser } } = await supabase.auth.getUser();
                 if (!authUser) {
                     setDebug("Не авторизован. Иду на логин.");
@@ -78,9 +97,9 @@ export default function Dashboard() {
 
                 setUser(authUser);
                 await loadData(authUser.id);
-                setDebug("Всё ок. Кабинет загружен.");
+                setDebug("Кабинет загружен.");
             } catch (err: any) {
-                setDebug("Сбой: " + err.message);
+                setDebug("Сбой инициализации: " + err.message);
             } finally {
                 setLoading(false);
             }
@@ -90,26 +109,37 @@ export default function Dashboard() {
     }, [router]);
 
     const loadData = async (userId: string) => {
+        // Загрузка профиля (например, 'Зимняя Вишня')
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
         if (p) {
             setBusinessName(p.business_name || "");
             setTelegramChatId(p.telegram_chat_id || "");
+            if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
         }
+        
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
+
         const { data: a } = await supabase.from("appointments")
             .select("id, client_name, client_phone, start_time, service:services (name)")
             .eq("master_id", userId)
             .gte('start_time', new Date().toISOString())
             .order('start_time', { ascending: true });
+            
         setAppointments(a || []);
     };
 
     const handleSaveProfile = async () => {
         setSaving(true);
-        await supabase.from("profiles").upsert({ id: user.id, business_name: businessName, telegram_chat_id: telegramChatId.trim(), updated_at: new Date() });
+        const { error } = await supabase.from("profiles").upsert({ 
+            id: user.id, 
+            business_name: businessName, 
+            telegram_chat_id: telegramChatId.trim(), 
+            disabled_days: disabledDays.join(','),
+            updated_at: new Date() 
+        });
         setSaving(false);
-        alert("Сохранено!");
+        alert(error ? error.message : "Сохранено!");
     };
 
     const handleAddService = async () => {
@@ -121,17 +151,33 @@ export default function Dashboard() {
         setAddingService(false);
     };
 
+    const handleDeleteService = async (id: string) => {
+        if (confirm("Удалить услугу?")) {
+            await supabase.from("services").delete().eq("id", id);
+            await loadData(user.id);
+        }
+    };
+
     const handleDeleteRecord = async (id: string) => {
-        if (confirm("Удалить?")) {
+        if (confirm("Удалить запись?")) {
             await supabase.from("appointments").delete().eq("id", id);
             await loadData(user.id);
         }
     };
 
-    // Ссылка для КЛИЕНТОВ (не путать с твоим входом)
+    const toggleDay = (dayId: number) => {
+        setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
+    };
+
+    // Ссылка для КЛИЕНТОВ (на основе твоего UUID из БД)
     const clientLink = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
 
-    if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
+    if (loading) return (
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white font-sans">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
+            <div className="text-[10px] font-mono text-slate-500">{debug}</div>
+        </div>
+    );
 
     if (isBrowser) {
         return (
@@ -139,10 +185,12 @@ export default function Dashboard() {
                 <Bot className="w-16 h-16 text-blue-500 mb-6" />
                 <h1 className="text-2xl font-bold mb-2">Вход подтвержден!</h1>
                 <p className="text-slate-400 mb-8 max-w-xs">Нажмите кнопку, чтобы сразу открыть ваш кабинет в Telegram.</p>
-                {returnLink && (
+                {returnLink ? (
                     <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
                         <ExternalLink className="w-5 h-5" /> Открыть Кабинет
                     </a>
+                ) : (
+                    <div className="text-slate-500 text-sm">Готовим ссылку...</div>
                 )}
             </div>
         );
@@ -168,6 +216,21 @@ export default function Dashboard() {
                     <h2 className="text-lg font-bold mb-5 flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
                         <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Название..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
+                        
+                        <div className="pt-4 border-t border-slate-700">
+                            <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">Рабочие дни</label>
+                            <div className="flex justify-between gap-1 mb-4">
+                                {DAYS.map((d) => {
+                                    const isWorking = !disabledDays.includes(d.id);
+                                    return (
+                                        <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all border ${isWorking ? "bg-emerald-600 text-white border-emerald-500" : "bg-slate-800 text-slate-600 border-slate-700"}`}>
+                                            {d.label}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
                         <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 py-4 rounded-xl font-bold">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}</button>
                     </div>
                 </div>
@@ -183,7 +246,7 @@ export default function Dashboard() {
                         {services.map(s => (
                             <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl">
                                 <span className="text-sm font-medium">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
-                                <button onClick={async () => { if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); } }} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteService(s.id)} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
@@ -199,14 +262,14 @@ export default function Dashboard() {
                                     <div className="text-slate-300 text-sm">{app.client_name}</div>
                                     <div className="text-slate-500 text-xs">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
                                 </div>
-                                <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-500 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-600 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
                 </div>
 
                 <div className="mt-4 p-2 bg-black/20 rounded-lg text-[8px] font-mono text-slate-700 flex items-center gap-2">
-                    <Bug className="w-2 h-2" /> DEBUG: {debug}
+                    <Bug className="w-2 h-2" /> {debug}
                 </div>
             </main>
         </div>
