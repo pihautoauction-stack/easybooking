@@ -60,11 +60,9 @@ export default function Dashboard() {
             const { data: { user: authUser } } = await supabase.auth.getUser();
             
             if (!authUser) {
-                // Если нет юзера и мы в ТГ — на логин
                 if (tg?.initData) {
                     router.push("/login");
                 } 
-                // Если нет юзера и мы в Safari — Next.js сам отправит на /login по логике Dashboard
                 setLoading(false);
                 return;
             }
@@ -74,7 +72,6 @@ export default function Dashboard() {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.refresh_token) {
                     const botUsername = "my_cool_booking_bot"; // Твой бот
-                    // Эта ссылка откроет бота и передаст токен
                     setReturnLink(`https://t.me/${botUsername}?startapp=${session.refresh_token}`);
                 }
             }
@@ -98,7 +95,14 @@ export default function Dashboard() {
         }
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
-        const { data: a } = await supabase.from("appointments").select(`id, client_name, client_phone, start_time, service:services (name)` boat).eq("master_id", userId).gte('start_time', new Date().toISOString()).order('start_time', { ascending: true });
+        
+        // ТУТ БЫЛ ФИКС (убрано слово boat)
+        const { data: a } = await supabase.from("appointments")
+            .select(`id, client_name, client_phone, start_time, service:services (name)`)
+            .eq("master_id", userId)
+            .gte('start_time', new Date().toISOString())
+            .order('start_time', { ascending: true });
+        
         setAppointments(a || []);
     };
 
@@ -145,10 +149,9 @@ export default function Dashboard() {
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
-    // --- ЛОВУШКА SAFARI: Если мы в браузере, ВСЕГДА показываем только кнопку перехода ---
     if (isBrowser) {
         return (
-            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white">
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white font-sans">
                 <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-6">
                      <Bot className="w-10 h-10 text-blue-500" />
                 </div>
@@ -158,7 +161,7 @@ export default function Dashboard() {
                 {returnLink ? (
                     <a 
                         href={returnLink} 
-                        className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
+                        className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 border border-blue-400/30"
                     >
                         <ExternalLink className="w-5 h-5" />
                         Открыть Кабинет в ТГ
@@ -169,18 +172,10 @@ export default function Dashboard() {
                         <span>Синхронизация...</span>
                     </div>
                 )}
-
-                <button 
-                    onClick={() => supabase.auth.signOut().then(() => router.push("/login"))}
-                    className="mt-10 text-slate-500 text-sm underline"
-                >
-                    Выйти из аккаунта
-                </button>
             </div>
         );
     }
 
-    // --- ОБЫЧНЫЙ ДАШБОРД (ТОЛЬКО ДЛЯ TELEGRAM) ---
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10">
@@ -195,7 +190,7 @@ export default function Dashboard() {
             <main className="grid gap-6">
                 <div className="bg-gradient-to-br from-blue-900/40 to-slate-800 p-5 rounded-2xl border border-blue-500/30 shadow-lg">
                     <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider">
-                        <LinkIcon className="w-3 h-3" /> Ваша ссылка для клиентов
+                        <LinkIcon className="w-3 h-3" /> Ссылка для клиентов
                     </h2>
                     <div className="flex gap-2">
                         <input readOnly value={profileUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 outline-none font-mono" />
@@ -205,7 +200,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Настройки */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
                     <h2 className="text-lg font-bold mb-5 flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
@@ -232,7 +226,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Услуги */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
                     <div className="flex gap-2 mb-4">
@@ -252,7 +245,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Записи */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Предстоящие записи</h2>
                     <div className="space-y-3">
