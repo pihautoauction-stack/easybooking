@@ -4,17 +4,24 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "EasyBooking",
-  description: "Telegram Mini App",
+  description: "Запись клиентов в Telegram",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="ru">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
-      <body className="bg-black text-white antialiased">
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+      <body className="bg-slate-900 text-white antialiased">
+        <Script 
+          src="https://telegram.org/js/telegram-web-app.js" 
+          strategy="beforeInteractive" 
+        />
         {children}
       </body>
     </html>
