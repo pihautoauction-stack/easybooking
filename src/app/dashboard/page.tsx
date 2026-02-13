@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Calendar, Copy, Plus, Loader2, Link as LinkIcon, User, Bot } from "lucide-react";
+import { Trash2, LogOut, Calendar, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ChevronRight, Clock, Briefcase } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -12,21 +12,16 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
-    const [verifying, setVerifying] = useState(false);
     const [user, setUser] = useState<any>(null);
     
-    // Профиль
     const [businessName, setBusinessName] = useState("");
     const [telegramChatId, setTelegramChatId] = useState(""); 
     const [workStart, setWorkStart] = useState(9);
     const [workEnd, setWorkEnd] = useState(21);
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
 
-    // Данные
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
-
-    // Inputs
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
 
@@ -37,25 +32,23 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-            window.Telegram.WebApp.ready();
-            window.Telegram.WebApp.expand();
-            // Проверка на наличие метода перед вызовом
-            if (window.Telegram.WebApp.setHeaderColor) {
-                window.Telegram.WebApp.setHeaderColor("#17212b");
-            }
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+            tg.setHeaderColor('#1a1a1a');
+            tg.setBackgroundColor('#1a1a1a');
         }
 
         const init = async () => {
-            if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-                const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
-                if (tgUser && !telegramChatId) {
-                    setTelegramChatId(tgUser.id.toString());
-                }
-            }
-
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { router.push("/login"); return; }
             setUser(user);
+
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+                const tgId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
+                if (tgId) setTelegramChatId(tgId.toString());
+            }
+
             await loadData(user.id);
             setLoading(false);
         };
@@ -71,10 +64,8 @@ export default function Dashboard() {
             setWorkEnd(p.work_end_hour || 21);
             if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
         }
-
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
-
         const { data: a } = await supabase.from("appointments")
             .select(`id, client_name, client_phone, start_time, service:services (name)`)
             .eq("master_id", userId)
@@ -94,185 +85,122 @@ export default function Dashboard() {
             disabled_days: disabledDays.join(','),
             updated_at: new Date(),
         };
-
-        const { error } = await supabase.from("profiles").upsert(updates);
+        await supabase.from("profiles").upsert(updates);
         setSaving(false);
-        
-        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.showPopup) {
-             window.Telegram.WebApp.showPopup({
-                title: error ? "Ошибка" : "Успешно",
-                message: error ? error.message : "Настройки сохранены",
-                buttons: [{type: "ok"}]
-             });
-        } else {
-            alert(error ? error.message : "Настройки сохранены!");
-        }
-    };
-
-    const handleVerifyBot = async () => {
-        if (!telegramChatId) return;
-        setVerifying(true);
-        const res = await fetch('/api/notify', {
-            method: 'POST',
-            body: JSON.stringify({ masterId: user.id, isTest: true }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        setVerifying(false);
-        if (res.ok) alert("✅ Отправлено! Проверь личку с ботом.");
-        else alert("❌ Ошибка. Нажми /start в боте.");
-    };
-
-    const handleAddService = async () => {
-        if (!newName || !newPrice) return;
-        setAddingService(true);
-        await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice) });
-        setNewName(""); setNewPrice("");
-        await loadData(user.id);
-        setAddingService(false);
-    };
-
-    const toggleDay = (dayId: number) => {
-        setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
-    };
-
-    const handleDeleteRecord = async (id: string) => {
-        if (confirm("Удалить запись?")) {
-            await supabase.from("appointments").delete().eq("id", id);
-            loadData(user.id);
+        if (window.Telegram?.WebApp?.showPopup) {
+            window.Telegram.WebApp.showPopup({ message: "Настройки сохранены ✨" });
         }
     };
 
     const profileUrl = user ? `${window.location.origin}/book/${user.id}` : "";
 
-    if (loading) return <div className="min-h-screen bg-[#17212b] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
+    if (loading) return <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
     return (
-        <div className="min-h-screen pb-24 font-sans text-sm bg-[#17212b] text-white">
+        <div className="min-h-screen bg-[#0f0f0f] text-white font-sans selection:bg-blue-500/30">
             
-            <div className="px-4 py-3 flex justify-between items-center border-b border-white/5 bg-[#232e3c]">
-                <h1 className="font-bold text-lg text-white">Кабинет</h1>
-                <button onClick={() => supabase.auth.signOut().then(() => router.push("/login"))} className="text-[#708499] hover:text-red-400">
-                    <LogOut className="w-5 h-5" />
+            {/* --- HEADER --- */}
+            <div className="px-6 pt-8 pb-4 flex justify-between items-end">
+                <div>
+                    <p className="text-gray-500 text-xs font-medium uppercase tracking-widest mb-1">Управление</p>
+                    <h1 className="text-3xl font-bold tracking-tight">Кабинет</h1>
+                </div>
+                <button onClick={() => supabase.auth.signOut().then(() => router.push("/login"))} className="p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
+                    <LogOut className="w-5 h-5 text-gray-400" />
                 </button>
             </div>
 
-            <main className="p-4 space-y-6">
+            <main className="px-4 pb-32 space-y-6">
                 
-                <div className="bg-[#232e3c] p-4 rounded-xl shadow-sm border border-white/5">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-[#708499] text-xs font-bold uppercase tracking-wider">Ссылка для записи</span>
-                        <div className="bg-emerald-500/10 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div> Активна
+                {/* --- КАРТОЧКА ССЫЛКИ --- */}
+                <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/10 p-6 rounded-[32px] border border-white/10 backdrop-blur-xl">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-blue-500 rounded-xl">
+                            <LinkIcon className="w-4 h-4 text-white" />
                         </div>
+                        <span className="font-semibold text-sm">Ваша визитка</span>
                     </div>
                     <div className="flex gap-2">
-                        <div className="flex-1 bg-[#17212b] rounded-lg p-3 text-xs text-white truncate font-mono border border-white/5">
+                        <div className="flex-1 bg-black/20 rounded-2xl p-4 text-[13px] text-blue-200 truncate font-mono border border-white/5">
                             {profileUrl}
                         </div>
-                        <button 
-                            onClick={() => {navigator.clipboard.writeText(profileUrl); alert("Скопировано!");}} 
-                            className="bg-[#5288c1] hover:bg-[#4a7db3] px-3 rounded-lg flex items-center justify-center text-white"
-                        >
+                        <button onClick={() => {navigator.clipboard.writeText(profileUrl);}} className="bg-white text-black px-5 rounded-2xl font-bold text-sm active:scale-90 transition-all">
                             <Copy className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
 
-                <div className="bg-[#232e3c] p-4 rounded-xl shadow-sm border border-white/5 space-y-4">
-                    <h2 className="text-white font-bold flex items-center gap-2">
-                        <User className="w-5 h-5 text-[#64b5ef]" /> Профиль
-                    </h2>
+                {/* --- ПРОФИЛЬ --- */}
+                <section className="bg-white/5 rounded-[32px] p-6 border border-white/5">
+                    <h2 className="text-lg font-bold mb-6 flex items-center gap-3"><User className="text-blue-400 w-5 h-5"/> Настройки мастера</h2>
                     
-                    <input 
-                        value={businessName} 
-                        onChange={e => setBusinessName(e.target.value)} 
-                        placeholder="Название (напр. Барбершоп)" 
-                        className="w-full bg-[#17212b] border border-white/5 rounded-lg p-3 text-white outline-none focus:border-[#5288c1] transition-colors" 
-                    />
-
-                    <div>
-                        <div className="flex gap-2">
-                            <input 
-                                value={telegramChatId} 
-                                onChange={e => setTelegramChatId(e.target.value)} 
-                                placeholder="Telegram ID" 
-                                className="flex-1 bg-[#17212b] border border-white/5 rounded-lg p-3 text-emerald-400 font-mono text-xs outline-none" 
-                            />
-                            <button onClick={handleVerifyBot} disabled={verifying || !telegramChatId} className="bg-[#2b3847] px-3 rounded-lg border border-white/5">
-                                {verifying ? <Loader2 className="w-4 h-4 animate-spin text-[#708499]" /> : <Bot className="w-4 h-4 text-[#64b5ef]" />}
-                            </button>
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[11px] text-gray-500 uppercase font-bold px-1">Название студии</label>
+                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Как вас зовут?" className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-blue-500/50 transition-all" />
                         </div>
-                        <p className="text-[#708499] text-[10px] mt-1.5 ml-1">ID для уведомлений (определяется авто)</p>
-                    </div>
 
-                    <div className="pt-2">
-                        <p className="text-[#708499] text-[10px] uppercase font-bold mb-2">Рабочие дни</p>
-                        <div className="flex justify-between gap-1 mb-3">
-                            {DAYS.map((d) => {
-                                const isWorking = !disabledDays.includes(d.id);
-                                return (
-                                    <button key={d.id} onClick={() => toggleDay(d.id)} 
-                                        className={`flex-1 py-2 rounded text-[10px] font-bold transition-all ${
-                                            isWorking ? "bg-[#50a14f] text-white" : "bg-[#17212b] text-[#708499]"
-                                        }`}
-                                    >
-                                        {d.label}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                        <div className="flex gap-2 text-xs">
-                            <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-[#17212b] p-2 rounded-lg text-white border border-white/5 outline-none">{[...Array(24)].map((_, i) => <option key={i} value={i}>с {i}:00</option>)}</select>
-                            <select value={workEnd} onChange={(e) => setWorkEnd(Number(e.target.value))} className="flex-1 bg-[#17212b] p-2 rounded-lg text-white border border-white/5 outline-none">{[...Array(24)].map((_, i) => <option key={i} value={i}>до {i}:00</option>)}</select>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-[#232e3c] p-4 rounded-xl shadow-sm border border-white/5">
-                    <h2 className="text-white font-bold mb-3 flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
-                    <div className="flex gap-2 mb-4">
-                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-[#17212b] rounded-lg p-3 text-white border border-white/5 outline-none" />
-                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-[#17212b] rounded-lg p-3 text-white border border-white/5 outline-none" />
-                        <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-600 px-3 rounded-lg flex items-center justify-center text-white">
-                            {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                        </button>
-                    </div>
-                    <div className="space-y-2">
-                        {services.map(s => (
-                            <div key={s.id} className="flex justify-between items-center bg-[#17212b] p-3 rounded-lg border border-white/5">
-                                <span className="text-white">{s.name} <span className="text-emerald-400 font-bold ml-1">{s.price} ₽</span></span>
-                                <button onClick={async () => { if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }}} className="text-[#708499]"><Trash2 className="w-4 h-4" /></button>
+                        <div className="pt-4 border-t border-white/5">
+                            <label className="text-[11px] text-gray-500 uppercase font-bold px-1 block mb-4">Рабочие часы</label>
+                            <div className="flex gap-3 items-center">
+                                <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10 outline-none appearance-none text-center font-bold">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
+                                <ChevronRight className="w-4 h-4 text-gray-600" />
+                                <select value={workEnd} onChange={(e) => setWorkEnd(Number(e.target.value))} className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10 outline-none appearance-none text-center font-bold">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
                             </div>
-                        ))}
+                        </div>
                     </div>
-                </div>
+                </section>
 
-                 <div className="bg-[#232e3c] p-4 rounded-xl shadow-sm border border-white/5 mb-8">
-                    <h2 className="text-white font-bold mb-3 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Записи</h2>
+                {/* --- УСЛУГИ --- */}
+                <section className="bg-white/5 rounded-[32px] p-6 border border-white/5">
+                    <h2 className="text-lg font-bold mb-6 flex items-center gap-3"><Briefcase className="text-pink-400 w-5 h-5"/> Прайс-лист</h2>
+                    <div className="flex gap-2 mb-6">
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Услуга" className="flex-[2] bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none" />
+                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none" />
+                        <button onClick={handleAddService} className="bg-pink-500 p-4 rounded-2xl active:scale-90 transition-all"><Plus className="w-5 h-5" /></button>
+                    </div>
                     <div className="space-y-3">
-                        {appointments.length === 0 ? <p className="text-[#708499] text-center text-xs py-2">Записей пока нет</p> : appointments.map(app => (
-                            <div key={app.id} className="p-3 bg-[#17212b] rounded-lg border border-white/5 flex justify-between items-center">
+                        {services.map(s => (
+                            <div key={s.id} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/5">
                                 <div>
-                                    <div className="text-emerald-400 font-bold">{format(new Date(app.start_time), "HH:mm")}</div>
-                                    <div className="text-white text-sm">{app.client_name}</div>
-                                    <div className="text-[#708499] text-xs">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
+                                    <p className="font-bold text-sm">{s.name}</p>
+                                    <p className="text-emerald-400 text-xs font-mono">{s.price} ₽</p>
                                 </div>
-                                <button onClick={() => handleDeleteRecord(app.id)} className="text-[#708499]"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={async () => { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }} className="text-gray-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
-                </div>
+                </section>
+
+                {/* --- ЗАПИСИ --- */}
+                <section className="bg-white/5 rounded-[32px] p-6 border border-white/5">
+                    <h2 className="text-lg font-bold mb-6 flex items-center gap-3"><Calendar className="text-emerald-400 w-5 h-5"/> Предстоящие визиты</h2>
+                    <div className="space-y-4">
+                        {appointments.length === 0 ? <p className="text-gray-600 text-center py-4 text-sm italic">Клиентов пока нет</p> : appointments.map(app => (
+                            <div key={app.id} className="p-5 bg-white/5 rounded-[24px] border border-white/5 flex justify-between items-center">
+                                <div className="space-y-1">
+                                    <div className="text-emerald-400 font-black text-xl font-mono">{format(new Date(app.start_time), "HH:mm")}</div>
+                                    <div className="font-bold text-sm">{app.client_name}</div>
+                                    <div className="text-gray-500 text-[11px]">{app.service?.name}</div>
+                                </div>
+                                <button onClick={() => handleDeleteRecord(app.id)} className="p-2 text-gray-600"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
             </main>
 
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#232e3c] border-t border-white/5">
+            {/* КНОПКА СОХРАНЕНИЯ (STICKY) */}
+            <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0f0f0f] via-[#0f0f0f]/90 to-transparent">
                 <button 
                     onClick={handleSaveProfile} 
                     disabled={saving}
-                    className="w-full bg-[#5288c1] active:bg-[#4a7db3] text-white py-3.5 rounded-xl font-bold text-base shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                    className="w-full bg-blue-500 hover:bg-blue-400 text-white py-5 rounded-[24px] font-bold text-lg shadow-2xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить изменения"}
+                    {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Сохранить профиль"}
                 </button>
             </div>
         </div>
     );
-} 
+}
