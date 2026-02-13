@@ -79,12 +79,13 @@ export default function Dashboard() {
                 return; 
             }
             
-            // --- ГЕНЕРАЦИЯ ПРАВИЛЬНОЙ ССЫЛКИ ДЛЯ SAFARI ---
+            // --- ГЕНЕРАЦИЯ ПРАВИЛЬНОЙ ССЫЛКИ ДЛЯ SAFARI (ФИКС: ПРЯМОЙ ВХОД В APP) ---
             if (!window.Telegram?.WebApp?.initData) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.refresh_token) {
                     // Используем юзернейм твоего бота
                     const botName = "my_cool_booking_bot"; 
+                    // Добавлен /app — это заставляет Telegram открыть именно Mini App
                     setReturnLink(`https://t.me/${botName}/app?startapp=${session.refresh_token}`);
                 }
             }
