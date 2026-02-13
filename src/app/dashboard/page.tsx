@@ -45,10 +45,8 @@ export default function Dashboard() {
         // --- ПРОВЕРКА: МЫ В TELEGRAM ИЛИ В SAFARI? ---
         const tg = window.Telegram?.WebApp;
         if (!tg?.initData) {
-            // Если initData пустая — значит мы скорее всего в обычном браузере
             setIsBrowser(true);
         } else {
-            // Мы в Телеграме — настраиваем цвета
             tg.ready();
             tg.expand();
             if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
@@ -59,7 +57,6 @@ export default function Dashboard() {
             // --- ЛОГИКА ВХОДА ЧЕРЕЗ РЕДИРЕКТ (Внутри Telegram) ---
             if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.start_param) {
                 const tokenFromSafari = window.Telegram.WebApp.initDataUnsafe.start_param;
-                // Игнорируем auth_success, ищем реальный токен
                 if (tokenFromSafari && tokenFromSafari !== 'auth_success') {
                     const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
                     if (refreshData.session) {
@@ -68,10 +65,9 @@ export default function Dashboard() {
                 }
             }
 
-            // 1. Проверяем пользователя
-            let { data: { user }, error } = await supabase.auth.getUser();
+            // 1. Проверка пользователя
+            let { data: { user } } = await supabase.auth.getUser();
             
-            // Если пользователя нет, пробуем подождать (вдруг куки летят)
             if (!user) {
                 await new Promise(r => setTimeout(r, 1000));
                 const { data: { user: retryUser } } = await supabase.auth.getUser();
@@ -83,11 +79,12 @@ export default function Dashboard() {
                 return; 
             }
             
-            // Если мы в Safari (isBrowser) и пользователь залогинен — генерируем ссылку возврата
+            // --- ГЕНЕРАЦИЯ ПРАВИЛЬНОЙ ССЫЛКИ ДЛЯ SAFARI ---
             if (!window.Telegram?.WebApp?.initData) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.refresh_token) {
-                    const botName = "my_cool_booking_bot"; // ТВОЙ БОТ
+                    // Используем юзернейм твоего бота
+                    const botName = "my_cool_booking_bot"; 
                     setReturnLink(`https://t.me/${botName}/app?startapp=${session.refresh_token}`);
                 }
             }
@@ -129,10 +126,6 @@ export default function Dashboard() {
         setAppointments(a || []);
     };
 
-    // ... Остальные функции (handleSaveProfile, handleVerifyBot и т.д.) оставляем без изменений ...
-    // Я сократил их здесь для краткости, но ты вставь ПОЛНЫЕ версии из предыдущего кода
-    // Или просто скопируй этот блок целиком, если функции ниже нужны (я их добавлю).
-
     const handleSaveProfile = async () => {
         setSaving(true);
         const updates = {
@@ -163,7 +156,7 @@ export default function Dashboard() {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
-                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Отправлено!"});
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено!"});
                 else alert("Отправлено!");
             } else { alert("Ошибка. Запустите бота."); }
         } catch (e) { alert("Ошибка сети"); }
@@ -197,40 +190,30 @@ export default function Dashboard() {
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
-    // --- ЛОВУШКА SAFARI ---
-    // Если мы в браузере (не в ТГ), показываем экран возврата
     if (isBrowser) {
         return (
             <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white font-sans">
                 <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
                      <Bot className="w-10 h-10 text-blue-400" />
                 </div>
-                <h1 className="text-2xl font-bold mb-2">Настройка завершена!</h1>
+                <h1 className="text-2xl font-bold mb-2">Вход выполнен!</h1>
                 <p className="text-slate-400 mb-8 max-w-xs">
-                    Вы успешно вошли в систему. Теперь вернитесь в Telegram, чтобы управлять записями.
+                    Чтобы управлять записями, откройте приложение в Telegram.
                 </p>
-                
                 {returnLink ? (
-                    <a 
-                        href={returnLink}
-                        className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2 transition-transform active:scale-95"
-                    >
-                        <ExternalLink className="w-5 h-5" />
-                        Открыть в Telegram
+                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
+                        <ExternalLink className="w-5 h-5" /> Открыть в Telegram
                     </a>
                 ) : (
-                    <div className="flex items-center gap-2 text-slate-500">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Генерируем ссылку...
-                    </div>
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
                 )}
             </div>
         );
     }
 
-    // --- ОБЫЧНЫЙ ДАШБОРД (ТОЛЬКО В TELEGRAM) ---
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
-             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
+            <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
                 <div>
                     <h1 className="text-lg font-bold flex items-center gap-2">
                         <Settings className="text-blue-500 w-5 h-5" /> Кабинет
@@ -267,18 +250,14 @@ export default function Dashboard() {
                     <div className="space-y-4">
                         <div>
                             <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Название бизнеса</label>
-                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Барбершоп TopGun" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder:text-slate-600" />
+                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Название..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors" />
                         </div>
                         
                         <div>
-                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (для уведомлений)</label>
-                            <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="Авто-определение..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors text-emerald-400 font-mono" />
+                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (уведомления)</label>
+                            <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="ID..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors text-emerald-400 font-mono" />
                             <div className="flex gap-2 items-center mt-2">
-                                <button 
-                                    onClick={handleVerifyBot}
-                                    disabled={verifying || !telegramChatId}
-                                    className="text-[10px] font-bold uppercase tracking-wider bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-900/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                                >
+                                <button onClick={handleVerifyBot} disabled={verifying || !telegramChatId} className="text-[10px] font-bold uppercase tracking-wider bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-900/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50">
                                     {verifying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
                                     Проверить связь
                                 </button>
@@ -286,38 +265,26 @@ export default function Dashboard() {
                         </div>
                         
                         <div className="pt-4 border-t border-slate-700">
-                            <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">Рабочие дни (Зеленый = Работаю)</label>
+                            <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">Рабочие дни</label>
                             <div className="flex justify-between gap-1 mb-4">
                                 {DAYS.map((d) => {
                                     const isWorking = !disabledDays.includes(d.id);
                                     return (
-                                        <button 
-                                            key={d.id} 
-                                            onClick={() => toggleDay(d.id)} 
-                                            className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer border ${
-                                                isWorking 
-                                                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20 border-emerald-500" 
-                                                : "bg-slate-800 text-slate-600 border-slate-700 hover:bg-slate-700"
-                                            }`}
-                                        >
+                                        <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all border ${isWorking ? "bg-emerald-600 text-white border-emerald-500" : "bg-slate-800 text-slate-600 border-slate-700"}`}>
                                             {d.label}
                                         </button>
                                     )
                                 })}
                             </div>
                             <div className="flex gap-2 items-center">
-                                <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm cursor-pointer outline-none focus:border-blue-500">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
+                                <select value={workStart} onChange={(e) => setWorkStart(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
                                 <span className="text-slate-500">—</span>
-                                <select value={workEnd} onChange={(e) => setWorkEnd(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm cursor-pointer outline-none focus:border-blue-500">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
+                                <select value={workEnd} onChange={(e) => setWorkEnd(Number(e.target.value))} className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm">{[...Array(24)].map((_, i) => <option key={i} value={i}>{i}:00</option>)}</select>
                             </div>
                         </div>
 
-                        <button 
-                            onClick={handleSaveProfile} 
-                            disabled={saving}
-                            className="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-                        >
-                            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Сохранить изменения</>}
+                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all mt-4 disabled:opacity-50">
+                            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Сохранить настройки</>}
                         </button>
                     </div>
                 </div>
@@ -325,32 +292,27 @@ export default function Dashboard() {
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
                     <div className="flex gap-2 mb-4">
-                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-pink-500 transition-all" />
-                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-pink-500 transition-all" />
-                        <button 
-                            onClick={handleAddService} 
-                            disabled={addingService || !newName || !newPrice}
-                            className="bg-pink-600 hover:bg-pink-500 active:scale-95 px-4 rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-pink-900/20"
-                        >
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
+                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
+                        <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-600 hover:bg-pink-500 px-4 rounded-xl flex items-center justify-center transition-all disabled:opacity-50">
                             {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 text-white" />}
                         </button>
                     </div>
                     <div className="space-y-2">
                         {services.map(s => (
-                            <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl border border-slate-600/50 hover:border-slate-500 transition-colors">
+                            <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl border border-slate-600/50">
                                 <span className="text-sm font-medium text-slate-200">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
                                 <button onClick={async () => { 
                                      if(window.Telegram?.WebApp?.showConfirm) {
                                         window.Telegram.WebApp.showConfirm("Удалить услугу?", async (ok) => {
                                             if(ok) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }
                                         });
-                                     } else {
-                                        if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }
+                                     } else if(confirm("Удалить?")) {
+                                        await supabase.from("services").delete().eq("id", s.id); loadData(user.id);
                                      }
-                                }} className="text-slate-500 hover:text-red-400 p-2 cursor-pointer transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                }} className="text-slate-500 hover:text-red-400 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
-                        {services.length === 0 && <p className="text-slate-500 text-xs text-center py-2">Добавьте первую услугу</p>}
                     </div>
                 </div>
 
@@ -366,7 +328,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="text-right">
                                     <div className="bg-blue-900/30 px-2 py-1 rounded text-[10px] text-blue-300 border border-blue-500/20 mb-2">{app.service?.name}</div>
-                                    <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-600 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDeleteRecord(app.id)} className="text-slate-600 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             </div>
                         ))}
