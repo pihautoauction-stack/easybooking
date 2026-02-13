@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ExternalLink, AlertCircle } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -15,10 +15,9 @@ export default function Dashboard() {
     const [verifying, setVerifying] = useState(false);
     const [user, setUser] = useState<any>(null);
     
-    // Состояния для "Ловушки Safari"
+    // Состояния для редиректа
     const [isBrowser, setIsBrowser] = useState(false);
     const [returnLink, setReturnLink] = useState<string | null>(null);
-    const [authError, setAuthError] = useState<string | null>(null);
 
     // Данные профиля
     const [businessName, setBusinessName] = useState("");
@@ -39,7 +38,7 @@ export default function Dashboard() {
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
         
-        // 1. Проверяем среду (ТГ или Браузер)
+        // ПРОВЕРКА СРЕДЫ: Если нет initData, значит это Safari/Chrome
         if (!tg?.initData) {
             setIsBrowser(true);
         } else {
@@ -50,59 +49,37 @@ export default function Dashboard() {
         }
 
         const init = async () => {
-            setLoading(true);
-            
-            // --- ЛОГИКА АВТОРИЗАЦИИ ПО ТОКЕНУ ---
+            // 1. Пробуем поймать токен из URL (если мы уже в Telegram)
             const startParam = tg?.initDataUnsafe?.start_param;
-            
-            if (startParam && startParam !== 'auth_success') {
-                // Если параметр длинный — это наш Refresh Token
-                if (startParam.length > 30) {
-                    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({ 
-                        refresh_token: startParam 
-                    });
-                    
-                    if (refreshError) {
-                        console.error("Ошибка обновления сессии:", refreshError);
-                        setAuthError("Ссылка устарела. Запросите новое письмо на почту.");
-                    } else if (refreshData.session) {
-                        // Очищаем URL, чтобы токен не мешался
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                    }
-                }
+            if (startParam && startParam.length > 30) {
+                await supabase.auth.refreshSession({ refresh_token: startParam });
+                window.history.replaceState({}, document.title, window.location.pathname);
             }
 
-            // 2. Проверяем, залогинены ли мы теперь
-            let { data: { user: authUser } } = await supabase.auth.getUser();
+            // 2. Проверяем сессию
+            const { data: { user: authUser } } = await supabase.auth.getUser();
             
-            // Микро-задержка для Safari/медленного интернета
             if (!authUser) {
-                await new Promise(r => setTimeout(r, 1200));
-                const { data: { user: retryUser } } = await supabase.auth.getUser();
-                authUser = retryUser;
-            }
-
-            // Если не залогинены и мы в ТГ — на логин. Если в браузере — покажем кнопку.
-            if (!authUser) {
-                if (!tg?.initData) {
-                    // Генерируем ссылку для возврата в Safari
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.refresh_token) {
-                        const botName = "my_cool_booking_bot"; // Твой бот
-                        setReturnLink(`https://t.me/${botName}?startapp=${session.refresh_token}`);
-                    }
-                } else {
+                // Если нет юзера и мы в ТГ — на логин
+                if (tg?.initData) {
                     router.push("/login");
-                }
+                } 
+                // Если нет юзера и мы в Safari — Next.js сам отправит на /login по логике Dashboard
                 setLoading(false);
                 return;
             }
 
-            // 3. Загружаем данные мастера
-            setUser(authUser);
-            if (tg?.initDataUnsafe?.user?.id) {
-                setTelegramChatId(tg.initDataUnsafe.user.id.toString());
+            // 3. Если мы в SAFARI и залогинены — готовим ссылку для прыжка в ТГ
+            if (!tg?.initData) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.refresh_token) {
+                    const botUsername = "my_cool_booking_bot"; // Твой бот
+                    // Эта ссылка откроет бота и передаст токен
+                    setReturnLink(`https://t.me/${botUsername}?startapp=${session.refresh_token}`);
+                }
             }
+
+            setUser(authUser);
             await loadData(authUser.id);
             setLoading(false);
         };
@@ -111,60 +88,37 @@ export default function Dashboard() {
     }, [router]);
 
     const loadData = async (userId: string) => {
-        try {
-            const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
-            if (p) {
-                setBusinessName(p.business_name || "");
-                if (p.telegram_chat_id) setTelegramChatId(p.telegram_chat_id);
-                setWorkStart(p.work_start_hour || 9);
-                setWorkEnd(p.work_end_hour || 21);
-                if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
-            }
-
-            const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
-            setServices(s || []);
-
-            const { data: a } = await supabase.from("appointments")
-                .select(`id, client_name, client_phone, start_time, service:services (name)`)
-                .eq("master_id", userId)
-                .gte('start_time', new Date().toISOString())
-                .order('start_time', { ascending: true });
-            setAppointments(a || []);
-        } catch (e) {
-            console.error("Load error:", e);
+        const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
+        if (p) {
+            setBusinessName(p.business_name || "");
+            setTelegramChatId(p.telegram_chat_id || "");
+            setWorkStart(p.work_start_hour || 9);
+            setWorkEnd(p.work_end_hour || 21);
+            if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
         }
+        const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
+        setServices(s || []);
+        const { data: a } = await supabase.from("appointments").select(`id, client_name, client_phone, start_time, service:services (name)` boat).eq("master_id", userId).gte('start_time', new Date().toISOString()).order('start_time', { ascending: true });
+        setAppointments(a || []);
     };
 
     const handleSaveProfile = async () => {
         setSaving(true);
         const { error } = await supabase.from("profiles").upsert({
-            id: user.id,
-            business_name: businessName,
-            telegram_chat_id: telegramChatId.trim(),
-            work_start_hour: workStart,
-            work_end_hour: workEnd,
-            disabled_days: disabledDays.join(','),
-            updated_at: new Date(),
+            id: user.id, business_name: businessName, telegram_chat_id: telegramChatId.trim(),
+            work_start_hour: workStart, work_end_hour: workEnd,
+            disabled_days: disabledDays.join(','), updated_at: new Date(),
         });
         setSaving(false);
-        if (window.Telegram?.WebApp?.showPopup) {
-            window.Telegram.WebApp.showPopup({ message: error ? `Ошибка: ${error.message}` : "Настройки сохранены! ✅" });
-        } else {
-            alert(error ? error.message : "Сохранено!");
-        }
+        alert(error ? error.message : "Настройки сохранены!");
     };
 
     const handleVerifyBot = async () => {
         if (!telegramChatId) return;
         setVerifying(true);
-        const res = await fetch('/api/notify', {
-            method: 'POST',
-            body: JSON.stringify({ masterId: user.id, isTest: true }),
-            headers: { 'Content-Type': 'application/json' }
-        });
+        await fetch('/api/notify', { method: 'POST', body: JSON.stringify({ masterId: user.id, isTest: true }), headers: { 'Content-Type': 'application/json' } });
         setVerifying(false);
-        if (res.ok) alert("Тестовое уведомление отправлено!");
-        else alert("Ошибка. Запустите бота /start");
+        alert("Проверьте уведомление в Telegram!");
     };
 
     const handleAddService = async () => {
@@ -183,7 +137,7 @@ export default function Dashboard() {
     const handleDeleteRecord = async (id: string) => {
         if (confirm("Удалить запись?")) {
             await supabase.from("appointments").delete().eq("id", id);
-            await loadData(user.id);
+            loadData(user.id);
         }
     };
 
@@ -191,39 +145,42 @@ export default function Dashboard() {
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
-    // --- ОШИБКА АВТОРИЗАЦИИ ---
-    if (authError) {
-        return (
-            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white">
-                <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                <h1 className="text-xl font-bold mb-2">Упс!</h1>
-                <p className="text-slate-400 mb-6">{authError}</p>
-                <button onClick={() => router.push("/login")} className="bg-blue-600 px-6 py-3 rounded-xl font-bold">Вернуться к входу</button>
-            </div>
-        );
-    }
-
-    // --- ЭКРАН SAFARI ---
-    if (isBrowser && !user) {
+    // --- ЛОВУШКА SAFARI: Если мы в браузере, ВСЕГДА показываем только кнопку перехода ---
+    if (isBrowser) {
         return (
             <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white">
                 <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-6">
                      <Bot className="w-10 h-10 text-blue-500" />
                 </div>
-                <h1 className="text-2xl font-bold mb-2">Вход подтвержден!</h1>
-                <p className="text-slate-400 mb-8 max-w-xs">Нажмите кнопку ниже, чтобы управлять записями в Telegram.</p>
+                <h1 className="text-2xl font-bold mb-2">Вход выполнен!</h1>
+                <p className="text-slate-400 mb-8 max-w-xs">Чтобы управлять записями, перейдите в Telegram.</p>
+                
                 {returnLink ? (
-                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 border border-blue-400/30">
-                        <ExternalLink className="w-5 h-5" /> Открыть в Telegram
+                    <a 
+                        href={returnLink} 
+                        className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    >
+                        <ExternalLink className="w-5 h-5" />
+                        Открыть Кабинет в ТГ
                     </a>
                 ) : (
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+                    <div className="text-slate-500 flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Синхронизация...</span>
+                    </div>
                 )}
+
+                <button 
+                    onClick={() => supabase.auth.signOut().then(() => router.push("/login"))}
+                    className="mt-10 text-slate-500 text-sm underline"
+                >
+                    Выйти из аккаунта
+                </button>
             </div>
         );
     }
 
-    // --- ОСНОВНОЙ ДАШБОРД (В TELEGRAM) ---
+    // --- ОБЫЧНЫЙ ДАШБОРД (ТОЛЬКО ДЛЯ TELEGRAM) ---
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10">
@@ -238,7 +195,7 @@ export default function Dashboard() {
             <main className="grid gap-6">
                 <div className="bg-gradient-to-br from-blue-900/40 to-slate-800 p-5 rounded-2xl border border-blue-500/30 shadow-lg">
                     <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider">
-                        <LinkIcon className="w-3 h-3" /> Ссылка для записи клиентов
+                        <LinkIcon className="w-3 h-3" /> Ваша ссылка для клиентов
                     </h2>
                     <div className="flex gap-2">
                         <input readOnly value={profileUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 outline-none font-mono" />
@@ -248,13 +205,14 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Настройки */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
                     <h2 className="text-lg font-bold mb-5 flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
                         <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Название бизнеса" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" />
-                        <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="Telegram ID" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-emerald-400" />
-                        <button onClick={handleVerifyBot} disabled={verifying} className="text-[10px] uppercase bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg flex items-center gap-2">
-                            {verifying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />} Проверить связь
+                        <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="Ваш Telegram ID" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-emerald-400 font-mono" />
+                        <button onClick={handleVerifyBot} className="text-[10px] uppercase bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-2 rounded-lg flex items-center gap-2">
+                            <Bot className="w-3 h-3" /> Проверить уведомления
                         </button>
                         
                         <div className="pt-4 border-t border-slate-700">
@@ -268,17 +226,18 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg">
                             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Сохранить настройки</>}
                         </button>
                     </div>
                 </div>
 
+                {/* Услуги */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
                     <div className="flex gap-2 mb-4">
-                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" />
-                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" />
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
+                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
                         <button onClick={handleAddService} disabled={addingService} className="bg-pink-600 px-4 rounded-xl">
                             {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 text-white" />}
                         </button>
@@ -287,13 +246,14 @@ export default function Dashboard() {
                         {services.map(s => (
                             <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl">
                                 <span className="text-sm font-medium">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
-                                <button onClick={async () => { if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); } }} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteRecord(s.id)} className="text-slate-500 hover:text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
+                {/* Записи */}
+                <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Предстоящие записи</h2>
                     <div className="space-y-3">
                         {appointments.length === 0 ? <p className="text-slate-500 text-center py-4 text-sm">Новых записей нет</p> : appointments.map(app => (
