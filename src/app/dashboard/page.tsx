@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, Plus, Loader2, Link as LinkIcon, User } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, Plus, Loader2, Link as LinkIcon, User, Bot } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -12,6 +12,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
+    const [verifying, setVerifying] = useState(false); // Добавили состояние проверки
     const [user, setUser] = useState<any>(null);
     
     // Профиль
@@ -42,7 +43,6 @@ export default function Dashboard() {
             if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
                 const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
                 if (tgUser && !telegramChatId) {
-                    // Автоматически подставляем ID, если зашли через ТГ
                     setTelegramChatId(tgUser.id.toString());
                 }
             }
@@ -59,22 +59,18 @@ export default function Dashboard() {
     }, []);
 
     const loadData = async (userId: string) => {
-        // Загрузка профиля
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
         if (p) {
             setBusinessName(p.business_name || "");
-            // Если в базе уже есть ChatID, берем его. Если нет - берем из стейта (авто-определенный)
             if (p.telegram_chat_id) setTelegramChatId(p.telegram_chat_id);
             setWorkStart(p.work_start_hour || 9);
             setWorkEnd(p.work_end_hour || 21);
             if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
         }
 
-        // Загрузка услуг
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
 
-        // Загрузка записей
         const { data: a } = await supabase.from("appointments")
             .select(`id, client_name, client_phone, start_time, service:services (name)`)
             .eq("master_id", userId)
@@ -88,7 +84,7 @@ export default function Dashboard() {
         const updates = {
             id: user.id,
             business_name: businessName,
-            telegram_chat_id: telegramChatId.trim(), // Важно для уведомлений
+            telegram_chat_id: telegramChatId.trim(),
             work_start_hour: workStart,
             work_end_hour: workEnd,
             disabled_days: disabledDays.join(','),
@@ -99,7 +95,21 @@ export default function Dashboard() {
         setSaving(false);
         
         if (error) alert("Ошибка: " + error.message);
-        // Можно добавить красивый тоаст, но пока алерт для простоты
+        else alert("Настройки сохранены!");
+    };
+
+    // Функция проверки связи с ботом
+    const handleVerifyBot = async () => {
+        if (!telegramChatId) return;
+        setVerifying(true);
+        const res = await fetch('/api/notify', {
+            method: 'POST',
+            body: JSON.stringify({ masterId: user.id, isTest: true }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+        setVerifying(false);
+        if (res.ok) alert("Сообщение отправлено! Проверь Телеграм.");
+        else alert("Ошибка. Убедись, что ты запустил бота.");
     };
 
     const handleAddService = async () => {
@@ -113,11 +123,10 @@ export default function Dashboard() {
         setAddingService(false);
     };
 
-    // Логика переключения дней (Зеленый = Работаю)
     const toggleDay = (dayId: number) => {
         setDisabledDays(prev => {
-            if (prev.includes(dayId)) return prev.filter(d => d !== dayId); // Сделать рабочим
-            return [...prev, dayId]; // Сделать выходным
+            if (prev.includes(dayId)) return prev.filter(d => d !== dayId);
+            return [...prev, dayId];
         });
     };
 
@@ -128,14 +137,12 @@ export default function Dashboard() {
         }
     };
 
-    // Генерируем ссылку на основе UUID
     const profileUrl = user ? `${window.location.origin}/book/${user.id}` : "";
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
-            {/* --- HEADER --- */}
             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
                 <div>
                     <h1 className="text-lg font-bold flex items-center gap-2">
@@ -143,13 +150,11 @@ export default function Dashboard() {
                     </h1>
                 </div>
                 <button onClick={() => supabase.auth.signOut().then(() => router.push("/login"))} className="text-slate-400 hover:text-red-400 transition-colors p-2">
-                    <LogOut className="w-5 h-5" />
+                    <LogOut className="w-5 h-5" /> Выйти
                 </button>
             </header>
 
             <main className="grid gap-6">
-                
-                {/* --- ССЫЛКА ДЛЯ КЛИЕНТОВ --- */}
                 <div className="bg-gradient-to-br from-blue-900/40 to-slate-800 p-5 rounded-2xl border border-blue-500/30 shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 blur-2xl rounded-full pointer-events-none"></div>
                     <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider">
@@ -166,7 +171,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* --- НАСТРОЙКИ --- */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-5 text-white flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
@@ -175,13 +179,22 @@ export default function Dashboard() {
                             <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Барбершоп TopGun" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder:text-slate-600" />
                         </div>
                         
-                        {/* Chat ID скрыт, если он определился автоматом, или можно оставить для проверки */}
                         <div>
                             <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (для уведомлений)</label>
                             <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="Авто-определение..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors text-emerald-400 font-mono" />
+                            {/* Добавленная кнопка проверки связи */}
+                            <div className="flex gap-2 items-center mt-2">
+                                <button 
+                                    onClick={handleVerifyBot}
+                                    disabled={verifying || !telegramChatId}
+                                    className="text-[10px] font-bold uppercase tracking-wider bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-900/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                    {verifying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
+                                    Проверить связь
+                                </button>
+                            </div>
                         </div>
                         
-                        {/* ГРАФИК */}
                         <div className="pt-4 border-t border-slate-700">
                             <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">Рабочие дни (Зеленый = Работаю)</label>
                             <div className="flex justify-between gap-1 mb-4">
@@ -219,7 +232,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* --- УСЛУГИ --- */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
                     <div className="flex gap-2 mb-4">
@@ -244,7 +256,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* --- ЗАПИСИ --- */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Записи</h2>
                     <div className="space-y-3">
@@ -263,7 +274,6 @@ export default function Dashboard() {
                         ))}
                     </div>
                 </div>
-
             </main>
         </div>
     );
