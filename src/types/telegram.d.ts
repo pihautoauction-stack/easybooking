@@ -6,6 +6,11 @@ interface TelegramWebApp {
   setBackgroundColor: (color: string) => void;
   showPopup: (params: { title?: string; message: string; buttons?: any[] }) => void;
   showConfirm: (message: string, callback: (confirmed: boolean) => void) => void;
+  
+  // ВОТ ЭТИХ ПОЛЕЙ НЕ ХВАТАЛО:
+  initData: string;
+  platform: string;
+
   initDataUnsafe: {
     user?: {
       id: number;
