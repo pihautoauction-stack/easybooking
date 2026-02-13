@@ -3,33 +3,26 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 0, 0, 0;
-  --background-end-rgb: 0, 0, 0;
+  --background: #000000;
+  --foreground: #ffffff;
 }
 
 @layer base {
-  /* Убираем белые рамки глобально и делаем их прозрачными */
-  *, ::before, ::after {
-    border-color: rgba(255, 255, 255, 0.1); 
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* Отключаем белый фон и скроллбар */
+    overflow-x: hidden; 
+    -webkit-font-smoothing: antialiased;
   }
   
-  body {
-    color: rgb(var(--foreground-rgb));
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
-    /* Защита от скролла на айфонах */
-    overflow-x: hidden;
-    min-height: 100vh;
+  /* УБИВАЕМ БЕЛЫЕ РАМКИ ГЛОБАЛЬНО */
+  *, ::before, ::after {
+    border-color: rgba(255, 255, 255, 0.05); /* Еле заметная серая, а не белая */
   }
-}
 
-/* Скрываем скроллбар для красоты */
-::-webkit-scrollbar {
-  width: 0px;
-  background: transparent;
+  /* Убираем стандартные стили кнопок и инпутов */
+  input, select, textarea, button {
+    outline: none;
+  }
 }

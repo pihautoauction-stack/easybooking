@@ -2,6 +2,7 @@ interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  // Вот эти методы, которых не хватало:
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
   showPopup: (params: { title?: string; message: string; buttons?: any[] }) => void;
@@ -12,6 +13,7 @@ interface TelegramWebApp {
       last_name?: string;
       username?: string;
     };
+    // И вот это поле для редиректа:
     start_param?: string;
   };
   themeParams: {
