@@ -17,27 +17,24 @@ export default function MiniAppEntry() {
       const startParam = tg.initDataUnsafe?.start_param;
 
       if (startParam) {
-        // У тебя в базе ID мастера (UUID) имеет длину 36 символов
-        // Токен авторизации всегда гораздо длиннее (обычно больше 100 символов)
-        
+        // Проверка: UUID мастера = 36 символов, Токен = больше 40 символов
         if (startParam.length > 40) {
-          // ЭТО МАСТЕР (Токен входа)
+          // ЭТО МАСТЕР (вход по токену из Safari)
           setStatus("Авторизация мастера...");
-          // Отправляем в дашборд, он сам подхватит токен из Telegram WebApp
           router.replace("/dashboard");
-        } else {
-          // ЭТО КЛИЕНТ (ID мастера)
+        } else if (startParam.length === 36) {
+          // ЭТО КЛИЕНТ (запись по ID мастера)
           setStatus("Переход к записи...");
           router.replace(`/book/${startParam}`);
+        } else {
+          // Любой другой непонятный параметр
+          router.replace("/dashboard");
         }
       } else {
-        // Нет параметров — просто идем в кабинет
-        setStatus("Вход в кабинет...");
         router.replace("/dashboard");
       }
     } else {
-      // Если открыли не в Telegram (например, подтверждение почты в Safari)
-      // Мы отправляем на dashboard, где сработает наша "ловушка Safari"
+      // Если открыто в браузере (подтверждение почты)
       router.replace("/dashboard");
     }
   }, [router]);
