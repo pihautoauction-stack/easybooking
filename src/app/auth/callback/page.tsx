@@ -4,7 +4,7 @@ import { useEffect } from "react";
 export default function AuthCallback() {
   useEffect(() => {
     // После подтверждения почты, просто перекидываем в бота
-    window.location.href = "https://easybooking-omega.vercel.app/auth/callback"
+    window.location.href = "https://easybooking-omega.vercel.app/auth/callback
 "; 
   }, []);
 
