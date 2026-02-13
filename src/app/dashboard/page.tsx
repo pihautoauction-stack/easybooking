@@ -8,19 +8,6 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
 export default function Dashboard() {
-    // ... внутри компонента Dashboard ...
-    const [isTelegram, setIsTelegram] = useState(false);
-
-    useEffect(() => {
-        // Проверяем, в Телеграме мы или нет
-        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.platform) {
-            setIsTelegram(true);
-        } else {
-            // Если мы в обычном браузере (Safari/Chrome) — можно показать предупреждение
-            // Но для начала просто ставим true, чтобы не блокировать отладку
-            setIsTelegram(true); 
-        }
-        // ... остальной код useEffect ...
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -78,10 +65,11 @@ export default function Dashboard() {
                 }
             }
 
-            // 2. Проверка пользователя
+            // 2. Проверка пользователя с повторной попыткой
             let { data: { user } } = await supabase.auth.getUser();
             
             if (!user) {
+                // Ждем 1 сек, вдруг куки/токен еще летят
                 await new Promise(r => setTimeout(r, 1000));
                 const { data: { user: retryUser } } = await supabase.auth.getUser();
                 user = retryUser;
@@ -154,7 +142,7 @@ export default function Dashboard() {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
-                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено!"});
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено! Проверь чат с ботом."});
                 else alert("Сообщение отправлено!");
             } else {
                  alert("Ошибка. Убедись, что ты запустил бота /start.");
