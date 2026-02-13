@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -15,6 +15,10 @@ export default function Dashboard() {
     const [verifying, setVerifying] = useState(false);
     const [user, setUser] = useState<any>(null);
     
+    // Состояния для "Ловушки Safari"
+    const [isBrowser, setIsBrowser] = useState(false);
+    const [returnLink, setReturnLink] = useState<string | null>(null);
+
     // Профиль
     const [businessName, setBusinessName] = useState("");
     const [telegramChatId, setTelegramChatId] = useState(""); 
@@ -38,9 +42,13 @@ export default function Dashboard() {
     ];
 
     useEffect(() => {
-        // Настройка цветов Telegram
-        if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-            const tg = window.Telegram.WebApp;
+        // --- ПРОВЕРКА: МЫ В TELEGRAM ИЛИ В SAFARI? ---
+        const tg = window.Telegram?.WebApp;
+        if (!tg?.initData) {
+            // Если initData пустая — значит мы скорее всего в обычном браузере
+            setIsBrowser(true);
+        } else {
+            // Мы в Телеграме — настраиваем цвета
             tg.ready();
             tg.expand();
             if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
@@ -48,28 +56,23 @@ export default function Dashboard() {
         }
 
         const init = async () => {
-            // --- ЛОГИКА АВТОРИЗАЦИИ ЧЕРЕЗ РЕДИРЕКТ ---
+            // --- ЛОГИКА ВХОДА ЧЕРЕЗ РЕДИРЕКТ (Внутри Telegram) ---
             if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.start_param) {
                 const tokenFromSafari = window.Telegram.WebApp.initDataUnsafe.start_param;
-                const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
-                if (refreshData.session) {
-                    window.history.replaceState({}, document.title, window.location.pathname);
+                // Игнорируем auth_success, ищем реальный токен
+                if (tokenFromSafari && tokenFromSafari !== 'auth_success') {
+                    const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
+                    if (refreshData.session) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
                 }
             }
 
-            // 1. Авто-определение Telegram ID
-            if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-                const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
-                if (tgUser && !telegramChatId) {
-                    setTelegramChatId(tgUser.id.toString());
-                }
-            }
-
-            // 2. Проверка пользователя с повторной попыткой
-            let { data: { user } } = await supabase.auth.getUser();
+            // 1. Проверяем пользователя
+            let { data: { user }, error } = await supabase.auth.getUser();
             
+            // Если пользователя нет, пробуем подождать (вдруг куки летят)
             if (!user) {
-                // Ждем 1 сек, вдруг куки/токен еще летят
                 await new Promise(r => setTimeout(r, 1000));
                 const { data: { user: retryUser } } = await supabase.auth.getUser();
                 user = retryUser;
@@ -80,12 +83,30 @@ export default function Dashboard() {
                 return; 
             }
             
+            // Если мы в Safari (isBrowser) и пользователь залогинен — генерируем ссылку возврата
+            if (!window.Telegram?.WebApp?.initData) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.refresh_token) {
+                    const botName = "my_cool_booking_bot"; // ТВОЙ БОТ
+                    setReturnLink(`https://t.me/${botName}/app?startapp=${session.refresh_token}`);
+                }
+            }
+
             setUser(user);
+
+            // Авто-определение Telegram ID
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+                const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
+                if (tgUser && !telegramChatId) {
+                    setTelegramChatId(tgUser.id.toString());
+                }
+            }
+
             await loadData(user.id);
             setLoading(false);
         };
         init();
-    }, [router]);
+    }, [router, telegramChatId]);
 
     const loadData = async (userId: string) => {
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
@@ -108,6 +129,10 @@ export default function Dashboard() {
         setAppointments(a || []);
     };
 
+    // ... Остальные функции (handleSaveProfile, handleVerifyBot и т.д.) оставляем без изменений ...
+    // Я сократил их здесь для краткости, но ты вставь ПОЛНЫЕ версии из предыдущего кода
+    // Или просто скопируй этот блок целиком, если функции ниже нужны (я их добавлю).
+
     const handleSaveProfile = async () => {
         setSaving(true);
         const updates = {
@@ -119,16 +144,12 @@ export default function Dashboard() {
             disabled_days: disabledDays.join(','),
             updated_at: new Date(),
         };
-
         const { error } = await supabase.from("profiles").upsert(updates);
         setSaving(false);
-        
         if (window.Telegram?.WebApp?.showPopup) {
-            window.Telegram.WebApp.showPopup({
-                message: error ? `Ошибка: ${error.message}` : "Настройки сохранены! ✅"
-            });
+            window.Telegram.WebApp.showPopup({ message: error ? `Ошибка: ${error.message}` : "Настройки сохранены! ✅" });
         } else {
-            alert(error ? "Ошибка: " + error.message : "Настройки сохранены!");
+            alert(error ? error.message : "Сохранено!");
         }
     };
 
@@ -142,48 +163,33 @@ export default function Dashboard() {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
-                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено! Проверь чат с ботом."});
-                else alert("Сообщение отправлено!");
-            } else {
-                 alert("Ошибка. Убедись, что ты запустил бота /start.");
-            }
-        } catch (e) {
-            alert("Ошибка сети");
-        }
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Отправлено!"});
+                else alert("Отправлено!");
+            } else { alert("Ошибка. Запустите бота."); }
+        } catch (e) { alert("Ошибка сети"); }
         setVerifying(false);
     };
 
     const handleAddService = async () => {
         if (!newName || !newPrice) return;
         setAddingService(true);
-        await supabase.from("services").insert({
-            user_id: user.id, name: newName, price: Number(newPrice)
-        });
+        await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice) });
         setNewName(""); setNewPrice("");
         await loadData(user.id);
         setAddingService(false);
     };
 
     const toggleDay = (dayId: number) => {
-        setDisabledDays(prev => {
-            if (prev.includes(dayId)) return prev.filter(d => d !== dayId);
-            return [...prev, dayId];
-        });
+        setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     };
 
     const handleDeleteRecord = async (id: string) => {
         if (window.Telegram?.WebApp?.showConfirm) {
              window.Telegram.WebApp.showConfirm("Удалить запись?", async (confirmed: boolean) => {
-                if (confirmed) {
-                    await supabase.from("appointments").delete().eq("id", id);
-                    loadData(user.id);
-                }
+                if (confirmed) { await supabase.from("appointments").delete().eq("id", id); loadData(user.id); }
              });
         } else {
-            if (confirm("Удалить запись?")) {
-                await supabase.from("appointments").delete().eq("id", id);
-                loadData(user.id);
-            }
+            if (confirm("Удалить запись?")) { await supabase.from("appointments").delete().eq("id", id); loadData(user.id); }
         }
     };
 
@@ -191,9 +197,40 @@ export default function Dashboard() {
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
+    // --- ЛОВУШКА SAFARI ---
+    // Если мы в браузере (не в ТГ), показываем экран возврата
+    if (isBrowser) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white font-sans">
+                <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                     <Bot className="w-10 h-10 text-blue-400" />
+                </div>
+                <h1 className="text-2xl font-bold mb-2">Настройка завершена!</h1>
+                <p className="text-slate-400 mb-8 max-w-xs">
+                    Вы успешно вошли в систему. Теперь вернитесь в Telegram, чтобы управлять записями.
+                </p>
+                
+                {returnLink ? (
+                    <a 
+                        href={returnLink}
+                        className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    >
+                        <ExternalLink className="w-5 h-5" />
+                        Открыть в Telegram
+                    </a>
+                ) : (
+                    <div className="flex items-center gap-2 text-slate-500">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Генерируем ссылку...
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // --- ОБЫЧНЫЙ ДАШБОРД (ТОЛЬКО В TELEGRAM) ---
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
-            <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
+             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
                 <div>
                     <h1 className="text-lg font-bold flex items-center gap-2">
                         <Settings className="text-blue-500 w-5 h-5" /> Кабинет
