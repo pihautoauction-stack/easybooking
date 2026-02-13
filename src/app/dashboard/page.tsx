@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Trash2, LogOut, Settings, Calendar, Save, Copy, ExternalLink, Plus, Loader2, Link as LinkIcon, User, Bot } from "lucide-react";
+import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as LinkIcon, User, Bot } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -12,7 +12,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
-    const [verifying, setVerifying] = useState(false); // Добавили состояние проверки
+    const [verifying, setVerifying] = useState(false);
     const [user, setUser] = useState<any>(null);
     
     // Профиль
@@ -38,6 +38,15 @@ export default function Dashboard() {
     ];
 
     useEffect(() => {
+        // Настройка цветов Telegram
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+            if (tg.setHeaderColor) tg.setHeaderColor('#0f172a'); // slate-900
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
+        }
+
         const init = async () => {
             // 1. Авто-определение Telegram ID
             if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
@@ -47,16 +56,27 @@ export default function Dashboard() {
                 }
             }
 
-            // 2. Auth Check
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { router.push("/login"); return; }
-            setUser(user);
+            // 2. Auth Check с повторной попыткой (для редиректа)
+            let { data: { user } } = await supabase.auth.getUser();
+            
+            if (!user) {
+                // Ждем немного, вдруг куки еще летят
+                await new Promise(r => setTimeout(r, 1000));
+                const { data: { user: retryUser } } = await supabase.auth.getUser();
+                user = retryUser;
+            }
 
+            if (!user) { 
+                router.push("/login"); 
+                return; 
+            }
+            
+            setUser(user);
             await loadData(user.id);
             setLoading(false);
         };
         init();
-    }, []);
+    }, [router]); // Добавил router в зависимости
 
     const loadData = async (userId: string) => {
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
@@ -94,22 +114,34 @@ export default function Dashboard() {
         const { error } = await supabase.from("profiles").upsert(updates);
         setSaving(false);
         
-        if (error) alert("Ошибка: " + error.message);
-        else alert("Настройки сохранены!");
+        if (window.Telegram?.WebApp?.showPopup) {
+            window.Telegram.WebApp.showPopup({
+                message: error ? `Ошибка: ${error.message}` : "Настройки сохранены! ✅"
+            });
+        } else {
+            alert(error ? "Ошибка: " + error.message : "Настройки сохранены!");
+        }
     };
 
-    // Функция проверки связи с ботом
     const handleVerifyBot = async () => {
         if (!telegramChatId) return;
         setVerifying(true);
-        const res = await fetch('/api/notify', {
-            method: 'POST',
-            body: JSON.stringify({ masterId: user.id, isTest: true }),
-            headers: { 'Content-Type': 'application/json' }
-        });
+        try {
+            const res = await fetch('/api/notify', {
+                method: 'POST',
+                body: JSON.stringify({ masterId: user.id, isTest: true }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (res.ok) {
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено! Проверь чат с ботом."});
+                else alert("Сообщение отправлено!");
+            } else {
+                 alert("Ошибка. Убедись, что ты запустил бота /start.");
+            }
+        } catch (e) {
+            alert("Ошибка сети");
+        }
         setVerifying(false);
-        if (res.ok) alert("Сообщение отправлено! Проверь Телеграм.");
-        else alert("Ошибка. Убедись, что ты запустил бота.");
     };
 
     const handleAddService = async () => {
@@ -131,9 +163,19 @@ export default function Dashboard() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (confirm("Удалить запись?")) {
-            await supabase.from("appointments").delete().eq("id", id);
-            loadData(user.id);
+        // Используем нативный конфирм Telegram, если доступен
+        if (window.Telegram?.WebApp?.showConfirm) {
+             window.Telegram.WebApp.showConfirm("Удалить запись?", async (confirmed: boolean) => {
+                if (confirmed) {
+                    await supabase.from("appointments").delete().eq("id", id);
+                    loadData(user.id);
+                }
+             });
+        } else {
+            if (confirm("Удалить запись?")) {
+                await supabase.from("appointments").delete().eq("id", id);
+                loadData(user.id);
+            }
         }
     };
 
@@ -163,7 +205,11 @@ export default function Dashboard() {
                     <div className="flex gap-2">
                         <input readOnly value={profileUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 outline-none font-mono" />
                         <button 
-                            onClick={() => {navigator.clipboard.writeText(profileUrl); alert("Ссылка скопирована!");}} 
+                            onClick={() => {
+                                navigator.clipboard.writeText(profileUrl); 
+                                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Ссылка скопирована!"});
+                                else alert("Ссылка скопирована!");
+                            }} 
                             className="bg-blue-600 hover:bg-blue-500 active:scale-95 transition-all px-4 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20 cursor-pointer"
                         >
                             <Copy className="w-4 h-4 text-white" />
@@ -182,7 +228,6 @@ export default function Dashboard() {
                         <div>
                             <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (для уведомлений)</label>
                             <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="Авто-определение..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors text-emerald-400 font-mono" />
-                            {/* Добавленная кнопка проверки связи */}
                             <div className="flex gap-2 items-center mt-2">
                                 <button 
                                     onClick={handleVerifyBot}
@@ -249,7 +294,15 @@ export default function Dashboard() {
                         {services.map(s => (
                             <div key={s.id} className="flex justify-between items-center bg-slate-700/30 p-3 rounded-xl border border-slate-600/50 hover:border-slate-500 transition-colors">
                                 <span className="text-sm font-medium text-slate-200">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
-                                <button onClick={async () => { if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }}} className="text-slate-500 hover:text-red-400 p-2 cursor-pointer transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={async () => { 
+                                     if(window.Telegram?.WebApp?.showConfirm) {
+                                        window.Telegram.WebApp.showConfirm("Удалить услугу?", async (ok) => {
+                                            if(ok) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }
+                                        });
+                                     } else {
+                                        if(confirm("Удалить?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }
+                                     }
+                                }} className="text-slate-500 hover:text-red-400 p-2 cursor-pointer transition-colors"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         ))}
                         {services.length === 0 && <p className="text-slate-500 text-xs text-center py-2">Добавьте первую услугу</p>}
