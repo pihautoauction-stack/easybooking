@@ -8,6 +8,19 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
 export default function Dashboard() {
+    // ... внутри компонента Dashboard ...
+    const [isTelegram, setIsTelegram] = useState(false);
+
+    useEffect(() => {
+        // Проверяем, в Телеграме мы или нет
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.platform) {
+            setIsTelegram(true);
+        } else {
+            // Если мы в обычном браузере (Safari/Chrome) — можно показать предупреждение
+            // Но для начала просто ставим true, чтобы не блокировать отладку
+            setIsTelegram(true); 
+        }
+        // ... остальной код useEffect ...
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
