@@ -43,7 +43,9 @@ export default function Dashboard() {
             const tg = window.Telegram.WebApp;
             tg.ready();
             tg.expand();
+            // Устанавливаем правильные цвета хедера и фона
             if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
         }
 
         const init = async () => {
@@ -104,11 +106,11 @@ export default function Dashboard() {
         const { error } = await supabase.from("profiles").upsert(updates);
         setSaving(false);
         
-        if (window.Telegram?.WebApp?.showPopup) {
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.showPopup) {
             window.Telegram.WebApp.showPopup({
                 title: error ? "Ошибка" : "Успешно",
-                message: error ? error.message : "Ваш профиль обновлен!",
-                buttons: [{ type: "ok", text: "Отлично" }]
+                message: error ? error.message : "Профиль сохранен!",
+                buttons: [{ type: "ok" }]
             });
         }
     };
@@ -136,87 +138,80 @@ export default function Dashboard() {
     if (loading) return (
         <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center gap-4 text-blue-400">
             <Loader2 className="w-10 h-10 animate-spin" />
-            <p className="font-medium animate-pulse">Загружаем кабинет...</p>
         </div>
     );
 
-    const profileUrl = `${window.location.origin}/book/${user?.id}`;
+    const profileUrl = user ? `${window.location.origin}/book/${user.id}` : "";
 
     return (
         <div className="min-h-screen bg-[#0f172a] text-slate-100 font-sans selection:bg-blue-500/30 pb-32">
             
             {/* Header */}
-            <header className="px-6 pt-10 pb-6 flex justify-between items-center">
+            <header className="px-5 pt-6 pb-4 flex justify-between items-center bg-[#0f172a] sticky top-0 z-50 border-b border-white/5">
                 <div>
-                    <h1 className="text-3xl font-black tracking-tighter bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
                         EasyBooking
                     </h1>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">
-                        Control Center
-                    </p>
                 </div>
                 <button 
                     onClick={() => supabase.auth.signOut().then(() => router.push("/login"))}
-                    className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all shadow-xl"
+                    className="p-2 bg-slate-800/50 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-colors"
                 >
-                    <LogOut className="w-5 h-5 text-slate-400" />
+                    <LogOut className="w-5 h-5" />
                 </button>
             </header>
 
-            <main className="px-4 space-y-6">
+            <main className="px-4 pt-6 space-y-6">
                 
-                {/* Booking Link Card */}
-                <div className="relative group overflow-hidden bg-gradient-to-br from-blue-600/20 to-indigo-600/10 p-6 rounded-[32px] border border-white/10 shadow-2xl">
-                    <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-                        <LinkIcon className="w-12 h-12" />
-                    </div>
-                    <div className="flex items-center gap-2 mb-4 text-blue-400">
-                        <Bell className="w-4 h-4" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Ваша визитка</span>
+                {/* Ссылка (Визитка) */}
+                <div className="relative group overflow-hidden bg-gradient-to-br from-blue-900/40 to-indigo-900/40 p-5 rounded-3xl border border-white/10 shadow-lg">
+                    <div className="flex items-center gap-2 mb-3 text-blue-300">
+                        <LinkIcon className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-widest">Ваша ссылка</span>
                     </div>
                     <div className="flex gap-2 relative z-10">
-                        <div className="flex-1 bg-black/40 backdrop-blur-md rounded-2xl p-4 text-[13px] text-blue-200 truncate font-mono border border-white/5 shadow-inner">
+                        <div className="flex-1 bg-black/30 backdrop-blur-md rounded-xl p-3 text-sm text-blue-100 truncate font-mono border border-white/5">
                             {profileUrl}
                         </div>
                         <button 
-                            onClick={() => {navigator.clipboard.writeText(profileUrl); alert("Скопировано!");}}
-                            className="bg-blue-500 hover:bg-blue-400 text-white px-5 rounded-2xl active:scale-95 transition-all shadow-lg shadow-blue-500/20"
+                            onClick={() => {navigator.clipboard.writeText(profileUrl); if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message:"Ссылка скопирована!"});}}
+                            className="bg-blue-500 hover:bg-blue-400 text-white px-4 rounded-xl active:scale-95 transition-all font-bold"
                         >
                             <Copy className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
 
-                {/* Profile Settings */}
-                <section className="bg-white/5 backdrop-blur-md rounded-[32px] p-6 border border-white/5 space-y-6 shadow-xl">
-                    <h2 className="text-lg font-bold flex items-center gap-3">
-                        <Settings2 className="text-blue-400 w-5 h-5"/> Настройки мастера
+                {/* Настройки Профиля */}
+                <section className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-white/5 shadow-xl space-y-5">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                        <User className="text-blue-400 w-5 h-5"/> Профиль
                     </h2>
                     
                     <div className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Название студии / Имя</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Название / Имя</label>
                             <input 
                                 value={businessName} 
                                 onChange={e => setBusinessName(e.target.value)} 
-                                placeholder="Напр. Barber Studio" 
-                                className="w-full bg-slate-900/50 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-blue-500/50 transition-all text-sm placeholder:text-slate-700 shadow-inner" 
+                                placeholder="Напр. Барбершоп TopGun" 
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white outline-none focus:border-blue-500/50 transition-all text-sm placeholder:text-slate-600" 
                             />
                         </div>
 
                         <div>
-                            <label className="text-[11px] text-slate-500 font-black uppercase ml-1 block mb-3">Рабочие дни</label>
-                            <div className="grid grid-cols-7 gap-1.5">
+                            <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 block mb-2">Рабочие дни</label>
+                            <div className="grid grid-cols-7 gap-1">
                                 {DAYS.map((d) => {
                                     const isWorking = !disabledDays.includes(d.id);
                                     return (
                                         <button 
                                             key={d.id} 
                                             onClick={() => toggleDay(d.id)}
-                                            className={`py-3 rounded-xl text-[10px] font-black transition-all border ${
+                                            className={`py-2.5 rounded-lg text-[10px] font-bold transition-all border ${
                                                 isWorking 
-                                                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" 
-                                                : "bg-slate-900/40 border-white/5 text-slate-600"
+                                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+                                                : "bg-slate-950 border-transparent text-slate-600"
                                             }`}
                                         >
                                             {d.label}
@@ -226,68 +221,77 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div className="flex gap-3 pt-2">
-                            <div className="flex-1 space-y-2">
-                                <label className="text-[11px] text-slate-500 font-black uppercase ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> С</label>
-                                <select 
-                                    value={workStart} 
-                                    onChange={e => setWorkStart(Number(e.target.value))}
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-2xl p-4 outline-none appearance-none font-bold text-center text-sm shadow-inner"
-                                >
-                                    {[...Array(24)].map((_, i) => <option key={i} value={i} className="bg-[#0f172a]">{i}:00</option>)}
-                                </select>
+                        <div className="flex gap-3">
+                            <div className="flex-1 space-y-1.5">
+                                <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> С</label>
+                                <div className="relative">
+                                    <select 
+                                        value={workStart} 
+                                        onChange={e => setWorkStart(Number(e.target.value))}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 outline-none appearance-none font-bold text-center text-sm"
+                                    >
+                                        {[...Array(24)].map((_, i) => <option key={i} value={i} className="bg-[#0f172a]">{i}:00</option>)}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none"><ChevronRight className="w-3 h-3 text-slate-600 rotate-90"/></div>
+                                </div>
                             </div>
-                            <div className="flex-1 space-y-2">
-                                <label className="text-[11px] text-slate-500 font-black uppercase ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> До</label>
-                                <select 
-                                    value={workEnd} 
-                                    onChange={e => setWorkEnd(Number(e.target.value))}
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-2xl p-4 outline-none appearance-none font-bold text-center text-sm shadow-inner"
-                                >
-                                    {[...Array(24)].map((_, i) => <option key={i} value={i} className="bg-[#0f172a]">{i}:00</option>)}
-                                </select>
+                            <div className="flex-1 space-y-1.5">
+                                <label className="text-[10px] text-slate-500 font-bold uppercase ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> До</label>
+                                <div className="relative">
+                                    <select 
+                                        value={workEnd} 
+                                        onChange={e => setWorkEnd(Number(e.target.value))}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 outline-none appearance-none font-bold text-center text-sm"
+                                    >
+                                        {[...Array(24)].map((_, i) => <option key={i} value={i} className="bg-[#0f172a]">{i}:00</option>)}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none"><ChevronRight className="w-3 h-3 text-slate-600 rotate-90"/></div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                {/* Services Section */}
-                <section className="bg-white/5 backdrop-blur-md rounded-[32px] p-6 border border-white/5 shadow-xl">
-                    <h2 className="text-lg font-bold mb-6 flex items-center gap-3">
-                        <Briefcase className="text-pink-400 w-5 h-5"/> Мои Услуги
+                {/* Услуги */}
+                <section className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-white/5 shadow-xl">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Briefcase className="text-pink-400 w-5 h-5"/> Услуги
                     </h2>
-                    <div className="flex gap-2 mb-6">
+                    
+                    <div className="flex gap-2 mb-5">
                         <input 
                             value={newName} 
                             onChange={e => setNewName(e.target.value)} 
                             placeholder="Название" 
-                            className="flex-[2] bg-slate-900/50 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-pink-500/30 transition-all shadow-inner" 
+                            className="flex-[2] bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-sm outline-none focus:border-pink-500/30 transition-all" 
                         />
                         <input 
                             value={newPrice} 
                             onChange={e => setNewPrice(e.target.value)} 
                             placeholder="₽" 
                             type="number" 
-                            className="flex-1 bg-slate-900/50 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-pink-500/30 transition-all text-center shadow-inner" 
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-sm outline-none focus:border-pink-500/30 transition-all text-center" 
                         />
                         <button 
                             onClick={handleAddService} 
                             disabled={addingService || !newName}
-                            className="bg-pink-500 hover:bg-pink-400 p-4 rounded-2xl active:scale-90 transition-all shadow-lg shadow-pink-500/20"
+                            className="bg-pink-600 hover:bg-pink-500 p-3.5 rounded-xl active:scale-90 transition-all flex items-center justify-center shadow-lg shadow-pink-600/20"
                         >
-                            {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                            {addingService ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Plus className="w-5 h-5 text-white" />}
                         </button>
                     </div>
-                    <div className="space-y-3">
+
+                    <div className="space-y-2.5">
+                        {services.length === 0 && <p className="text-center text-slate-600 text-xs py-4">Нет услуг</p>}
                         {services.map(s => (
-                            <div key={s.id} className="group flex justify-between items-center bg-slate-900/40 p-4 rounded-[24px] border border-white/5 hover:border-white/10 transition-all">
+                            <div key={s.id} className="flex justify-between items-center bg-slate-950/50 p-3.5 rounded-xl border border-white/5">
                                 <div>
-                                    <p className="font-bold text-sm text-slate-100">{s.name}</p>
-                                    <p className="text-emerald-400 text-xs font-black tracking-tight mt-0.5">{s.price} ₽</p>
+                                    <p className="font-semibold text-sm text-slate-100">{s.name}</p>
+                                    <p className="text-emerald-400 text-xs font-bold mt-0.5">{s.price} ₽</p>
                                 </div>
                                 <button 
                                     onClick={async () => { if(confirm("Удалить услугу?")) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }}}
-                                    className="p-2 text-slate-700 hover:text-red-400 transition-colors"
+                                    className="p-2 text-slate-600 hover:text-red-400 transition-colors"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
@@ -296,33 +300,30 @@ export default function Dashboard() {
                     </div>
                 </section>
 
-                {/* Appointments Section */}
-                <section className="bg-white/5 backdrop-blur-md rounded-[32px] p-6 border border-white/5 shadow-xl">
-                    <h2 className="text-lg font-bold mb-6 flex items-center gap-3">
-                        <Calendar className="text-emerald-400 w-5 h-5"/> Предстоящие записи
+                {/* Записи */}
+                <section className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-5 border border-white/5 shadow-xl">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Calendar className="text-emerald-400 w-5 h-5"/> Записи
                     </h2>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {appointments.length === 0 ? (
-                            <div className="text-center py-10 opacity-30">
-                                <Calendar className="w-12 h-12 mx-auto mb-2" />
-                                <p className="text-xs font-bold uppercase tracking-widest">Записей пока нет</p>
+                            <div className="text-center py-6 text-slate-600">
+                                <p className="text-xs">Записей пока нет</p>
                             </div>
                         ) : appointments.map(app => (
-                            <div key={app.id} className="p-5 bg-gradient-to-r from-slate-900/60 to-slate-900/30 rounded-[28px] border border-white/5 flex justify-between items-center">
-                                <div className="space-y-1.5">
-                                    <div className="text-emerald-400 font-black text-2xl font-mono leading-none tracking-tighter">
+                            <div key={app.id} className="p-4 bg-gradient-to-r from-slate-800/50 to-slate-900/50 rounded-2xl border border-white/5 flex justify-between items-center">
+                                <div>
+                                    <div className="text-emerald-400 font-black text-lg font-mono tracking-tight">
                                         {format(new Date(app.start_time), "HH:mm")}
                                     </div>
-                                    <div className="font-bold text-[13px] text-slate-200">{app.client_name}</div>
-                                    <div className="inline-flex items-center gap-1.5 bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-500/20">
-                                        <Check className="w-2.5 h-2.5" /> {app.service?.name}
-                                    </div>
+                                    <div className="font-bold text-sm text-slate-200">{app.client_name}</div>
+                                    <div className="text-slate-500 text-[10px] uppercase font-bold mt-0.5">{app.service?.name}</div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <span className="text-slate-500 text-[10px] font-bold">{format(new Date(app.start_time), "d MMM", { locale: ru })}</span>
+                                    <span className="text-slate-500 text-[10px] font-bold bg-slate-950 px-2 py-1 rounded-md">{format(new Date(app.start_time), "d MMM", { locale: ru })}</span>
                                     <button 
                                         onClick={async () => { if(confirm("Удалить запись?")) { await supabase.from("appointments").delete().eq("id", app.id); loadData(user.id); }}}
-                                        className="p-2 text-slate-800 hover:text-red-400 transition-colors"
+                                        className="text-slate-600 hover:text-red-400 p-1"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -333,19 +334,14 @@ export default function Dashboard() {
                 </section>
             </main>
 
-            {/* Bottom Action Area */}
-            <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/95 to-transparent pointer-events-none">
+            {/* Плавающая кнопка сохранения */}
+            <div className="fixed bottom-4 left-4 right-4 z-40">
                 <button 
                     onClick={handleSaveProfile} 
                     disabled={saving}
-                    className="pointer-events-auto w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-5 rounded-[24px] font-black text-lg shadow-[0_20px_40px_rgba(37,99,235,0.2)] active:scale-95 transition-all flex items-center justify-center gap-3"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-blue-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 backdrop-blur-sm"
                 >
-                    {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : (
-                        <>
-                            <Check className="w-5 h-5" />
-                            <span>Сохранить профиль</span>
-                        </>
-                    )}
+                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить изменения"}
                 </button>
             </div>
         </div>
