@@ -22,7 +22,7 @@ export default function Dashboard() {
     // График
     const [workStart, setWorkStart] = useState(9);
     const [workEnd, setWorkEnd] = useState(21);
-    const [disabledDays, setDisabledDays] = useState<number[]>([]); // 0-6
+    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
 
     // Данные
     const [services, setServices] = useState<any[]>([]);
@@ -38,16 +38,29 @@ export default function Dashboard() {
     ];
 
     useEffect(() => {
-        // Настройка цветов Telegram
+        // Настройка цветов
         if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
             const tg = window.Telegram.WebApp;
             tg.ready();
             tg.expand();
-            if (tg.setHeaderColor) tg.setHeaderColor('#0f172a'); // slate-900
+            if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
             if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
         }
 
         const init = async () => {
+            // --- ЛОГИКА АВТОРИЗАЦИИ ЧЕРЕЗ РЕДИРЕКТ ---
+            // Если мы пришли с токеном из Safari, ловим его здесь
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.start_param) {
+                const tokenFromSafari = window.Telegram.WebApp.initDataUnsafe.start_param;
+                // Пытаемся обновить сессию по этому токену
+                const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
+                if (refreshData.session) {
+                    // Если получилось — чистим параметр, чтобы не висел
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+            // ------------------------------------------
+
             // 1. Авто-определение Telegram ID
             if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
                 const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
@@ -56,27 +69,16 @@ export default function Dashboard() {
                 }
             }
 
-            // 2. Auth Check с повторной попыткой (для редиректа)
-            let { data: { user } } = await supabase.auth.getUser();
-            
-            if (!user) {
-                // Ждем немного, вдруг куки еще летят
-                await new Promise(r => setTimeout(r, 1000));
-                const { data: { user: retryUser } } = await supabase.auth.getUser();
-                user = retryUser;
-            }
-
-            if (!user) { 
-                router.push("/login"); 
-                return; 
-            }
-            
+            // 2. Обычная проверка юзера
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { router.push("/login"); return; }
             setUser(user);
+
             await loadData(user.id);
             setLoading(false);
         };
         init();
-    }, [router]); // Добавил router в зависимости
+    }, [router]);
 
     const loadData = async (userId: string) => {
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
@@ -115,11 +117,9 @@ export default function Dashboard() {
         setSaving(false);
         
         if (window.Telegram?.WebApp?.showPopup) {
-            window.Telegram.WebApp.showPopup({
-                message: error ? `Ошибка: ${error.message}` : "Настройки сохранены! ✅"
-            });
+            window.Telegram.WebApp.showPopup({ message: error ? `Ошибка: ${error.message}` : "Сохранено!" });
         } else {
-            alert(error ? "Ошибка: " + error.message : "Настройки сохранены!");
+            alert(error ? error.message : "Сохранено!");
         }
     };
 
@@ -133,14 +133,12 @@ export default function Dashboard() {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
-                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено! Проверь чат с ботом."});
-                else alert("Сообщение отправлено!");
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Отправлено!"});
+                else alert("Отправлено!");
             } else {
-                 alert("Ошибка. Убедись, что ты запустил бота /start.");
+                 alert("Запустите бота!");
             }
-        } catch (e) {
-            alert("Ошибка сети");
-        }
+        } catch (e) { alert("Ошибка сети"); }
         setVerifying(false);
     };
 
@@ -163,19 +161,12 @@ export default function Dashboard() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        // Используем нативный конфирм Telegram, если доступен
         if (window.Telegram?.WebApp?.showConfirm) {
-             window.Telegram.WebApp.showConfirm("Удалить запись?", async (confirmed: boolean) => {
-                if (confirmed) {
-                    await supabase.from("appointments").delete().eq("id", id);
-                    loadData(user.id);
-                }
+             window.Telegram.WebApp.showConfirm("Удалить?", async (ok) => {
+                if (ok) { await supabase.from("appointments").delete().eq("id", id); loadData(user.id); }
              });
         } else {
-            if (confirm("Удалить запись?")) {
-                await supabase.from("appointments").delete().eq("id", id);
-                loadData(user.id);
-            }
+            if (confirm("Удалить?")) { await supabase.from("appointments").delete().eq("id", id); loadData(user.id); }
         }
     };
 
