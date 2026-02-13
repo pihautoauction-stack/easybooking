@@ -44,6 +44,7 @@ export default function Dashboard() {
     useEffect(() => {
         // --- ПРОВЕРКА: МЫ В TELEGRAM ИЛИ В SAFARI? ---
         const tg = window.Telegram?.WebApp;
+        // Если initData отсутствует — мы открыты в обычном браузере
         if (!tg?.initData) {
             setIsBrowser(true);
         } else {
@@ -54,45 +55,51 @@ export default function Dashboard() {
         }
 
         const init = async () => {
-            // --- ЛОГИКА ВХОДА ЧЕРЕЗ РЕДИРЕКТ (Внутри Telegram) ---
+            // --- ЛОГИКА ВХОДА ЧЕРЕЗ ТОКЕН (Внутри Telegram) ---
             if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.start_param) {
                 const tokenFromSafari = window.Telegram.WebApp.initDataUnsafe.start_param;
+                // Игнорируем технические параметры, ищем refresh_token
                 if (tokenFromSafari && tokenFromSafari !== 'auth_success') {
                     const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
                     if (refreshData.session) {
+                        // Очищаем URL от токена для безопасности
                         window.history.replaceState({}, document.title, window.location.pathname);
                     }
                 }
             }
 
-            // 1. Проверка пользователя
+            // 1. Проверка текущей сессии
             let { data: { user } } = await supabase.auth.getUser();
             
             if (!user) {
+                // Если сессии нет, ждем секунду (на случай медленного обновления кук)
                 await new Promise(r => setTimeout(r, 1000));
                 const { data: { user: retryUser } } = await supabase.auth.getUser();
                 user = retryUser;
             }
 
+            // Если всё еще нет юзера — отправляем на вход
             if (!user) { 
                 router.push("/login"); 
                 return; 
             }
             
-            // --- ГЕНЕРАЦИЯ ПРАВИЛЬНОЙ ССЫЛКИ ДЛЯ SAFARI (ФИКС: ПРЯМОЙ ВХОД В APP) ---
+            // --- ГЕНЕРАЦИЯ ССЫЛКИ ДЛЯ ПЕРЕХОДА ИЗ SAFARI ---
             if (!window.Telegram?.WebApp?.initData) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.refresh_token) {
                     // Используем юзернейм твоего бота
-                    const botName = "my_cool_booking_bot"; 
-                    // Добавлен /app — это заставляет Telegram открыть именно Mini App
-                    setReturnLink(`https://t.me/${botName}/app?startapp=${session.refresh_token}`);
+                    const botUsername = "my_cool_booking_bot"; 
+                    
+                    // Самый надежный формат для Menu Button Web App:
+                    // Просто ссылка на бота с параметром. Telegram предложит запустить приложение.
+                    setReturnLink(`https://t.me/${botUsername}?startapp=${session.refresh_token}`);
                 }
             }
 
             setUser(user);
 
-            // Авто-определение Telegram ID
+            // Авто-определение Telegram ID для уведомлений
             if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
                 const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
                 if (tgUser && !telegramChatId) {
@@ -158,7 +165,7 @@ export default function Dashboard() {
             });
             if (res.ok) {
                 if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено!"});
-                else alert("Отправлено!");
+                else alert("Сообщение отправлено!");
             } else { alert("Ошибка. Запустите бота."); }
         } catch (e) { alert("Ошибка сети"); }
         setVerifying(false);
@@ -191,6 +198,7 @@ export default function Dashboard() {
 
     if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin text-blue-500"/></div>;
 
+    // --- ЭКРАН "ЛОВУШКА" ДЛЯ SAFARI ---
     if (isBrowser) {
         return (
             <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white font-sans">
@@ -199,37 +207,40 @@ export default function Dashboard() {
                 </div>
                 <h1 className="text-2xl font-bold mb-2">Вход выполнен!</h1>
                 <p className="text-slate-400 mb-8 max-w-xs">
-                    Чтобы управлять записями, откройте приложение в Telegram.
+                    Для управления вашим кабинетом и записями вернитесь в Telegram.
                 </p>
                 {returnLink ? (
-                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
+                    <a href={returnLink} className="w-full max-w-xs bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 border border-blue-400/30">
                         <ExternalLink className="w-5 h-5" /> Открыть в Telegram
                     </a>
                 ) : (
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+                    <div className="flex items-center gap-3 text-slate-500">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Подготовка доступа...</span>
+                    </div>
                 )}
             </div>
         );
     }
 
+    // --- ИНТЕРФЕЙС КАБИНЕТА (ТОЛЬКО В TELEGRAM) ---
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-20 font-sans">
             <header className="flex justify-between items-center mb-6 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md sticky top-4 z-10 shadow-xl">
-                <div>
-                    <h1 className="text-lg font-bold flex items-center gap-2">
-                        <Settings className="text-blue-500 w-5 h-5" /> Кабинет
-                    </h1>
-                </div>
+                <h1 className="text-lg font-bold flex items-center gap-2">
+                    <Settings className="text-blue-500 w-5 h-5" /> Кабинет
+                </h1>
                 <button onClick={() => supabase.auth.signOut().then(() => router.push("/login"))} className="text-slate-400 hover:text-red-400 transition-colors p-2">
-                    <LogOut className="w-5 h-5" /> Выйти
+                    <LogOut className="w-5 h-5" />
                 </button>
             </header>
 
             <main className="grid gap-6">
+                {/* Блок со ссылкой для клиентов */}
                 <div className="bg-gradient-to-br from-blue-900/40 to-slate-800 p-5 rounded-2xl border border-blue-500/30 shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 blur-2xl rounded-full pointer-events-none"></div>
                     <h2 className="text-xs font-bold uppercase text-blue-300 mb-3 flex items-center gap-2 tracking-wider">
-                        <LinkIcon className="w-3 h-3" /> Ваша ссылка
+                        <LinkIcon className="w-3 h-3" /> Ссылка для записи
                     </h2>
                     <div className="flex gap-2">
                         <input readOnly value={profileUrl} className="flex-1 bg-slate-950/50 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 outline-none font-mono" />
@@ -246,16 +257,17 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Настройки профиля */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-5 text-white flex items-center gap-2"><User className="w-5 h-5 text-purple-400"/> Профиль</h2>
                     <div className="space-y-4">
                         <div>
                             <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Название бизнеса</label>
-                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Название..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors" />
+                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Ваше название" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors" />
                         </div>
                         
                         <div>
-                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (уведомления)</label>
+                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Telegram ID (для уведомлений)</label>
                             <input value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="ID..." className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-blue-500 transition-colors text-emerald-400 font-mono" />
                             <div className="flex gap-2 items-center mt-2">
                                 <button onClick={handleVerifyBot} disabled={verifying || !telegramChatId} className="text-[10px] font-bold uppercase tracking-wider bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-900/50 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50">
@@ -266,7 +278,7 @@ export default function Dashboard() {
                         </div>
                         
                         <div className="pt-4 border-t border-slate-700">
-                            <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">Рабочие дни</label>
+                            <label className="text-[10px] text-slate-500 uppercase font-bold block mb-3">График работы</label>
                             <div className="flex justify-between gap-1 mb-4">
                                 {DAYS.map((d) => {
                                     const isWorking = !disabledDays.includes(d.id);
@@ -285,16 +297,17 @@ export default function Dashboard() {
                         </div>
 
                         <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all mt-4 disabled:opacity-50">
-                            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Сохранить настройки</>}
+                            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-4 h-4" /> Сохранить изменения</>}
                         </button>
                     </div>
                 </div>
 
+                {/* Услуги */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
                     <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Plus className="w-5 h-5 text-pink-400"/> Услуги</h2>
                     <div className="flex gap-2 mb-4">
-                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
-                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none" />
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-pink-500 transition-all" />
+                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:border-pink-500 transition-all" />
                         <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-600 hover:bg-pink-500 px-4 rounded-xl flex items-center justify-center transition-all disabled:opacity-50">
                             {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 text-white" />}
                         </button>
@@ -317,10 +330,11 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Записи */}
                 <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md">
-                    <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Записи</h2>
+                    <h2 className="text-lg font-bold mb-4 text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-400"/> Предстоящие записи</h2>
                     <div className="space-y-3">
-                        {appointments.length === 0 ? <p className="text-slate-500 text-center py-4 text-sm">Пока пусто</p> : appointments.map(app => (
+                        {appointments.length === 0 ? <p className="text-slate-500 text-center py-4 text-sm">Новых записей нет</p> : appointments.map(app => (
                             <div key={app.id} className="p-4 bg-slate-700/40 rounded-xl border border-slate-600 flex justify-between items-center">
                                 <div>
                                     <div className="text-emerald-400 font-bold text-lg font-mono">{format(new Date(app.start_time), "HH:mm")}</div>
