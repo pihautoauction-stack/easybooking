@@ -17,7 +17,7 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
       </head>
-      <body className="bg-[#17212b] text-white antialiased">
+      <body className="bg-black text-white antialiased select-none">
         <Script 
           src="https://telegram.org/js/telegram-web-app.js" 
           strategy="beforeInteractive" 
@@ -26,4 +26,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-} 
+}
