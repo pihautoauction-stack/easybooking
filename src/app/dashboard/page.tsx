@@ -7,15 +7,6 @@ import { Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, Loader2, Link as 
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
-// --- БРОНЕБОЙНЫЙ ФИКС ТИПОВ ---
-// Это говорит TypeScript: "Отстань, я знаю, что в window есть Telegram"
-declare global {
-  interface Window {
-    Telegram: any;
-  }
-}
-// ------------------------------
-
 export default function Dashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -52,20 +43,16 @@ export default function Dashboard() {
             const tg = window.Telegram.WebApp;
             tg.ready();
             tg.expand();
-            // Безопасная проверка методов через ?. (на случай если версия Telegram старая)
             if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
             if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
         }
 
         const init = async () => {
             // --- ЛОГИКА АВТОРИЗАЦИИ ЧЕРЕЗ РЕДИРЕКТ ---
-            // Ловим токен, если он пришел из Safari
             if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.start_param) {
                 const tokenFromSafari = window.Telegram.WebApp.initDataUnsafe.start_param;
-                // Пытаемся обновить сессию
                 const { data: refreshData } = await supabase.auth.refreshSession({ refresh_token: tokenFromSafari });
                 if (refreshData.session) {
-                    // Чистим URL, чтобы токен не висел
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
             }
@@ -78,11 +65,10 @@ export default function Dashboard() {
                 }
             }
 
-            // 2. Проверка пользователя с повторной попыткой
+            // 2. Проверка пользователя
             let { data: { user } } = await supabase.auth.getUser();
             
             if (!user) {
-                // Ждем 1 сек, вдруг куки/токен еще летят
                 await new Promise(r => setTimeout(r, 1000));
                 const { data: { user: retryUser } } = await supabase.auth.getUser();
                 user = retryUser;
@@ -155,7 +141,7 @@ export default function Dashboard() {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
-                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено! Проверь чат с ботом."});
+                if(window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({message: "Сообщение отправлено!"});
                 else alert("Сообщение отправлено!");
             } else {
                  alert("Ошибка. Убедись, что ты запустил бота /start.");
@@ -185,7 +171,6 @@ export default function Dashboard() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        // Проверяем наличие нативного конфирма (теперь без ошибок типов)
         if (window.Telegram?.WebApp?.showConfirm) {
              window.Telegram.WebApp.showConfirm("Удалить запись?", async (confirmed: boolean) => {
                 if (confirmed) {
@@ -318,7 +303,7 @@ export default function Dashboard() {
                                 <span className="text-sm font-medium text-slate-200">{s.name} <span className="text-emerald-400 ml-1 font-bold">{s.price} ₽</span></span>
                                 <button onClick={async () => { 
                                      if(window.Telegram?.WebApp?.showConfirm) {
-                                        window.Telegram.WebApp.showConfirm("Удалить услугу?", async (ok: boolean) => {
+                                        window.Telegram.WebApp.showConfirm("Удалить услугу?", async (ok) => {
                                             if(ok) { await supabase.from("services").delete().eq("id", s.id); loadData(user.id); }
                                         });
                                      } else {
