@@ -20,7 +20,7 @@ export default function Dashboard() {
     const [telegramChatId, setTelegramChatId] = useState(""); 
     const [workStart, setWorkStart] = useState(9);
     const [workEnd, setWorkEnd] = useState(21);
-    const [disabledDays, setDisabledDays] = useState<number[]>([]); // 0-6
+    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
 
     // Данные
     const [services, setServices] = useState<any[]>([]);
@@ -39,7 +39,10 @@ export default function Dashboard() {
         if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
             window.Telegram.WebApp.ready();
             window.Telegram.WebApp.expand();
-            window.Telegram.WebApp.setHeaderColor("#17212b");
+            // Проверка на наличие метода перед вызовом
+            if (window.Telegram.WebApp.setHeaderColor) {
+                window.Telegram.WebApp.setHeaderColor("#17212b");
+            }
         }
 
         const init = async () => {
@@ -95,7 +98,7 @@ export default function Dashboard() {
         const { error } = await supabase.from("profiles").upsert(updates);
         setSaving(false);
         
-        if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.showPopup) {
              window.Telegram.WebApp.showPopup({
                 title: error ? "Ошибка" : "Успешно",
                 message: error ? error.message : "Настройки сохранены",
