@@ -2,7 +2,7 @@ interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
-  setHeaderColor: (color: string) => void; // <--- ВОТ ЭТОЙ СТРОКИ НЕ ХВАТАЛО
+  setHeaderColor: (color: string) => void;
   showPopup: (params: { title?: string; message: string; buttons?: any[] }) => void;
   initDataUnsafe: {
     user?: {
@@ -11,6 +11,7 @@ interface TelegramWebApp {
       last_name?: string;
       username?: string;
     };
+    start_param?: string; // <--- ВОТ ЭТО МЫ ДОБАВИЛИ
   };
   themeParams: {
     bg_color?: string;
