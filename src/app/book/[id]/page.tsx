@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, ImageIcon } from "lucide-react";
+import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, Users } from "lucide-react";
 import { format, setHours, setMinutes, startOfToday, addMinutes, isBefore } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
@@ -16,10 +16,16 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
     const [services, setServices] = useState<any[]>([]);
+    const [employees, setEmployees] = useState<any[]>([]);
+    
+    // Стейты выбора
+    const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
     const [selectedService, setSelectedService] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
+    
+    // Форма
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
     const [bookingStatus, setBookingStatus] = useState<"idle" | "submitting" | "success" | "error" | "conflict">("idle");
@@ -31,6 +37,12 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 setProfile(profileData);
                 const { data: servicesData } = await supabase.from("services").select("*").eq("user_id", profileData.id);
                 setServices(servicesData || []);
+                
+                // Загружаем мастеров для салона
+                if (profileData.role === 'owner') {
+                    const { data: empData } = await supabase.from("employees").select("*").eq("salon_id", profileData.id);
+                    setEmployees(empData || []);
+                }
             }
             setLoading(false);
         };
@@ -46,7 +58,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             const startDay = new Date(selectedDate); startDay.setHours(0,0,0,0);
             const endDay = new Date(selectedDate); endDay.setHours(23,59,59,999);
             
-            const { data: busy } = await supabase.from("appointments").select("start_time").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString());
+            // Если выбран сотрудник, проверяем занятость именно его
+            let query = supabase.from("appointments").select("start_time").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString());
+            if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
+            
+            const { data: busy } = await query;
             const busyTimes = busy?.map(b => format(new Date(b.start_time), "HH:mm")) || [];
 
             let current = setMinutes(setHours(selectedDate, profile.work_start_hour || 9), 0);
@@ -60,7 +76,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             setAvailableSlots(slots);
         };
         generateSlots();
-    }, [selectedDate, profile]);
+    }, [selectedDate, profile, selectedEmployee]);
 
     const handleBooking = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -75,7 +91,16 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
         const res = await fetch('/api/notify', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ masterId: profile.id, serviceId: selectedService.id, clientName, clientPhone, startTime, clientTgId }),
+            body: JSON.stringify({ 
+                masterId: profile.id, 
+                serviceId: selectedService.id, 
+                employeeId: selectedEmployee?.id, // Передаем ID мастера
+                employeeName: selectedEmployee?.name, // Передаем имя для Telegram уведомления
+                clientName, 
+                clientPhone, 
+                startTime, 
+                clientTgId 
+            }),
         });
 
         if (res.status === 409) setBookingStatus("conflict");
@@ -85,11 +110,18 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
     const resetBooking = () => {
         setBookingStatus("idle");
+        setSelectedEmployee(null);
         setSelectedService(null);
         setSelectedDate(undefined);
         setSelectedTime(null);
         setClientName("");
         setClientPhone("");
+    };
+
+    const handleBack = () => {
+        if (selectedDate) { setSelectedDate(undefined); setSelectedTime(null); }
+        else if (selectedService) setSelectedService(null);
+        else if (selectedEmployee) setSelectedEmployee(null);
     };
 
     if (loading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white"><div className="p-4 sm:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)]"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-blue-500" /></div></div>;
@@ -105,10 +137,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <h1 className="text-2xl font-bold mb-2 drop-shadow-md">Вы записаны!</h1>
                     <p className="text-white/50 mb-8 text-sm leading-relaxed">
                         Ждем вас <br/><span className="text-white font-medium">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
+                        {selectedEmployee && <><br/><span className="text-indigo-400 text-xs mt-2 block">К мастеру: {selectedEmployee.name}</span></>}
                     </p>
                     <div className="space-y-3 w-full">
-                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
-                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-4 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
+                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-3.5 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
+                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-3.5 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
                     </div>
                 </div>
             </div>
@@ -120,8 +153,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             <div className="max-w-md mx-auto w-full">
                 
                 <div className="flex items-center gap-3 mb-6 pt-2">
-                    {selectedService && (
-                        <button onClick={() => setSelectedService(null)} className="p-2.5 bg-white/5 backdrop-blur-md rounded-xl border border-white/10 active:scale-95 shrink-0 hover:bg-white/10 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                    {(selectedEmployee || selectedService) && (
+                        <button onClick={handleBack} className="p-2.5 bg-white/5 backdrop-blur-md rounded-xl border border-white/10 active:scale-95 shrink-0 hover:bg-white/10 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
                     )}
                     <div className="min-w-0 flex-1">
                         <h1 className="text-lg font-bold uppercase tracking-widest text-blue-400/90 drop-shadow-md truncate">{profile.business_name}</h1>
@@ -132,8 +165,28 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     </button>
                 </div>
 
-                {!selectedService ? (
+                {/* ШАГ 1: ВЫБОР МАСТЕРА (ТОЛЬКО ДЛЯ САЛОНОВ) */}
+                {profile.role === 'owner' && !selectedEmployee ? (
                     <div className="space-y-3">
+                        <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите мастера</p>
+                        {employees.map((emp) => (
+                            <div key={emp.id} onClick={() => setSelectedEmployee(emp)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border border-indigo-500/20 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer hover:border-indigo-500/50 transition-all group flex items-center gap-4">
+                                <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl -z-10 group-hover:bg-indigo-500/10 transition-colors"></div>
+                                <div className="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/20 shrink-0">
+                                    <User className="w-6 h-6 text-indigo-400" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-base text-white/90">{emp.name}</h3>
+                                    {emp.specialty && <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">{emp.specialty}</p>}
+                                </div>
+                            </div>
+                        ))}
+                        {employees.length === 0 && <p className="text-center text-sm text-white/40 pt-10">В салоне пока нет добавленных мастеров.</p>}
+                    </div>
+                ) : !selectedService ? (
+                    /* ШАГ 2: ВЫБОР УСЛУГИ */
+                    <div className="space-y-3">
+                        {selectedEmployee && <div className="mb-4 bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2"><User className="w-4 h-4"/> К мастеру: {selectedEmployee.name}</div>}
                         <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите услугу</p>
                         {services.map((service) => (
                             <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border border-white/10 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer hover:border-blue-500/30 transition-all group flex flex-col">
@@ -142,8 +195,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                     <h3 className="font-bold text-base text-white/90 line-clamp-2">{service.name}</h3>
                                     <span className="text-blue-300 font-bold bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 text-sm shrink-0">{service.price} ₽</span>
                                 </div>
-                                
-                                {/* ГАЛЕРЕЯ КЛИЕНТА (КАРУСЕЛЬ) */}
                                 {service.image_urls && service.image_urls.length > 0 && (
                                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x mt-4">
                                         {service.image_urls.map((url: string, idx: number) => (
@@ -155,6 +206,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         ))}
                     </div>
                 ) : (
+                    /* ШАГ 3: КАЛЕНДАРЬ */
                     <div className="space-y-4">
                         <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/10 text-center shadow-lg backdrop-blur-xl relative overflow-hidden">
                             <div className="absolute -top-10 -left-10 w-24 h-24 bg-pink-500/10 rounded-full blur-3xl -z-10"></div>

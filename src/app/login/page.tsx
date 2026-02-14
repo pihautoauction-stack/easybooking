@@ -3,15 +3,20 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Loader2, Mail, ArrowRight, KeyRound } from "lucide-react";
+import { Loader2, Mail, ArrowRight, KeyRound, UserRound, Building2 } from "lucide-react";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [token, setToken] = useState("");
-    const [step, setStep] = useState<1 | 2>(1);
+    const [step, setStep] = useState<1 | 2 | 3>(1);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
     const router = useRouter();
+
+    // Стейты для Шага 3 (Регистрация)
+    const [userId, setUserId] = useState("");
+    const [setupRole, setSetupRole] = useState<"solo" | "owner">("solo");
+    const [setupName, setSetupName] = useState("");
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -21,30 +26,39 @@ export default function LoginPage() {
 
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setMessage(null);
-
+        setLoading(true); setMessage(null);
         const { error } = await supabase.auth.signInWithOtp({ email });
-
         if (error) setMessage({ type: "error", text: error.message });
-        else {
-            setMessage({ type: "success", text: "Код отправлен! Проверьте почту." });
-            setStep(2);
-        }
+        else { setMessage({ type: "success", text: "Код отправлен! Проверьте почту." }); setStep(2); }
         setLoading(false);
     };
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setMessage(null);
-
+        setLoading(true); setMessage(null);
         const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
-
-        if (error) setMessage({ type: "error", text: "Неверный код." });
-        else if (data.session) router.replace("/dashboard");
         
-        setLoading(false);
+        if (error) {
+            setMessage({ type: "error", text: "Неверный код." });
+            setLoading(false);
+        } else if (data.session) {
+            // Проверяем, настроен ли профиль
+            const { data: profile } = await supabase.from('profiles').select('business_name, role').eq('id', data.session.user.id).single();
+            if (!profile?.business_name) {
+                setUserId(data.session.user.id);
+                setStep(3); // Отправляем на выбор роли
+                setLoading(false);
+            } else {
+                router.replace("/dashboard");
+            }
+        }
+    };
+
+    const handleSetupProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        await supabase.from('profiles').update({ role: setupRole, business_name: setupName }).eq('id', userId);
+        router.replace("/dashboard");
     };
 
     return (
@@ -53,9 +67,13 @@ export default function LoginPage() {
                 <div className="absolute -top-10 sm:-top-20 -right-10 sm:-right-20 w-32 sm:w-40 h-32 sm:h-40 bg-blue-500/20 rounded-full blur-2xl sm:blur-3xl -z-10"></div>
                 
                 <div className="text-center mb-6 sm:mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1.5 sm:mb-2 drop-shadow-md">Вход в систему</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1.5 sm:mb-2 drop-shadow-md">
+                        {step === 3 ? "Настройка профиля" : "Вход в систему"}
+                    </h1>
                     <p className="text-white/50 text-xs sm:text-sm">
-                        {step === 1 ? "Введите email для доступа" : "8-значный код из письма"}
+                        {step === 1 && "Введите email для доступа"}
+                        {step === 2 && "8-значный код из письма"}
+                        {step === 3 && "Выберите формат вашей работы"}
                     </p>
                 </div>
 
@@ -65,7 +83,7 @@ export default function LoginPage() {
                     </div>
                 )}
 
-                {step === 1 ? (
+                {step === 1 && (
                     <form onSubmit={handleSendCode} className="space-y-4 sm:space-y-6">
                         <div className="relative">
                             <Mail className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 sm:w-5 sm:h-5" />
@@ -75,7 +93,9 @@ export default function LoginPage() {
                             {loading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <>Получить код <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></>}
                         </button>
                     </form>
-                ) : (
+                )}
+
+                {step === 2 && (
                     <form onSubmit={handleVerifyCode} className="space-y-4 sm:space-y-6">
                         <div className="relative">
                             <KeyRound className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 sm:w-5 sm:h-5" />
@@ -84,7 +104,32 @@ export default function LoginPage() {
                         <button type="submit" disabled={loading || token.length < 8} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-3 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base active:scale-95 flex items-center justify-center gap-2">
                             {loading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : "Войти в кабинет"}
                         </button>
-                        <button type="button" onClick={() => setStep(1)} className="w-full text-white/40 text-xs sm:text-sm hover:text-white py-1 sm:py-2">Вернуться назад</button>
+                    </form>
+                )}
+
+                {step === 3 && (
+                    <form onSubmit={handleSetupProfile} className="space-y-5">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div onClick={() => setSetupRole("solo")} className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col items-center gap-2 ${setupRole === "solo" ? "bg-blue-600/20 border-blue-500/50 text-blue-400" : "bg-black/40 border-white/10 text-white/40 hover:bg-white/5"}`}>
+                                <UserRound className="w-8 h-8" />
+                                <span className="text-xs font-bold text-center">Работаю<br/>один</span>
+                            </div>
+                            <div onClick={() => setSetupRole("owner")} className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col items-center gap-2 ${setupRole === "owner" ? "bg-purple-600/20 border-purple-500/50 text-purple-400" : "bg-black/40 border-white/10 text-white/40 hover:bg-white/5"}`}>
+                                <Building2 className="w-8 h-8" />
+                                <span className="text-xs font-bold text-center">У меня<br/>салон</span>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <label className="text-[10px] sm:text-xs text-white/50 uppercase font-bold tracking-wider ml-1">
+                                {setupRole === "solo" ? "Ваше имя или название" : "Название салона"}
+                            </label>
+                            <input required value={setupName} onChange={e => setSetupName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500/50" placeholder={setupRole === "solo" ? "Иван Иванов" : "Студия красоты Beauty"} />
+                        </div>
+
+                        <button type="submit" disabled={loading || !setupName} className="w-full bg-white text-black font-bold py-3.5 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-95 text-sm transition-all mt-4 flex justify-center">
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить и войти"}
+                        </button>
                     </form>
                 )}
             </div>
