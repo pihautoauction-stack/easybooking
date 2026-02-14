@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { 
-    Trash2, LogOut, Settings, Calendar, Save, Copy, Plus, 
-    Loader2, Link as LinkIcon, User, Bot, ExternalLink, 
-    Clock, CheckCircle2, Bug 
+    Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
+    Loader2, Link as LinkIcon, User, ExternalLink, 
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, MapPin
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+
+type Tab = 'appointments' | 'services' | 'profile';
 
 export default function Dashboard() {
     const router = useRouter();
@@ -18,17 +20,28 @@ export default function Dashboard() {
     const [isBrowser, setIsBrowser] = useState(false);
     const [returnLink, setReturnLink] = useState<string | null>(null);
 
+    // Навигация
+    const [activeTab, setActiveTab] = useState<Tab>('appointments');
+
+    // Данные профиля
     const [businessName, setBusinessName] = useState("");
     const [telegramChatId, setTelegramChatId] = useState(""); 
     const [workStart, setWorkStart] = useState(9);
     const [workEnd, setWorkEnd] = useState(21);
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
+    
+    // Списки
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
+    
+    // Состояния форм
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
+    
+    // Фильтр записей
+    const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
 
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
@@ -59,6 +72,7 @@ export default function Dashboard() {
                 tg.ready();
                 tg.expand();
                 if (tg.setHeaderColor) tg.setHeaderColor('#050505');
+                if (tg.setBackgroundColor) tg.setBackgroundColor('#050505');
 
                 const startParam = tg.initDataUnsafe?.start_param;
                 if (startParam && startParam.length > 40) {
@@ -96,10 +110,17 @@ export default function Dashboard() {
         }
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
-        const { data: a } = await supabase.from("appointments").select("id, client_name, client_phone, start_time, service:services (name)").eq("master_id", userId).gte('start_time', new Date().toISOString()).order('start_time', { ascending: true });
+        
+        // Загружаем записи (только будущие)
+        const { data: a } = await supabase.from("appointments")
+            .select("id, client_name, client_phone, start_time, service_id, service:services (name)")
+            .eq("master_id", userId)
+            .gte('start_time', new Date().toISOString())
+            .order('start_time', { ascending: true });
         setAppointments(a || []);
     };
 
+    // --- ОБРАБОТЧИКИ ---
     const handleSaveProfile = async () => {
         setSaving(true);
         const { error } = await supabase.from("profiles").upsert({
@@ -122,14 +143,14 @@ export default function Dashboard() {
     };
 
     const handleDeleteService = async (id: string) => {
-        if (confirm("Удалить эту услугу?")) {
+        if (confirm("Удалить эту услугу? (Существующие записи не удалятся)")) {
             await supabase.from("services").delete().eq("id", id);
             await loadData(user.id);
         }
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (confirm("Отменить запись клиента?")) {
+        if (confirm("Точно отменить запись клиента?")) {
             await supabase.from("appointments").delete().eq("id", id);
             await loadData(user.id);
         }
@@ -138,6 +159,12 @@ export default function Dashboard() {
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
 
+    // Фильтрация записей
+    const filteredAppointments = activeServiceFilter 
+        ? appointments.filter(a => a.service_id === activeServiceFilter)
+        : appointments;
+
+    // --- ЭКРАНЫ ЗАГРУЗКИ ---
     if (loading) return (
         <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
             <div className="p-4 sm:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)]">
@@ -163,100 +190,208 @@ export default function Dashboard() {
         );
     }
 
+    // --- ГЛАВНЫЙ ИНТЕРФЕЙС ---
     return (
-        <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white p-3 sm:p-4 pb-24 font-sans selection:bg-blue-500/30">
-            <header className="flex justify-between items-center mb-4 sm:mb-6 bg-white/[0.03] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-white/10 sticky top-3 sm:top-4 z-20 backdrop-blur-2xl shadow-lg">
-                <h1 className="text-base sm:text-lg font-bold flex items-center gap-2 drop-shadow-md"><Settings className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" /> Кабинет</h1>
-                <button onClick={() => supabase.auth.signOut().then(() => router.replace("/login"))} className="text-white/40 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-full"><LogOut className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+        <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white font-sans selection:bg-blue-500/30 flex flex-col">
+            
+            {/* Хедер (Фиксированный) */}
+            <header className="sticky top-0 z-30 bg-[#050505]/80 backdrop-blur-2xl border-b border-white/5 px-4 sm:px-5 py-3 sm:py-4 flex justify-between items-center">
+                <h1 className="text-base sm:text-lg font-bold flex items-center gap-2 drop-shadow-md">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
+                    {businessName || "Ваш Кабинет"}
+                </h1>
+                <button onClick={() => supabase.auth.signOut().then(() => router.replace("/login"))} className="text-white/40 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4 sm:w-5 sm:h-5" /></button>
             </header>
 
-            <main className="grid gap-4 sm:gap-5">
-                {/* ССЫЛКА */}
-                <div className="relative overflow-hidden bg-white/[0.03] backdrop-blur-xl border border-white/10 p-4 sm:p-5 rounded-3xl shadow-xl">
-                    <div className="absolute top-0 right-0 w-24 sm:w-32 h-24 sm:h-32 bg-blue-500/10 rounded-full blur-2xl sm:blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
-                    <h2 className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-400/80 mb-2 sm:mb-3 tracking-widest flex items-center gap-1 sm:gap-2"><LinkIcon className="w-3 h-3" /> Ссылка клиентам</h2>
-                    <div className="flex gap-2">
-                        <input readOnly value={clientLink} className="flex-1 bg-black/40 border border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-[10px] sm:text-[11px] text-white/70 outline-none font-mono" />
-                        <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Скопировано!"); }} className="bg-blue-600/80 backdrop-blur-md px-4 sm:px-5 rounded-xl sm:rounded-2xl active:scale-95 border border-blue-400/20 shadow-lg"><Copy className="w-4 h-4 sm:w-5 sm:h-5 text-white" /></button>
-                    </div>
-                </div>
-
-                {/* ПРОФИЛЬ */}
-                <div className="bg-white/[0.03] backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/10 shadow-xl">
-                    <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><User className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]"/> Профиль</h2>
-                    <div className="space-y-4 sm:space-y-5">
-                        <div className="space-y-1.5 sm:space-y-2">
-                            <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название бизнеса</label>
-                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Салон красоты..." className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
-                        </div>
+            {/* Контентная область с отступом снизу под меню */}
+            <main className="flex-1 overflow-y-auto p-4 sm:p-5 pb-28 sm:pb-32 space-y-5">
+                
+                {/* 🟢 ВКЛАДКА: ЗАПИСИ */}
+                {activeTab === 'appointments' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                         
-                        <div className="pt-2">
-                            <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider block mb-2 sm:mb-3 ml-1">Дни работы</label>
-                            <div className="flex justify-between gap-1 mb-3 sm:mb-4">
-                                {DAYS.map((d) => (
-                                    <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-2 sm:py-3.5 rounded-lg sm:rounded-2xl text-[10px] sm:text-xs font-bold transition-all border ${!disabledDays.includes(d.id) ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.15)]" : "bg-black/40 text-white/30 border-white/5"}`}>{d.label}</button>
+                        {/* Фильтры по услугам */}
+                        {services.length > 0 && appointments.length > 0 && (
+                            <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                                <button 
+                                    onClick={() => setActiveServiceFilter(null)}
+                                    className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === null ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}
+                                >
+                                    Все записи
+                                </button>
+                                {services.map(s => (
+                                    <button 
+                                        key={s.id} 
+                                        onClick={() => setActiveServiceFilter(s.id)}
+                                        className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === s.id ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}
+                                    >
+                                        {s.name}
+                                    </button>
                                 ))}
                             </div>
-                        </div>
+                        )}
 
-                        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                            <div className="space-y-1.5 sm:space-y-2">
-                                <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Открытие</label>
-                                <input type="number" value={workStart} onChange={e => setWorkStart(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center" />
-                            </div>
-                            <div className="space-y-1.5 sm:space-y-2">
-                                <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Закрытие</label>
-                                <input type="number" value={workEnd} onChange={e => setWorkEnd(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center" />
-                            </div>
-                        </div>
+                        <div className="space-y-3 sm:space-y-4">
+                            {filteredAppointments.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                                        <CalendarIcon className="w-8 h-8 text-white/20" />
+                                    </div>
+                                    <p className="text-white/40 text-sm">В этой категории пока нет записей</p>
+                                </div>
+                            ) : filteredAppointments.map(app => (
+                                <div key={app.id} className="bg-white/[0.02] backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border border-white/10 shadow-lg relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -z-10"></div>
+                                    
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="text-emerald-400 font-bold font-mono text-2xl drop-shadow-md">{format(new Date(app.start_time), "HH:mm")}</div>
+                                                <div className="px-2 py-0.5 bg-white/5 rounded-md text-[10px] sm:text-xs text-white/40 font-bold uppercase tracking-wider border border-white/5">
+                                                    {format(new Date(app.start_time), "d MMM", { locale: ru })}
+                                                </div>
+                                            </div>
+                                            <h3 className="text-white/90 text-sm sm:text-base font-bold">{app.client_name}</h3>
+                                        </div>
+                                        <button onClick={() => handleDeleteRecord(app.id)} className="text-white/20 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                    </div>
 
-                        <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-white text-black py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base shadow-[0_0_15px_rgba(255,255,255,0.2)] active:scale-95 mt-1">{saving ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin mx-auto" /> : "Сохранить"}</button>
-                    </div>
-                </div>
-
-                {/* УСЛУГИ */}
-                <div className="bg-white/[0.03] backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/10 shadow-xl">
-                    <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Plus className="w-4 h-4 sm:w-5 sm:h-5 text-pink-400 drop-shadow-[0_0_10px_rgba(244,114,182,0.5)]"/> Услуги</h2>
-                    <div className="flex gap-2 mb-4 sm:mb-6">
-                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="flex-[2] bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none min-w-0" />
-                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="₽" type="number" className="flex-1 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none text-center min-w-0" />
-                        <button onClick={handleAddService} disabled={addingService} className="bg-pink-500/80 backdrop-blur-md px-4 sm:px-5 rounded-xl sm:rounded-2xl active:scale-95 border border-pink-400/20 shadow-lg">
-                            {addingService ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-white" /> : <Plus className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
-                        </button>
-                    </div>
-                    <div className="space-y-2.5 sm:space-y-3">
-                        {services.map(s => (
-                            <div key={s.id} className="flex justify-between items-center bg-black/20 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5">
-                                <span className="text-xs sm:text-sm font-medium text-white/90 truncate mr-2">{s.name} <span className="text-pink-400 ml-1 sm:ml-2 font-bold px-1.5 sm:px-2 py-0.5 sm:py-1 bg-pink-500/10 rounded-md sm:rounded-lg whitespace-nowrap">{s.price} ₽</span></span>
-                                <button onClick={() => handleDeleteService(s.id)} className="text-white/30 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-lg sm:rounded-xl shrink-0"><Trash2 className="w-3 h-3 sm:w-4 sm:h-4" /></button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* ЗАПИСИ */}
-                <div className="bg-white/[0.03] backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
-                    <div className="absolute bottom-0 left-0 w-24 sm:w-32 h-24 sm:h-32 bg-emerald-500/10 rounded-full blur-2xl sm:blur-3xl -z-10 -translate-x-1/2 translate-y-1/2"></div>
-                    <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]"/> Клиенты</h2>
-                    <div className="space-y-2.5 sm:space-y-3">
-                        {appointments.length === 0 ? <p className="text-white/30 text-center py-6 sm:py-8 text-xs sm:text-sm">Записей пока нет.</p> : appointments.map(app => (
-                            <div key={app.id} className="p-4 sm:p-5 bg-black/40 rounded-2xl border border-white/5 flex justify-between items-center backdrop-blur-sm">
-                                <div className="min-w-0 pr-2">
-                                    <div className="text-emerald-400 font-bold font-mono text-xl sm:text-2xl leading-none mb-1 sm:mb-2">{format(new Date(app.start_time), "HH:mm")}</div>
-                                    <div className="text-white/90 text-xs sm:text-sm font-semibold truncate">{app.client_name}</div>
-                                    <div className="text-white/40 text-[9px] sm:text-[10px] mt-1 sm:mt-1.5 font-bold uppercase truncate">
-                                        {format(new Date(app.start_time), "d MMM", { locale: ru })} • {app.service?.name}
+                                    <div className="flex flex-col gap-2 pt-4 border-t border-white/5">
+                                        <div className="flex items-center gap-2 text-xs sm:text-sm text-white/60">
+                                            <Scissors className="w-4 h-4 text-pink-400/70" />
+                                            <span className="truncate">{app.service?.name || "Услуга удалена"}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <div className="flex items-center gap-2 text-xs sm:text-sm text-white/60">
+                                                <Phone className="w-4 h-4 text-blue-400/70" />
+                                                <span className="font-mono">{app.client_phone}</span>
+                                            </div>
+                                            <a href={`tel:${app.client_phone}`} className="text-[10px] sm:text-xs font-bold text-black bg-white/90 hover:bg-white px-4 py-1.5 rounded-lg active:scale-95 transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)]">Позвонить</a>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-2 sm:gap-3 shrink-0">
-                                    <a href={`tel:${app.client_phone}`} className="text-[10px] sm:text-[11px] text-blue-400 font-mono bg-blue-500/10 px-2 py-1 rounded-md sm:rounded-lg border border-blue-500/20">{app.client_phone}</a>
-                                    <button onClick={() => handleDeleteRecord(app.id)} className="text-white/30 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-lg sm:rounded-xl"><Trash2 className="w-3 h-3 sm:w-4 sm:h-4" /></button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* 🔵 ВКЛАДКА: УСЛУГИ */}
+                {activeTab === 'services' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
+                        <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -z-10"></div>
+                            <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Plus className="w-4 h-4 sm:w-5 sm:h-5 text-pink-400 drop-shadow-[0_0_10px_rgba(244,114,182,0.5)]"/> Добавить услугу</h2>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Стрижка, Маникюр..." className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50" />
+                                <div className="flex gap-3">
+                                    <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-full sm:w-32 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-center" />
+                                    <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-500/80 backdrop-blur-md px-6 rounded-xl sm:rounded-2xl active:scale-95 border border-pink-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center">
+                                        {addingService ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Plus className="w-5 h-5 text-white" />}
+                                    </button>
                                 </div>
                             </div>
-                        ))}
+                        </div>
+
+                        <div className="space-y-3">
+                            <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest pl-2">Список услуг ({services.length})</h3>
+                            {services.map(s => (
+                                <div key={s.id} className="flex justify-between items-center bg-black/20 p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/5 hover:border-white/10 transition-colors">
+                                    <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        <span className="text-pink-400 font-bold px-3 py-1.5 bg-pink-500/10 rounded-lg border border-pink-500/10">{s.price} ₽</span>
+                                        <button onClick={() => handleDeleteService(s.id)} className="text-white/30 hover:text-red-400 hover:bg-red-500/10 p-2 sm:p-2.5 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
+
+                {/* 🟣 ВКЛАДКА: ПРОФИЛЬ */}
+                {activeTab === 'profile' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
+                        
+                        {/* Блок со ссылкой */}
+                        <div className="relative overflow-hidden bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
+                            <h2 className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-400/80 mb-3 tracking-widest flex items-center gap-2"><LinkIcon className="w-3 h-3" /> Ссылка для клиентов</h2>
+                            <div className="flex gap-2">
+                                <input readOnly value={clientLink} className="flex-1 bg-black/40 border border-white/5 rounded-2xl p-4 text-[10px] sm:text-[11px] text-white/70 outline-none font-mono" />
+                                <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Ссылка скопирована!"); }} className="bg-blue-600/80 backdrop-blur-md px-5 rounded-2xl active:scale-95 border border-blue-400/20 shadow-lg"><Copy className="w-4 h-4 sm:w-5 sm:h-5 text-white" /></button>
+                            </div>
+                        </div>
+
+                        {/* Настройки бизнеса */}
+                        <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl">
+                            <h2 className="text-base sm:text-lg font-bold mb-5 flex items-center gap-2"><Settings className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]"/> Настройки бизнеса</h2>
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название на странице записи</label>
+                                    <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Мой салон..." className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
+                                </div>
+                                
+                                <div className="pt-2">
+                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider block mb-3 ml-1">Дни работы</label>
+                                    <div className="flex justify-between gap-1 mb-4">
+                                        {DAYS.map((d) => (
+                                            <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-3 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-bold transition-all border ${!disabledDays.includes(d.id) ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.15)]" : "bg-black/40 text-white/30 border-white/5 hover:bg-white/5"}`}>{d.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Открытие (час)</label>
+                                        <input type="number" min="0" max="23" value={workStart} onChange={e => setWorkStart(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center font-mono text-lg" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Закрытие (час)</label>
+                                        <input type="number" min="0" max="23" value={workEnd} onChange={e => setWorkEnd(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center font-mono text-lg" />
+                                    </div>
+                                </div>
+
+                                <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-white text-black py-4 rounded-2xl font-bold text-sm sm:text-base shadow-[0_0_15px_rgba(255,255,255,0.2)] active:scale-95 mt-2 transition-all">{saving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Сохранить профиль"}</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
+
+            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Bottom Bar) */}
+            <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-6 sm:px-10 pb-6">
+                <div className="flex justify-between items-center max-w-sm mx-auto pt-2">
+                    <button 
+                        onClick={() => setActiveTab('appointments')} 
+                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
+                    >
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}>
+                            <CalendarDays className="w-6 h-6 sm:w-7 sm:h-7" />
+                        </div>
+                        <span className="text-[10px] font-bold tracking-wider">Записи</span>
+                    </button>
+
+                    <button 
+                        onClick={() => setActiveTab('services')} 
+                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
+                    >
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}>
+                            <Scissors className="w-6 h-6 sm:w-7 sm:h-7" />
+                        </div>
+                        <span className="text-[10px] font-bold tracking-wider">Услуги</span>
+                    </button>
+
+                    <button 
+                        onClick={() => setActiveTab('profile')} 
+                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
+                    >
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}>
+                            <UserCircle className="w-6 h-6 sm:w-7 sm:h-7" />
+                        </div>
+                        <span className="text-[10px] font-bold tracking-wider">Профиль</span>
+                    </button>
+                </div>
+            </nav>
+            
         </div>
     );
 }
