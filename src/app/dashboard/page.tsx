@@ -67,6 +67,7 @@ export default function Dashboard() {
                 if (!tg?.initData) {
                     setIsBrowser(true);
                     const { data: { session } } = await supabase.auth.getSession();
+                    // ВАЖНО: Здесь я вставил юзернейм бота и имя приложения
                     if (session?.refresh_token) setReturnLink(`tg://resolve?domain=my_cool_booking_bot&appname=app&startapp=${session.refresh_token}`);
                     setLoading(false); return;
                 }
@@ -247,7 +248,10 @@ export default function Dashboard() {
     };
 
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
+    
+    // ВАЖНО: Здесь я вставил юзернейм бота и имя приложения для генерации ссылки
     const clientLink = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
+    
     const filteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
