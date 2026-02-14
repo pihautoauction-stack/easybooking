@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban, BarChart3, TrendingUp
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban, BarChart3, TrendingUp, ImagePlus
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
-// ДОБАВЛЕНА ВКЛАДКА 'analytics'
 type Tab = 'appointments' | 'services' | 'clients' | 'analytics' | 'profile';
 
 export default function Dashboard() {
@@ -43,6 +42,9 @@ export default function Dashboard() {
     
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     const [selectedApp, setSelectedApp] = useState<any>(null);
+
+    // Состояние загрузки картинок
+    const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
 
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
@@ -145,11 +147,10 @@ export default function Dashboard() {
             const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
             setServices(s || []);
             
-            // Выбираем только не удаленные
             const { data: a } = await supabase.from("appointments")
                 .select("id, client_name, client_phone, start_time, service_id, client_id, status, service:services (name, price)")
                 .eq("master_id", userId)
-                .gte('start_time', new Date(Date.now() - 86400000).toISOString()) // Загружаем записи с вчерашнего дня
+                .gte('start_time', new Date(Date.now() - 86400000).toISOString())
                 .order('start_time', { ascending: true });
             setAppointments(a || []);
 
@@ -184,7 +185,7 @@ export default function Dashboard() {
     const handleAddService = async () => {
         if (!newName || !newPrice) return;
         setAddingService(true);
-        await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice) });
+        await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice), image_urls: [] });
         setNewName(""); setNewPrice("");
         await loadData(user.id);
         setAddingService(false);
@@ -194,6 +195,46 @@ export default function Dashboard() {
         if (confirm("Удалить эту услугу? (Существующие записи не удалятся)")) {
             await supabase.from("services").delete().eq("id", id);
             await loadData(user.id);
+        }
+    };
+
+    // ЗАГРУЗКА И УДАЛЕНИЕ КАРТИНОК
+    const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>, serviceId: string, currentUrls: string[]) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingImageId(serviceId);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `${user.id}/${fileName}`;
+
+            // 1. Загружаем файл в Storage
+            const { error: uploadError } = await supabase.storage.from('gallery').upload(filePath, file);
+            if (uploadError) throw uploadError;
+
+            // 2. Получаем публичную ссылку
+            const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
+            const newUrls = [...(currentUrls || []), data.publicUrl];
+
+            // 3. Обновляем услугу в базе
+            await supabase.from('services').update({ image_urls: newUrls }).eq('id', serviceId);
+            await loadData(user.id, true);
+        } catch (err: any) {
+            alert("Ошибка загрузки фото: " + err.message);
+        } finally {
+            setUploadingImageId(null);
+        }
+    };
+
+    const handleRemoveImage = async (serviceId: string, urlToRemove: string, currentUrls: string[]) => {
+        if (!confirm("Удалить фото?")) return;
+        try {
+            const newUrls = currentUrls.filter(url => url !== urlToRemove);
+            await supabase.from('services').update({ image_urls: newUrls }).eq('id', serviceId);
+            await loadData(user.id, true);
+        } catch (err: any) {
+            alert("Ошибка удаления фото: " + err.message);
         }
     };
 
@@ -209,39 +250,30 @@ export default function Dashboard() {
                     window.Telegram.WebApp.showPopup({ message: "Успешно отменено" });
                 }
             } catch (err: any) {
-                alert("Ошибка удаления (Supabase RLS): " + err.message);
+                alert("Ошибка удаления: " + err.message);
             }
         }
     };
 
-    // ФУНКЦИЯ ЗАВЕРШЕНИЯ ВИЗИТА (АНАЛИТИКА + CRM)
     const handleCompleteRecord = async (app: any) => {
         if (confirm("Завершить визит? Клиенту будет начислена сумма в статистику.")) {
             try {
-                // 1. Отмечаем статус
-                const { error: appError } = await supabase.from("appointments")
-                    .update({ status: 'completed' })
-                    .eq("id", app.id);
+                const { error: appError } = await supabase.from("appointments").update({ status: 'completed' }).eq("id", app.id);
                 if (appError) throw appError;
 
-                // 2. Начисляем доход и визит в CRM
                 if (app.client_id && app.service?.price) {
                     const client = clients.find(c => c.id === app.client_id);
                     if (client) {
-                        await supabase.from("clients")
-                            .update({
-                                visits_count: client.visits_count + 1,
-                                total_revenue: Number(client.total_revenue) + Number(app.service.price)
-                            })
-                            .eq("id", app.client_id);
+                        await supabase.from("clients").update({
+                            visits_count: client.visits_count + 1,
+                            total_revenue: Number(client.total_revenue) + Number(app.service.price)
+                        }).eq("id", app.client_id);
                     }
                 }
 
                 await loadData(user.id, true);
                 setSelectedApp(null);
-                if (window.Telegram?.WebApp?.showPopup) {
-                    window.Telegram.WebApp.showPopup({ message: "Визит завершен! Сумма учтена в доходе." });
-                }
+                if (window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({ message: "Визит завершен!" });
             } catch (err: any) {
                 alert("Ошибка: " + err.message);
             }
@@ -249,7 +281,7 @@ export default function Dashboard() {
     };
 
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean) => {
-        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить клиента в черный список? Он больше не сможет к вам записаться онлайн.")) {
+        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить клиента в черный список?")) {
             try {
                 await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId);
                 await loadData(user.id, true);
@@ -273,7 +305,6 @@ export default function Dashboard() {
 
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
 
-    // Подсчет общей аналитики
     const totalRevenue = clients.reduce((acc, c) => acc + Number(c.total_revenue || 0), 0);
     const totalVisits = clients.reduce((acc, c) => acc + Number(c.visits_count || 0), 0);
 
@@ -374,7 +405,7 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* 🔵 УСЛУГИ */}
+                {/* 🔵 УСЛУГИ (С ГАЛЕРЕЕЙ) */}
                 {activeTab === 'services' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
@@ -394,12 +425,33 @@ export default function Dashboard() {
                         <div className="space-y-3">
                             <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest pl-2">Список услуг ({services.length})</h3>
                             {services.map(s => (
-                                <div key={s.id} className="flex justify-between items-center bg-black/20 p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/5 hover:border-white/10 transition-colors">
-                                    <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
-                                    <div className="flex items-center gap-3 shrink-0">
-                                        <span className="text-pink-400 font-bold px-3 py-1.5 bg-pink-500/10 rounded-lg border border-pink-500/10">{s.price} ₽</span>
-                                        <button onClick={() => handleDeleteService(s.id)} className="text-white/30 hover:text-red-400 hover:bg-red-500/10 p-2 sm:p-2.5 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                <div key={s.id} className="flex flex-col bg-black/20 p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/5 hover:border-white/10 transition-colors">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <span className="text-pink-400 font-bold px-3 py-1.5 bg-pink-500/10 rounded-lg border border-pink-500/10">{s.price} ₽</span>
+                                            
+                                            {/* КНОПКА ЗАГРУЗКИ ФОТО */}
+                                            <label className="text-white/50 hover:text-blue-400 hover:bg-blue-500/10 p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer">
+                                                {uploadingImageId === s.id ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-blue-400" /> : <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5" />}
+                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, s.id, s.image_urls || [])} />
+                                            </label>
+
+                                            <button onClick={() => handleDeleteService(s.id)} className="text-white/30 hover:text-red-400 hover:bg-red-500/10 p-2 sm:p-2.5 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                        </div>
                                     </div>
+                                    
+                                    {/* МИНИ-ГАЛЕРЕЯ ДЛЯ МАСТЕРА */}
+                                    {s.image_urls && s.image_urls.length > 0 && (
+                                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x pt-2 border-t border-white/5">
+                                            {s.image_urls.map((url: string, idx: number) => (
+                                                <div key={idx} className="relative shrink-0 snap-center">
+                                                    <img src={url} alt="portfolio" className="w-16 h-16 object-cover rounded-xl border border-white/10" />
+                                                    <button onClick={() => handleRemoveImage(s.id, url, s.image_urls)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg active:scale-95"><X className="w-3 h-3" /></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -411,14 +463,8 @@ export default function Dashboard() {
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-4">
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
-                            <input 
-                                value={clientSearchQuery} 
-                                onChange={e => setClientSearchQuery(e.target.value)} 
-                                placeholder="Поиск по имени или номеру..." 
-                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm text-white outline-none focus:border-indigo-500/50" 
-                            />
+                            <input value={clientSearchQuery} onChange={e => setClientSearchQuery(e.target.value)} placeholder="Поиск по имени или номеру..." className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm text-white outline-none focus:border-indigo-500/50" />
                         </div>
-
                         <div className="space-y-3">
                             {filteredClients.length === 0 ? (
                                 <p className="text-white/30 text-center py-8 text-sm">Клиенты не найдены</p>
@@ -436,7 +482,6 @@ export default function Dashboard() {
                                             <Ban className="w-4 h-4 sm:w-5 sm:h-5" />
                                         </button>
                                     </div>
-                                    
                                     <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
                                         <div className="bg-black/30 p-3 rounded-xl border border-white/5">
                                             <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Визиты</p>
@@ -486,7 +531,7 @@ export default function Dashboard() {
                                     </div>
                                 ))}
                                 {clients.filter(c => c.total_revenue > 0).length === 0 && (
-                                    <p className="text-xs text-white/40 text-center py-4">Здесь появятся ваши лучшие клиенты после завершения первых визитов.</p>
+                                    <p className="text-xs text-white/40 text-center py-4">Здесь появятся ваши лучшие клиенты.</p>
                                 )}
                             </div>
                         </div>
@@ -537,7 +582,6 @@ export default function Dashboard() {
                 )}
             </main>
 
-            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Теперь 5 кнопок) */}
             <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-2 sm:px-6 pb-6">
                 <div className="flex justify-between items-center max-w-sm mx-auto pt-2 px-2">
                     <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
@@ -563,7 +607,7 @@ export default function Dashboard() {
                 </div>
             </nav>
 
-            {/* ВСПЛЫВАЮЩАЯ КАРТОЧКА КЛИЕНТА (МОДАЛКА) */}
+            {/* ВСПЛЫВАЮЩАЯ КАРТОЧКА КЛИЕНТА */}
             {selectedApp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
                     <div className="bg-[#0f172a] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -593,7 +637,6 @@ export default function Dashboard() {
                             </div>
 
                             <div className="flex flex-col gap-3 pt-2">
-                                {/* НОВАЯ КНОПКА ЗАВЕРШЕНИЯ ВИЗИТА */}
                                 {selectedApp.status !== 'completed' && (
                                     <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-500/10 text-emerald-400 font-bold py-3.5 rounded-2xl border border-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
                                         <CheckCircle2 className="w-4 h-4" /> Завершить визит
@@ -602,7 +645,7 @@ export default function Dashboard() {
 
                                 <div className="grid grid-cols-2 gap-3 mt-2">
                                     <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        <Phone className="w-4 h-4" />
+                                        <Phone className="w-4 h-4" /> Позвонить
                                     </a>
                                     <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
                                         <MessageCircle className="w-4 h-4" /> WhatsApp

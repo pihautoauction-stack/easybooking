@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays } from "lucide-react";
+import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, ImageIcon } from "lucide-react";
 import { format, setHours, setMinutes, startOfToday, addMinutes, isBefore } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
@@ -83,7 +83,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else setBookingStatus("error");
     };
 
-    // Функция для сброса состояния (Новая запись без перезагрузки)
     const resetBooking = () => {
         setBookingStatus("idle");
         setSelectedService(null);
@@ -108,9 +107,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         Ждем вас <br/><span className="text-white font-medium">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
                     </p>
                     <div className="space-y-3 w-full">
-                        {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ */}
-                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-3.5 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
-                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-3.5 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
+                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
+                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-4 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
                     </div>
                 </div>
             </div>
@@ -129,7 +127,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         <h1 className="text-lg font-bold uppercase tracking-widest text-blue-400/90 drop-shadow-md truncate">{profile.business_name}</h1>
                         <p className="text-[10px] text-white/40 font-medium tracking-wider mt-0.5">ОНЛАЙН-ЗАПИСЬ</p>
                     </div>
-                    {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ */}
                     <button onClick={() => router.push('/my-bookings')} className="flex items-center justify-center p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl active:scale-95 transition-all shadow-lg shrink-0">
                         <CalendarDays className="w-5 h-5 text-blue-400" />
                     </button>
@@ -139,12 +136,21 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <div className="space-y-3">
                         <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите услугу</p>
                         {services.map((service) => (
-                            <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-4 border border-white/10 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer hover:border-blue-500/30 transition-all group">
+                            <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border border-white/10 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer hover:border-blue-500/30 transition-all group flex flex-col">
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/5 rounded-full blur-2xl -z-10 group-hover:bg-blue-500/10 transition-colors"></div>
                                 <div className="flex justify-between items-center gap-2">
                                     <h3 className="font-bold text-base text-white/90 line-clamp-2">{service.name}</h3>
                                     <span className="text-blue-300 font-bold bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 text-sm shrink-0">{service.price} ₽</span>
                                 </div>
+                                
+                                {/* ГАЛЕРЕЯ КЛИЕНТА (КАРУСЕЛЬ) */}
+                                {service.image_urls && service.image_urls.length > 0 && (
+                                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x mt-4">
+                                        {service.image_urls.map((url: string, idx: number) => (
+                                            <img key={idx} src={url} alt="portfolio" className="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl shrink-0 snap-center border border-white/10 shadow-md" />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
