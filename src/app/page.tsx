@@ -15,19 +15,14 @@ export default function MiniAppEntry() {
 
       const startParam = tg.initDataUnsafe?.start_param;
 
-      if (startParam) {
-        // Если это UUID мастера (36 символов) — на запись
-        if (startParam.length === 36) {
-          router.replace(`/book/${startParam}`);
-        } else {
-          // Во всех остальных случаях (токен или пусто) — в кабинет
-          router.replace("/dashboard");
-        }
+      // Если это UUID мастера (36 символов) — на запись к "Зимней Вишне"
+      if (startParam && startParam.length === 36) {
+        router.replace(`/book/${startParam}`);
       } else {
+        // Во всех остальных случаях (включая вход по токену) — в кабинет
         router.replace("/dashboard");
       }
     } else {
-      // Если открыли в Safari — сразу в дашборд, там сработает кнопка перехода
       router.replace("/dashboard");
     }
   }, [router]);
@@ -35,7 +30,7 @@ export default function MiniAppEntry() {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
       <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
-      <p className="text-slate-400 text-sm animate-pulse">Синхронизация профиля...</p>
+      <p className="text-slate-400 text-sm animate-pulse">Проверка доступа...</p>
     </div>
   );
 }
