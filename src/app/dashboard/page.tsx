@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban, BarChart3, TrendingUp
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
-// ДОБАВЛЕН ТАБ 'clients'
-type Tab = 'appointments' | 'services' | 'clients' | 'profile';
+// ДОБАВЛЕНА ВКЛАДКА 'analytics'
+type Tab = 'appointments' | 'services' | 'clients' | 'analytics' | 'profile';
 
 export default function Dashboard() {
     const router = useRouter();
@@ -33,7 +33,6 @@ export default function Dashboard() {
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     
-    // CRM СТЕЙТ
     const [clients, setClients] = useState<any[]>([]);
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     
@@ -146,14 +145,14 @@ export default function Dashboard() {
             const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
             setServices(s || []);
             
+            // Выбираем только не удаленные
             const { data: a } = await supabase.from("appointments")
                 .select("id, client_name, client_phone, start_time, service_id, client_id, status, service:services (name, price)")
                 .eq("master_id", userId)
-                .gte('start_time', new Date().toISOString())
+                .gte('start_time', new Date(Date.now() - 86400000).toISOString()) // Загружаем записи с вчерашнего дня
                 .order('start_time', { ascending: true });
             setAppointments(a || []);
 
-            // ЗАГРУЗКА КЛИЕНТОВ ДЛЯ CRM
             const { data: c } = await supabase.from("clients")
                 .select("*")
                 .eq("master_id", userId)
@@ -215,7 +214,40 @@ export default function Dashboard() {
         }
     };
 
-    // ФУНКЦИЯ БЛОКИРОВКИ КЛИЕНТА (ЧЕРНЫЙ СПИСОК)
+    // ФУНКЦИЯ ЗАВЕРШЕНИЯ ВИЗИТА (АНАЛИТИКА + CRM)
+    const handleCompleteRecord = async (app: any) => {
+        if (confirm("Завершить визит? Клиенту будет начислена сумма в статистику.")) {
+            try {
+                // 1. Отмечаем статус
+                const { error: appError } = await supabase.from("appointments")
+                    .update({ status: 'completed' })
+                    .eq("id", app.id);
+                if (appError) throw appError;
+
+                // 2. Начисляем доход и визит в CRM
+                if (app.client_id && app.service?.price) {
+                    const client = clients.find(c => c.id === app.client_id);
+                    if (client) {
+                        await supabase.from("clients")
+                            .update({
+                                visits_count: client.visits_count + 1,
+                                total_revenue: Number(client.total_revenue) + Number(app.service.price)
+                            })
+                            .eq("id", app.client_id);
+                    }
+                }
+
+                await loadData(user.id, true);
+                setSelectedApp(null);
+                if (window.Telegram?.WebApp?.showPopup) {
+                    window.Telegram.WebApp.showPopup({ message: "Визит завершен! Сумма учтена в доходе." });
+                }
+            } catch (err: any) {
+                alert("Ошибка: " + err.message);
+            }
+        }
+    };
+
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean) => {
         if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить клиента в черный список? Он больше не сможет к вам записаться онлайн.")) {
             try {
@@ -234,13 +266,16 @@ export default function Dashboard() {
         ? appointments.filter(a => a.service_id === activeServiceFilter)
         : appointments;
 
-    // Фильтр для поиска клиентов
     const filteredClients = clients.filter(c => 
         c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || 
         c.phone.includes(clientSearchQuery)
     );
 
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
+
+    // Подсчет общей аналитики
+    const totalRevenue = clients.reduce((acc, c) => acc + Number(c.total_revenue || 0), 0);
+    const totalVisits = clients.reduce((acc, c) => acc + Number(c.visits_count || 0), 0);
 
     if (loading) return (
         <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
@@ -310,16 +345,17 @@ export default function Dashboard() {
                                     <p className="text-white/40 text-sm">В этой категории пока нет записей</p>
                                 </div>
                             ) : filteredAppointments.map(app => (
-                                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-white/[0.02] backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border border-white/10 shadow-lg relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all hover:bg-white/[0.04]">
-                                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -z-10"></div>
+                                <div key={app.id} onClick={() => setSelectedApp(app)} className={`backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border shadow-lg relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all hover:bg-white/[0.04] ${app.status === 'completed' ? 'bg-emerald-900/10 border-emerald-500/20 opacity-70' : 'bg-white/[0.02] border-white/10'}`}>
+                                    <div className={`absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl -z-10 ${app.status === 'completed' ? 'bg-emerald-500/5' : 'bg-blue-500/5'}`}></div>
                                     
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <div className="text-emerald-400 font-bold font-mono text-2xl drop-shadow-md">{format(new Date(app.start_time), "HH:mm")}</div>
+                                                <div className={`font-bold font-mono text-2xl drop-shadow-md ${app.status === 'completed' ? 'text-emerald-500/70' : 'text-blue-400'}`}>{format(new Date(app.start_time), "HH:mm")}</div>
                                                 <div className="px-2 py-0.5 bg-white/5 rounded-md text-[10px] sm:text-xs text-white/40 font-bold uppercase tracking-wider border border-white/5">
                                                     {format(new Date(app.start_time), "d MMM", { locale: ru })}
                                                 </div>
+                                                {app.status === 'completed' && <div className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded-md font-bold uppercase tracking-wider">Завершено</div>}
                                             </div>
                                             <h3 className="text-white/90 text-sm sm:text-base font-bold">{app.client_name}</h3>
                                         </div>
@@ -370,7 +406,7 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* 🟡 НОВАЯ ВКЛАДКА: КЛИЕНТЫ (CRM) */}
+                {/* 🟡 КЛИЕНТЫ (CRM) */}
                 {activeTab === 'clients' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-4">
                         <div className="relative">
@@ -379,7 +415,7 @@ export default function Dashboard() {
                                 value={clientSearchQuery} 
                                 onChange={e => setClientSearchQuery(e.target.value)} 
                                 placeholder="Поиск по имени или номеру..." 
-                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm text-white outline-none focus:border-blue-500/50" 
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm text-white outline-none focus:border-indigo-500/50" 
                             />
                         </div>
 
@@ -394,7 +430,7 @@ export default function Dashboard() {
                                                 {client.name}
                                                 {client.is_blacklisted && <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[10px] rounded-md font-bold uppercase">Заблокирован</span>}
                                             </h3>
-                                            <p className="text-blue-400 font-mono text-xs mt-1">{client.phone}</p>
+                                            <p className="text-indigo-400 font-mono text-xs mt-1">{client.phone}</p>
                                         </div>
                                         <button onClick={() => handleToggleBlacklist(client.id, client.is_blacklisted)} className={`p-2 rounded-xl transition-all ${client.is_blacklisted ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-white/20 hover:text-red-400 hover:bg-red-500/10'}`}>
                                             <Ban className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -413,6 +449,46 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* 🟢 АНАЛИТИКА И ДОХОДЫ */}
+                {activeTab === 'analytics' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-emerald-500/10 p-5 rounded-3xl border border-emerald-500/20 shadow-lg relative overflow-hidden">
+                                <div className="absolute -top-10 -right-10 w-24 h-24 bg-emerald-500/20 rounded-full blur-2xl"></div>
+                                <p className="text-[10px] text-emerald-400/70 uppercase font-bold tracking-wider mb-1">Общий доход</p>
+                                <p className="text-2xl font-bold text-emerald-400">{totalRevenue} ₽</p>
+                            </div>
+                            <div className="bg-purple-500/10 p-5 rounded-3xl border border-purple-500/20 shadow-lg relative overflow-hidden">
+                                <div className="absolute -top-10 -right-10 w-24 h-24 bg-purple-500/20 rounded-full blur-2xl"></div>
+                                <p className="text-[10px] text-purple-400/70 uppercase font-bold tracking-wider mb-1">Всего визитов</p>
+                                <p className="text-2xl font-bold text-purple-400">{totalVisits}</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/[0.03] backdrop-blur-xl p-5 rounded-3xl border border-white/10 shadow-lg">
+                            <h3 className="text-sm font-bold text-white/90 mb-4 flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-purple-400" /> Топ-5 клиентов
+                            </h3>
+                            <div className="space-y-3">
+                                {clients.filter(c => c.total_revenue > 0).sort((a,b) => b.total_revenue - a.total_revenue).slice(0, 5).map((c, i) => (
+                                    <div key={c.id} className="flex justify-between items-center bg-black/20 p-3 rounded-2xl border border-white/5">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? 'bg-yellow-500/20 text-yellow-400' : i === 1 ? 'bg-gray-300/20 text-gray-300' : i === 2 ? 'bg-orange-600/20 text-orange-400' : 'bg-white/5 text-white/40'}`}>
+                                                {i + 1}
+                                            </div>
+                                            <span className="text-sm font-bold text-white/90">{c.name}</span>
+                                        </div>
+                                        <span className="text-xs font-bold text-emerald-400">{c.total_revenue} ₽</span>
+                                    </div>
+                                ))}
+                                {clients.filter(c => c.total_revenue > 0).length === 0 && (
+                                    <p className="text-xs text-white/40 text-center py-4">Здесь появятся ваши лучшие клиенты после завершения первых визитов.</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -461,24 +537,28 @@ export default function Dashboard() {
                 )}
             </main>
 
-            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Добавлена иконка Клиентов) */}
-            <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 sm:px-10 pb-6">
-                <div className="flex justify-between items-center max-w-sm mx-auto pt-2">
-                    <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><CalendarDays className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Записи</span>
+            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Теперь 5 кнопок) */}
+            <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-2 sm:px-6 pb-6">
+                <div className="flex justify-between items-center max-w-sm mx-auto pt-2 px-2">
+                    <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-blue-500/10' : 'bg-transparent'}`}><CalendarDays className="w-5 h-5" /></div>
+                        <span className="text-[9px] font-bold tracking-wider">Записи</span>
                     </button>
                     <button onClick={() => setActiveTab('services')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Услуги</span>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-5 h-5" /></div>
+                        <span className="text-[9px] font-bold tracking-wider">Услуги</span>
                     </button>
                     <button onClick={() => setActiveTab('clients')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'clients' ? 'text-indigo-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'clients' ? 'bg-indigo-500/10' : 'bg-transparent'}`}><Users className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Клиенты</span>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'clients' ? 'bg-indigo-500/10' : 'bg-transparent'}`}><Users className="w-5 h-5" /></div>
+                        <span className="text-[9px] font-bold tracking-wider">Клиенты</span>
                     </button>
-                    <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}><UserCircle className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Профиль</span>
+                    <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'analytics' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'analytics' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><BarChart3 className="w-5 h-5" /></div>
+                        <span className="text-[9px] font-bold tracking-wider">Доход</span>
+                    </button>
+                    <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-gray-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-gray-500/10' : 'bg-transparent'}`}><UserCircle className="w-5 h-5" /></div>
+                        <span className="text-[9px] font-bold tracking-wider">Профиль</span>
                     </button>
                 </div>
             </nav>
@@ -513,15 +593,27 @@ export default function Dashboard() {
                             </div>
 
                             <div className="flex flex-col gap-3 pt-2">
-                                <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <Phone className="w-4 h-4" /> Позвонить
-                                </a>
-                                <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <MessageCircle className="w-4 h-4" /> Написать в WhatsApp
-                                </a>
-                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className="w-full bg-red-500/10 text-red-400 font-bold py-3.5 rounded-2xl border border-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
-                                    <Trash2 className="w-4 h-4" /> Отменить запись
-                                </button>
+                                {/* НОВАЯ КНОПКА ЗАВЕРШЕНИЯ ВИЗИТА */}
+                                {selectedApp.status !== 'completed' && (
+                                    <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-500/10 text-emerald-400 font-bold py-3.5 rounded-2xl border border-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4" /> Завершить визит
+                                    </button>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3 mt-2">
+                                    <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <Phone className="w-4 h-4" />
+                                    </a>
+                                    <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <MessageCircle className="w-4 h-4" /> WhatsApp
+                                    </a>
+                                </div>
+
+                                {selectedApp.status !== 'completed' && (
+                                    <button onClick={() => handleDeleteRecord(selectedApp.id)} className="w-full bg-white/5 text-white/40 font-bold py-3.5 rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-2 hover:bg-red-500/10 hover:text-red-400">
+                                        <Trash2 className="w-4 h-4" /> Отменить запись
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
