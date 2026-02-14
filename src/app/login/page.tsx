@@ -26,61 +26,51 @@ export default function LoginPage() {
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setMessage(null);
-        try {
-            const { error } = await supabase.auth.signInWithOtp({ email });
-            if (error) setMessage({ type: "error", text: error.message });
-            else { setMessage({ type: "success", text: "Код отправлен! Проверьте почту." }); setStep(2); }
-        } catch (err: any) {
-            // ЭТО ПОКАЖЕТ РЕАЛЬНУЮ ПРИЧИНУ LOAD FAILED
-            setMessage({ type: "error", text: "Ошибка сети: " + err.message });
-        }
+        const { error } = await supabase.auth.signInWithOtp({ email });
+        if (error) setMessage({ type: "error", text: error.message });
+        else { setMessage({ type: "success", text: "Код отправлен! Проверьте почту." }); setStep(2); }
         setLoading(false);
     };
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setMessage(null);
-        try {
-            const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
-            
-            if (error) {
-                setMessage({ type: "error", text: error.message || "Неверный код." });
-                setLoading(false);
-            } else if (data.session) {
-                const { data: profile } = await supabase.from('profiles').select('business_name, role').eq('id', data.session.user.id).single();
-                if (!profile?.business_name) {
-                    setUserId(data.session.user.id);
-                    setStep(3); 
-                    setLoading(false);
-                } else {
-                    router.replace("/dashboard");
-                }
-            }
-        } catch (err: any) {
-            setMessage({ type: "error", text: "Ошибка при проверке: " + err.message });
+        const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+        
+        if (error) {
+            setMessage({ type: "error", text: "Неверный код." });
             setLoading(false);
+        } else if (data.session) {
+            const { data: profile } = await supabase.from('profiles').select('business_name, role').eq('id', data.session.user.id).single();
+            if (!profile?.business_name) {
+                setUserId(data.session.user.id);
+                setStep(3); 
+                setLoading(false);
+            } else {
+                router.replace("/dashboard");
+            }
         }
     };
 
     const handleSetupProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        try {
-            const { error } = await supabase.from('profiles').upsert({ 
-                id: userId, 
-                role: setupRole, 
-                business_name: setupName 
-            });
+        
+        const { error } = await supabase.from('profiles').upsert({ 
+            id: userId, 
+            role: setupRole, 
+            business_name: setupName 
+        });
 
-            if (error) throw error;
-            router.replace("/dashboard");
-        } catch (err: any) {
-            alert("Ошибка создания профиля: " + err.message);
+        if (error) {
+            alert("Ошибка создания профиля: " + error.message);
             setLoading(false);
+            return;
         }
+
+        router.replace("/dashboard");
     };
 
-    // ... дальше твой UI без изменений
     return (
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-blue-500/30">
             <div className="bg-white/[0.03] p-6 sm:p-10 rounded-3xl sm:rounded-[2.5rem] shadow-2xl w-full max-w-md border border-white/10 backdrop-blur-2xl relative overflow-hidden">
