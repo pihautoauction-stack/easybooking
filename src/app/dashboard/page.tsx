@@ -191,7 +191,7 @@ export default function Dashboard() {
         if (confirm("Точно отменить запись клиента?")) {
             try {
                 const { error } = await supabase.from("appointments").delete().eq("id", id);
-                if (error) throw error;
+                if (error) throw error; 
                 
                 await loadData(user.id);
                 setSelectedApp(null); 
@@ -199,7 +199,7 @@ export default function Dashboard() {
                     window.Telegram.WebApp.showPopup({ message: "Успешно отменено" });
                 }
             } catch (err: any) {
-                alert("Ошибка удаления: " + err.message + "\n(Выполни 'ALTER TABLE public.appointments DISABLE ROW LEVEL SECURITY;' в Supabase SQL Editor)");
+                alert("Ошибка удаления (Supabase RLS): " + err.message);
             }
         }
     };
@@ -211,6 +211,7 @@ export default function Dashboard() {
         ? appointments.filter(a => a.service_id === activeServiceFilter)
         : appointments;
 
+    // Очищает номер телефона для ссылок
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
 
     if (loading) return (
@@ -428,7 +429,8 @@ export default function Dashboard() {
                             </div>
 
                             <div className="flex flex-col gap-3 pt-2">
-                                <a href={`tel:${selectedApp.client_phone}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                {/* ИСПРАВЛЕНА ССЫЛКА НА ТЕЛЕФОН ЗДЕСЬ */}
+                                <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
                                     <Phone className="w-4 h-4" /> Позвонить
                                 </a>
                                 <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
