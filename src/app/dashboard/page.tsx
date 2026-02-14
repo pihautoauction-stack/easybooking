@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -16,6 +16,7 @@ type Tab = 'appointments' | 'services' | 'profile';
 export default function Dashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false); // Индикатор тихого обновления
     const [user, setUser] = useState<any>(null);
     const [isBrowser, setIsBrowser] = useState(false);
     const [returnLink, setReturnLink] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
-    // ОСНОВНАЯ ИНИЦИАЛИЗАЦИЯ
+    // ОСНОВНАЯ ИНИЦИАЛИЗАЦИЯ И АВТОРИЗАЦИЯ
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -96,46 +97,74 @@ export default function Dashboard() {
         return () => subscription.unsubscribe();
     }, [router]);
 
-    // REALTIME ОБНОВЛЕНИЯ (МАГИЯ АВТО-ОБНОВЛЕНИЯ ЭКРАНА)
+    // ТРОЙНАЯ БРОНЯ АВТООБНОВЛЕНИЙ (REALTIME + ФОКУС + ТАЙМЕР)
     useEffect(() => {
         if (!user?.id) return;
         
+        // 1. Realtime от базы данных
         const channel = supabase
-            .channel('realtime_appointments')
-            .on('postgres_changes', { 
-                event: '*', 
-                schema: 'public', 
-                table: 'appointments', 
-                filter: `master_id=eq.${user.id}` 
-            }, () => {
-                // Если база изменилась (клиент записался/удалился) — тихо обновляем список на экране мастера
+            .channel('public:appointments')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
                 loadData(user.id);
             })
             .subscribe();
 
+        // 2. Обновление при возврате в Telegram (если приложение сворачивали)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') loadData(user.id);
+        };
+        const handleFocus = () => loadData(user.id);
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleFocus);
+
+        // 3. Тихий таймер: обновляет данные каждые 10 секунд на всякий случай
+        const silentInterval = setInterval(() => {
+            loadData(user.id, true); // true = тихое обновление без лоадера
+        }, 10000);
+
         return () => {
             supabase.removeChannel(channel);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleFocus);
+            clearInterval(silentInterval);
         };
     }, [user?.id]);
 
-    const loadData = async (userId: string) => {
-        const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
-        if (p) {
-            setBusinessName(p.business_name || "");
-            setTelegramChatId(p.telegram_chat_id || "");
-            setWorkStart(Number(p.work_start_hour) || 9);
-            setWorkEnd(Number(p.work_end_hour) || 21);
-            if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
+    // ФУНКЦИЯ ЗАГРУЗКИ ДАННЫХ
+    const loadData = async (userId: string, isSilent = false) => {
+        if (!isSilent) setIsSyncing(true);
+        try {
+            const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
+            if (p) {
+                setBusinessName(p.business_name || "");
+                setTelegramChatId(p.telegram_chat_id || "");
+                setWorkStart(Number(p.work_start_hour) || 9);
+                setWorkEnd(Number(p.work_end_hour) || 21);
+                if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
+            }
+            
+            const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
+            setServices(s || []);
+            
+            const { data: a } = await supabase.from("appointments")
+                .select("id, client_name, client_phone, start_time, service_id, service:services (name, price)")
+                .eq("master_id", userId)
+                .gte('start_time', new Date().toISOString())
+                .order('start_time', { ascending: true });
+            
+            setAppointments(a || []);
+            
+            // Если открыта карточка отмененного клиента — закрываем её автоматически
+            if (selectedApp && a && !a.find((app: any) => app.id === selectedApp.id)) {
+                setSelectedApp(null);
+            }
+
+        } catch (error) {
+            console.error(error);
+        } finally {
+            if (!isSilent) setTimeout(() => setIsSyncing(false), 500);
         }
-        const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
-        setServices(s || []);
-        
-        const { data: a } = await supabase.from("appointments")
-            .select("id, client_name, client_phone, start_time, service_id, service:services (name, price)")
-            .eq("master_id", userId)
-            .gte('start_time', new Date().toISOString())
-            .order('start_time', { ascending: true });
-        setAppointments(a || []);
     };
 
     const handleSaveProfile = async () => {
@@ -212,10 +241,21 @@ export default function Dashboard() {
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white font-sans selection:bg-blue-500/30 flex flex-col">
             
             <header className="sticky top-0 z-30 bg-[#050505]/80 backdrop-blur-2xl border-b border-white/5 px-4 sm:px-5 py-3 sm:py-4 flex justify-between items-center">
-                <h1 className="text-base sm:text-lg font-bold flex items-center gap-2 drop-shadow-md">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
-                    {businessName || "Ваш Кабинет"}
-                </h1>
+                <div className="flex items-center gap-2">
+                    <div className="relative flex h-3 w-3 items-center justify-center">
+                        {isSyncing ? (
+                            <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+                        ) : (
+                            <>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-20"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+                            </>
+                        )}
+                    </div>
+                    <h1 className="text-base sm:text-lg font-bold drop-shadow-md truncate max-w-[150px] sm:max-w-[200px]">
+                        {businessName || "Ваш Кабинет"}
+                    </h1>
+                </div>
                 <button onClick={() => supabase.auth.signOut().then(() => router.replace("/login"))} className="text-white/40 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4 sm:w-5 sm:h-5" /></button>
             </header>
 
