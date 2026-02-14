@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-    // Отправляем уведомление мастеру
+    // Уведомление мастеру
     if (masterChatId && botToken) {
        const formattedDate = new Date(startTime).toLocaleString('ru-RU', {
          timeZone: 'Europe/Moscow', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit'

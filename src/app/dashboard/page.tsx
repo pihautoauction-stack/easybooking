@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, MapPin
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -20,28 +20,24 @@ export default function Dashboard() {
     const [isBrowser, setIsBrowser] = useState(false);
     const [returnLink, setReturnLink] = useState<string | null>(null);
 
-    // Навигация
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
 
-    // Данные профиля
     const [businessName, setBusinessName] = useState("");
     const [telegramChatId, setTelegramChatId] = useState(""); 
     const [workStart, setWorkStart] = useState(9);
     const [workEnd, setWorkEnd] = useState(21);
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
     
-    // Списки
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     
-    // Состояния форм
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
     
-    // Фильтр записей
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
+    const [selectedApp, setSelectedApp] = useState<any>(null);
 
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
@@ -111,16 +107,14 @@ export default function Dashboard() {
         const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
         setServices(s || []);
         
-        // Загружаем записи (только будущие)
         const { data: a } = await supabase.from("appointments")
-            .select("id, client_name, client_phone, start_time, service_id, service:services (name)")
+            .select("id, client_name, client_phone, start_time, service_id, service:services (name, price)")
             .eq("master_id", userId)
             .gte('start_time', new Date().toISOString())
             .order('start_time', { ascending: true });
         setAppointments(a || []);
     };
 
-    // --- ОБРАБОТЧИКИ ---
     const handleSaveProfile = async () => {
         setSaving(true);
         const { error } = await supabase.from("profiles").upsert({
@@ -153,18 +147,19 @@ export default function Dashboard() {
         if (confirm("Точно отменить запись клиента?")) {
             await supabase.from("appointments").delete().eq("id", id);
             await loadData(user.id);
+            setSelectedApp(null); 
         }
     };
 
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
 
-    // Фильтрация записей
     const filteredAppointments = activeServiceFilter 
         ? appointments.filter(a => a.service_id === activeServiceFilter)
         : appointments;
 
-    // --- ЭКРАНЫ ЗАГРУЗКИ ---
+    const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
+
     if (loading) return (
         <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
             <div className="p-4 sm:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)]">
@@ -190,11 +185,9 @@ export default function Dashboard() {
         );
     }
 
-    // --- ГЛАВНЫЙ ИНТЕРФЕЙС ---
     return (
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white font-sans selection:bg-blue-500/30 flex flex-col">
             
-            {/* Хедер (Фиксированный) */}
             <header className="sticky top-0 z-30 bg-[#050505]/80 backdrop-blur-2xl border-b border-white/5 px-4 sm:px-5 py-3 sm:py-4 flex justify-between items-center">
                 <h1 className="text-base sm:text-lg font-bold flex items-center gap-2 drop-shadow-md">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
@@ -203,30 +196,16 @@ export default function Dashboard() {
                 <button onClick={() => supabase.auth.signOut().then(() => router.replace("/login"))} className="text-white/40 hover:text-red-400 p-1.5 sm:p-2 bg-white/5 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4 sm:w-5 sm:h-5" /></button>
             </header>
 
-            {/* Контентная область с отступом снизу под меню */}
             <main className="flex-1 overflow-y-auto p-4 sm:p-5 pb-28 sm:pb-32 space-y-5">
                 
-                {/* 🟢 ВКЛАДКА: ЗАПИСИ */}
+                {/* 🟢 ЗАПИСИ */}
                 {activeTab === 'appointments' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                        
-                        {/* Фильтры по услугам */}
                         {services.length > 0 && appointments.length > 0 && (
                             <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-                                <button 
-                                    onClick={() => setActiveServiceFilter(null)}
-                                    className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === null ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}
-                                >
-                                    Все записи
-                                </button>
+                                <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === null ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}>Все записи</button>
                                 {services.map(s => (
-                                    <button 
-                                        key={s.id} 
-                                        onClick={() => setActiveServiceFilter(s.id)}
-                                        className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === s.id ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}
-                                    >
-                                        {s.name}
-                                    </button>
+                                    <button key={s.id} onClick={() => setActiveServiceFilter(s.id)} className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shrink-0 ${activeServiceFilter === s.id ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-white/50 border-transparent hover:bg-white/10'}`}>{s.name}</button>
                                 ))}
                             </div>
                         )}
@@ -234,13 +213,11 @@ export default function Dashboard() {
                         <div className="space-y-3 sm:space-y-4">
                             {filteredAppointments.length === 0 ? (
                                 <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                        <CalendarIcon className="w-8 h-8 text-white/20" />
-                                    </div>
+                                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10"><CalendarIcon className="w-8 h-8 text-white/20" /></div>
                                     <p className="text-white/40 text-sm">В этой категории пока нет записей</p>
                                 </div>
                             ) : filteredAppointments.map(app => (
-                                <div key={app.id} className="bg-white/[0.02] backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border border-white/10 shadow-lg relative overflow-hidden group">
+                                <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-white/[0.02] backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border border-white/10 shadow-lg relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all hover:bg-white/[0.04]">
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -z-10"></div>
                                     
                                     <div className="flex justify-between items-start mb-4">
@@ -253,20 +230,14 @@ export default function Dashboard() {
                                             </div>
                                             <h3 className="text-white/90 text-sm sm:text-base font-bold">{app.client_name}</h3>
                                         </div>
-                                        <button onClick={() => handleDeleteRecord(app.id)} className="text-white/20 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                        {/* Блокируем всплытие клика */}
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecord(app.id); }} className="text-white/20 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
                                     </div>
 
                                     <div className="flex flex-col gap-2 pt-4 border-t border-white/5">
                                         <div className="flex items-center gap-2 text-xs sm:text-sm text-white/60">
                                             <Scissors className="w-4 h-4 text-pink-400/70" />
                                             <span className="truncate">{app.service?.name || "Услуга удалена"}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-1">
-                                            <div className="flex items-center gap-2 text-xs sm:text-sm text-white/60">
-                                                <Phone className="w-4 h-4 text-blue-400/70" />
-                                                <span className="font-mono">{app.client_phone}</span>
-                                            </div>
-                                            <a href={`tel:${app.client_phone}`} className="text-[10px] sm:text-xs font-bold text-black bg-white/90 hover:bg-white px-4 py-1.5 rounded-lg active:scale-95 transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)]">Позвонить</a>
                                         </div>
                                     </div>
                                 </div>
@@ -275,7 +246,7 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* 🔵 ВКЛАДКА: УСЛУГИ */}
+                {/* 🔵 УСЛУГИ */}
                 {activeTab === 'services' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
@@ -307,11 +278,9 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* 🟣 ВКЛАДКА: ПРОФИЛЬ */}
+                {/* 🟣 ПРОФИЛЬ */}
                 {activeTab === 'profile' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
-                        
-                        {/* Блок со ссылкой */}
                         <div className="relative overflow-hidden bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-xl">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
                             <h2 className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-400/80 mb-3 tracking-widest flex items-center gap-2"><LinkIcon className="w-3 h-3" /> Ссылка для клиентов</h2>
@@ -321,15 +290,13 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Настройки бизнеса */}
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl">
                             <h2 className="text-base sm:text-lg font-bold mb-5 flex items-center gap-2"><Settings className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]"/> Настройки бизнеса</h2>
                             <div className="space-y-5">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название на странице записи</label>
+                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название</label>
                                     <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Мой салон..." className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
                                 </div>
-                                
                                 <div className="pt-2">
                                     <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider block mb-3 ml-1">Дни работы</label>
                                     <div className="flex justify-between gap-1 mb-4">
@@ -338,7 +305,6 @@ export default function Dashboard() {
                                         ))}
                                     </div>
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold ml-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Открытие (час)</label>
@@ -349,7 +315,6 @@ export default function Dashboard() {
                                         <input type="number" min="0" max="23" value={workEnd} onChange={e => setWorkEnd(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center font-mono text-lg" />
                                     </div>
                                 </div>
-
                                 <button onClick={handleSaveProfile} disabled={saving} className="w-full bg-white text-black py-4 rounded-2xl font-bold text-sm sm:text-base shadow-[0_0_15px_rgba(255,255,255,0.2)] active:scale-95 mt-2 transition-all">{saving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Сохранить профиль"}</button>
                             </div>
                         </div>
@@ -357,41 +322,70 @@ export default function Dashboard() {
                 )}
             </main>
 
-            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Bottom Bar) */}
+            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ */}
             <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-6 sm:px-10 pb-6">
                 <div className="flex justify-between items-center max-w-sm mx-auto pt-2">
-                    <button 
-                        onClick={() => setActiveTab('appointments')} 
-                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
-                    >
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}>
-                            <CalendarDays className="w-6 h-6 sm:w-7 sm:h-7" />
-                        </div>
+                    <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><CalendarDays className="w-6 h-6 sm:w-7 sm:h-7" /></div>
                         <span className="text-[10px] font-bold tracking-wider">Записи</span>
                     </button>
-
-                    <button 
-                        onClick={() => setActiveTab('services')} 
-                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
-                    >
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}>
-                            <Scissors className="w-6 h-6 sm:w-7 sm:h-7" />
-                        </div>
+                    <button onClick={() => setActiveTab('services')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-6 h-6 sm:w-7 sm:h-7" /></div>
                         <span className="text-[10px] font-bold tracking-wider">Услуги</span>
                     </button>
-
-                    <button 
-                        onClick={() => setActiveTab('profile')} 
-                        className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}
-                    >
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}>
-                            <UserCircle className="w-6 h-6 sm:w-7 sm:h-7" />
-                        </div>
+                    <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}><UserCircle className="w-6 h-6 sm:w-7 sm:h-7" /></div>
                         <span className="text-[10px] font-bold tracking-wider">Профиль</span>
                     </button>
                 </div>
             </nav>
-            
+
+            {/* ВСПЛЫВАЮЩАЯ КАРТОЧКА КЛИЕНТА (МОДАЛКА) */}
+            {selectedApp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
+                    <div className="bg-[#0f172a] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+                        
+                        <button onClick={() => setSelectedApp(null)} className="absolute top-4 right-4 text-white/40 hover:text-white bg-white/5 p-2 rounded-full transition-colors">
+                            <X className="w-5 h-5" />
+                        </button>
+                        
+                        <h2 className="text-lg font-bold mb-6 text-white/90">Детали записи</h2>
+                        
+                        <div className="space-y-5">
+                            <div>
+                                <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Клиент</p>
+                                <p className="text-xl font-bold text-white/90">{selectedApp.client_name}</p>
+                                <p className="text-sm font-mono text-blue-400 mt-1">{selectedApp.client_phone}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 border-y border-white/10 py-4">
+                                <div>
+                                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Дата и Время</p>
+                                    <p className="text-base font-bold text-emerald-400">{format(new Date(selectedApp.start_time), "d MMMM", { locale: ru })}</p>
+                                    <p className="text-sm font-mono text-emerald-400/70">{format(new Date(selectedApp.start_time), "HH:mm")}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Услуга</p>
+                                    <p className="text-sm font-bold text-white/90">{selectedApp.service?.name}</p>
+                                    <p className="text-sm font-bold text-pink-400 mt-1">{selectedApp.service?.price ? `${selectedApp.service.price} ₽` : "Удалена"}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-3 pt-2">
+                                <a href={`tel:${selectedApp.client_phone}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <Phone className="w-4 h-4" /> Позвонить
+                                </a>
+                                <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}`} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <MessageCircle className="w-4 h-4" /> Написать в WhatsApp
+                                </a>
+                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className="w-full bg-red-500/10 text-red-400 font-bold py-3.5 rounded-2xl border border-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">
+                                    <Trash2 className="w-4 h-4" /> Отменить запись
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

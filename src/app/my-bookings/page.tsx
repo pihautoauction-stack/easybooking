@@ -44,7 +44,6 @@ export default function MyBookings() {
         if (!confirm("Вы уверены, что хотите отменить запись?")) return;
         setCancellingId(app.id);
 
-        // Отправляем запрос на удаление и уведомление мастера
         await fetch('/api/cancel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -57,7 +56,6 @@ export default function MyBookings() {
             }),
         });
 
-        // Убираем из списка на экране
         setAppointments(prev => prev.filter(a => a.id !== app.id));
         setCancellingId(null);
         if (window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({ message: "Запись успешно отменена" });
@@ -74,9 +72,12 @@ export default function MyBookings() {
     return (
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white p-4 sm:p-5 font-sans pb-24 selection:bg-blue-500/30">
             <div className="max-w-md mx-auto">
-                <h1 className="text-xl sm:text-2xl font-bold mb-6 sm:mb-8 pt-4 flex items-center gap-2 drop-shadow-md">
-                    <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
-                </h1>
+                <div className="flex justify-between items-center mb-6 sm:mb-8 pt-4">
+                    <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 drop-shadow-md">
+                        <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
+                    </h1>
+                    <button onClick={() => window.history.back()} className="text-xs font-bold text-white/50 bg-white/5 px-3 py-1.5 rounded-lg active:scale-95">Назад</button>
+                </div>
 
                 <div className="space-y-4">
                     {appointments.length === 0 ? (
