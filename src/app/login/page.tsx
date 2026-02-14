@@ -14,31 +14,27 @@ export default function LoginPage() {
     const router = useRouter();
 
     useEffect(() => {
-        // Если вдруг сессия уже есть (например, перезагрузили страницу) — сразу в кабинет
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (session) router.replace("/dashboard");
         });
     }, [router]);
 
-    // ШАГ 1: Отправка кода на почту
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setMessage(null);
 
-        // Используем стандартный OTP (без редиректов в браузер)
         const { error } = await supabase.auth.signInWithOtp({ email });
 
         if (error) {
             setMessage({ type: "error", text: error.message });
         } else {
-            setMessage({ type: "success", text: "Код отправлен! Проверьте письмо (там есть 6 цифр)." });
+            setMessage({ type: "success", text: "Код отправлен! Проверьте письмо (там 8 цифр)." });
             setStep(2);
         }
         setLoading(false);
     };
 
-    // ШАГ 2: Проверка 6-значного кода
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -53,7 +49,6 @@ export default function LoginPage() {
         if (error) {
             setMessage({ type: "error", text: "Неверный код. Проверьте правильность или запросите новый." });
         } else if (data.session) {
-            // Вход успешен прямо внутри Telegram! Летим в кабинет.
             router.replace("/dashboard");
         }
         setLoading(false);
@@ -65,7 +60,7 @@ export default function LoginPage() {
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-white mb-2">Вход в систему</h1>
                     <p className="text-slate-400">
-                        {step === 1 ? "Введите email для получения доступа" : "Введите 6-значный код из письма"}
+                        {step === 1 ? "Введите email для получения доступа" : "Введите 8-значный код из письма"}
                     </p>
                 </div>
 
@@ -103,16 +98,16 @@ export default function LoginPage() {
                                 <input
                                     type="text"
                                     required
-                                    maxLength={6}
+                                    maxLength={8} 
                                     className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-all text-center text-xl tracking-widest font-mono"
-                                    placeholder="123456"
+                                    placeholder="12345678"
                                     value={token}
-                                    onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))} // Разрешаем только цифры
+                                    onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))} 
                                 />
                             </div>
                         </div>
 
-                        <button type="submit" disabled={loading || token.length < 6} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2">
+                        <button type="submit" disabled={loading || token.length < 8} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2">
                             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Войти в кабинет"}
                         </button>
                         
