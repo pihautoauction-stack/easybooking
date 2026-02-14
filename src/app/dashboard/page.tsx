@@ -108,7 +108,7 @@ export default function Dashboard() {
                 table: 'appointments', 
                 filter: `master_id=eq.${user.id}` 
             }, () => {
-                // Как только база меняется (кто-то записался или удалился) — обновляем список
+                // Если база изменилась (клиент записался/удалился) — тихо обновляем список на экране мастера
                 loadData(user.id);
             })
             .subscribe();

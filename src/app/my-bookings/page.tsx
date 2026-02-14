@@ -45,7 +45,7 @@ export default function MyBookings() {
         setCancellingId(app.id);
 
         try {
-            // ИСПРАВЛЕННЫЙ ПУТЬ К API ОТМЕНЫ
+            // ИСПРАВЛЕННЫЙ ПУТЬ К API:
             const res = await fetch('/api/notify/cancel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -58,7 +58,7 @@ export default function MyBookings() {
                 }),
             });
 
-            if (!res.ok) throw new Error("Ошибка при удалении");
+            if (!res.ok) throw new Error("Ошибка удаления");
 
             // Удаляем визуально только после успеха
             setAppointments(prev => prev.filter(a => a.id !== app.id));
@@ -87,7 +87,7 @@ export default function MyBookings() {
                     <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 drop-shadow-md">
                         <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
                     </h1>
-                    <button onClick={() => window.history.back()} className="text-xs font-bold text-white/50 bg-white/5 px-3 py-1.5 rounded-lg active:scale-95">Назад</button>
+                    <button onClick={() => window.history.back()} className="text-xs font-bold text-white/50 bg-white/5 px-3 py-1.5 rounded-lg active:scale-95 transition-all hover:bg-white/10">Назад</button>
                 </div>
 
                 <div className="space-y-4">
@@ -120,7 +120,7 @@ export default function MyBookings() {
                                 <span className="font-bold text-pink-400 shrink-0">{app.service?.price} ₽</span>
                             </div>
 
-                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-3.5 rounded-xl sm:rounded-2xl border border-red-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-2">
+                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-3.5 rounded-xl sm:rounded-2xl border border-red-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100">
                                 {cancellingId === app.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Отменить запись <Trash2 className="w-4 h-4" /></>}
                             </button>
                         </div>
