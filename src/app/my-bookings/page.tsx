@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Calendar, Briefcase, Trash2, CalendarX2, X } from "lucide-react";
+import { Loader2, Calendar, Briefcase, Trash2, CalendarX2 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRouter } from "next/navigation";
@@ -126,6 +126,17 @@ export default function MyBookings() {
                         </div>
                     ))}
                 </div>
+
+                {/* НОВАЯ КНОПКА ДЛЯ ВХОДА СПЕЦИАЛИСТОВ */}
+                <div className="mt-12 mb-6 text-center">
+                    <button 
+                        onClick={() => router.push('/login')} 
+                        className="text-[10px] text-white/20 hover:text-white/50 uppercase tracking-widest transition-colors font-bold"
+                    >
+                        Вход для специалистов
+                    </button>
+                </div>
+
             </div>
         </div>
     );
