@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(request: Request) {
-    // Защита: этот скрипт может вызывать только Vercel Cron
     const authHeader = request.headers.get('authorization');
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return new Response('Unauthorized', { status: 401 });
@@ -12,7 +11,6 @@ export async function GET(request: Request) {
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         if (!botToken) throw new Error("No bot token");
 
-        // Ищем записи, которые состоятся ЗАВТРА
         const tomorrowStart = new Date();
         tomorrowStart.setDate(tomorrowStart.getDate() + 1);
         tomorrowStart.setHours(0, 0, 0, 0);
@@ -25,7 +23,7 @@ export async function GET(request: Request) {
             .gte("start_time", tomorrowStart.toISOString())
             .lte("start_time", tomorrowEnd.toISOString())
             .eq("status", "pending")
-            .not("client_tg_id", "is", null); // Только те, кто нажал /start в боте
+            .not("client_tg_id", "is", null);
 
         if (!appointments || appointments.length === 0) {
             return NextResponse.json({ success: true, sent: 0 });
@@ -33,11 +31,15 @@ export async function GET(request: Request) {
 
         let sentCount = 0;
 
-        // Рассылаем напоминания
-        for (const app of appointments) {
+        // Добавлено (as any[]) для обхода строгой типизации Vercel
+        for (const app of appointments as any[]) {
             const time = new Date(app.start_time).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
             
-            const msg = `🔔 *Напоминание о записи!*\n\nЖдем вас завтра в *${time}*.\n💇‍♀️ Услуга: ${app.service?.name}\n📍 Студия: ${app.master?.business_name}\n\n_Если ваши планы изменились, пожалуйста, отмените запись в Личном кабинете._`;
+            // Надежное извлечение названия (даже если база вернет массив)
+            const serviceName = Array.isArray(app.service) ? app.service[0]?.name : app.service?.name;
+            const masterName = Array.isArray(app.master) ? app.master[0]?.business_name : app.master?.business_name;
+            
+            const msg = `🔔 *Напоминание о записи!*\n\nЖдем вас завтра в *${time}*.\n💇‍♀️ Услуга: ${serviceName || 'Услуга'}\n📍 Студия: ${masterName || 'Студия'}\n\n_Если ваши планы изменились, пожалуйста, отмените запись в Личном кабинете._`;
 
             await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
