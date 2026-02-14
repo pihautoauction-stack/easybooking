@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw
+    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
-type Tab = 'appointments' | 'services' | 'profile';
+// ДОБАВЛЕН ТАБ 'clients'
+type Tab = 'appointments' | 'services' | 'clients' | 'profile';
 
 export default function Dashboard() {
     const router = useRouter();
@@ -31,6 +32,10 @@ export default function Dashboard() {
     
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
+    
+    // CRM СТЕЙТ
+    const [clients, setClients] = useState<any[]>([]);
+    const [clientSearchQuery, setClientSearchQuery] = useState("");
     
     const [saving, setSaving] = useState(false);
     const [addingService, setAddingService] = useState(false);
@@ -142,12 +147,18 @@ export default function Dashboard() {
             setServices(s || []);
             
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, service:services (name, price)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, service:services (name, price)")
                 .eq("master_id", userId)
                 .gte('start_time', new Date().toISOString())
                 .order('start_time', { ascending: true });
-            
             setAppointments(a || []);
+
+            // ЗАГРУЗКА КЛИЕНТОВ ДЛЯ CRM
+            const { data: c } = await supabase.from("clients")
+                .select("*")
+                .eq("master_id", userId)
+                .order('created_at', { ascending: false });
+            setClients(c || []);
             
             if (selectedApp && a && !a.find((app: any) => app.id === selectedApp.id)) {
                 setSelectedApp(null);
@@ -204,6 +215,18 @@ export default function Dashboard() {
         }
     };
 
+    // ФУНКЦИЯ БЛОКИРОВКИ КЛИЕНТА (ЧЕРНЫЙ СПИСОК)
+    const handleToggleBlacklist = async (clientId: string, currentStatus: boolean) => {
+        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить клиента в черный список? Он больше не сможет к вам записаться онлайн.")) {
+            try {
+                await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId);
+                await loadData(user.id, true);
+            } catch (err: any) {
+                alert("Ошибка: " + err.message);
+            }
+        }
+    };
+
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user ? `https://t.me/my_cool_booking_bot/app?startapp=${user.id}` : "";
 
@@ -211,7 +234,12 @@ export default function Dashboard() {
         ? appointments.filter(a => a.service_id === activeServiceFilter)
         : appointments;
 
-    // Очищает номер телефона для ссылок
+    // Фильтр для поиска клиентов
+    const filteredClients = clients.filter(c => 
+        c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || 
+        c.phone.includes(clientSearchQuery)
+    );
+
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
 
     if (loading) return (
@@ -263,6 +291,7 @@ export default function Dashboard() {
 
             <main className="flex-1 overflow-y-auto p-4 sm:p-5 pb-28 sm:pb-32 space-y-5">
                 
+                {/* 🟢 ЗАПИСИ */}
                 {activeTab === 'appointments' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                         {services.length > 0 && appointments.length > 0 && (
@@ -309,6 +338,7 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* 🔵 УСЛУГИ */}
                 {activeTab === 'services' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
@@ -340,6 +370,54 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* 🟡 НОВАЯ ВКЛАДКА: КЛИЕНТЫ (CRM) */}
+                {activeTab === 'clients' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-4">
+                        <div className="relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
+                            <input 
+                                value={clientSearchQuery} 
+                                onChange={e => setClientSearchQuery(e.target.value)} 
+                                placeholder="Поиск по имени или номеру..." 
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm text-white outline-none focus:border-blue-500/50" 
+                            />
+                        </div>
+
+                        <div className="space-y-3">
+                            {filteredClients.length === 0 ? (
+                                <p className="text-white/30 text-center py-8 text-sm">Клиенты не найдены</p>
+                            ) : filteredClients.map(client => (
+                                <div key={client.id} className={`bg-white/[0.03] backdrop-blur-xl rounded-[1.5rem] p-4 sm:p-5 border shadow-lg relative overflow-hidden transition-all ${client.is_blacklisted ? 'border-red-500/30 bg-red-900/10 opacity-70' : 'border-white/10'}`}>
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-white/90 text-sm sm:text-base font-bold flex items-center gap-2">
+                                                {client.name}
+                                                {client.is_blacklisted && <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[10px] rounded-md font-bold uppercase">Заблокирован</span>}
+                                            </h3>
+                                            <p className="text-blue-400 font-mono text-xs mt-1">{client.phone}</p>
+                                        </div>
+                                        <button onClick={() => handleToggleBlacklist(client.id, client.is_blacklisted)} className={`p-2 rounded-xl transition-all ${client.is_blacklisted ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-white/20 hover:text-red-400 hover:bg-red-500/10'}`}>
+                                            <Ban className="w-4 h-4 sm:w-5 sm:h-5" />
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                                        <div className="bg-black/30 p-3 rounded-xl border border-white/5">
+                                            <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Визиты</p>
+                                            <p className="text-lg font-bold text-white/90">{client.visits_count}</p>
+                                        </div>
+                                        <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                                            <p className="text-[10px] text-emerald-400/50 uppercase font-bold tracking-wider mb-1">Принес денег</p>
+                                            <p className="text-lg font-bold text-emerald-400">{client.total_revenue} ₽</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* 🟣 ПРОФИЛЬ */}
                 {activeTab === 'profile' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         <div className="relative overflow-hidden bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-xl">
@@ -383,23 +461,29 @@ export default function Dashboard() {
                 )}
             </main>
 
-            <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-6 sm:px-10 pb-6">
+            {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (Добавлена иконка Клиентов) */}
+            <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 sm:px-10 pb-6">
                 <div className="flex justify-between items-center max-w-sm mx-auto pt-2">
                     <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><CalendarDays className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-                        <span className="text-[10px] font-bold tracking-wider">Записи</span>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><CalendarDays className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Записи</span>
                     </button>
                     <button onClick={() => setActiveTab('services')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-                        <span className="text-[10px] font-bold tracking-wider">Услуги</span>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Услуги</span>
+                    </button>
+                    <button onClick={() => setActiveTab('clients')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'clients' ? 'text-indigo-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'clients' ? 'bg-indigo-500/10' : 'bg-transparent'}`}><Users className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Клиенты</span>
                     </button>
                     <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}>
-                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}><UserCircle className="w-6 h-6 sm:w-7 sm:h-7" /></div>
-                        <span className="text-[10px] font-bold tracking-wider">Профиль</span>
+                        <div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-blue-500/10' : 'bg-transparent'}`}><UserCircle className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                        <span className="text-[9px] sm:text-[10px] font-bold tracking-wider">Профиль</span>
                     </button>
                 </div>
             </nav>
 
+            {/* ВСПЛЫВАЮЩАЯ КАРТОЧКА КЛИЕНТА (МОДАЛКА) */}
             {selectedApp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
                     <div className="bg-[#0f172a] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -429,7 +513,6 @@ export default function Dashboard() {
                             </div>
 
                             <div className="flex flex-col gap-3 pt-2">
-                                {/* ИСПРАВЛЕНА ССЫЛКА НА ТЕЛЕФОН ЗДЕСЬ */}
                                 <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-blue-600/90 text-white font-bold py-3.5 rounded-2xl text-center shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 transition-all flex items-center justify-center gap-2">
                                     <Phone className="w-4 h-4" /> Позвонить
                                 </a>
@@ -446,4 +529,4 @@ export default function Dashboard() {
             )}
         </div>
     );
-} 
+}

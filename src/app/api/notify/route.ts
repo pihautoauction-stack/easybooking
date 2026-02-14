@@ -9,8 +9,8 @@ export async function POST(request: Request) {
     if (!masterId) return NextResponse.json({ error: "Master ID Error" }, { status: 400 });
 
     if (isTest) {
-      // Логика теста связи...
-      return NextResponse.json({ success: true });
+        // ... (тестовая логика остается)
+        return NextResponse.json({ success: true });
     }
 
     const { data: busy } = await supabase.from("appointments").select("id")
@@ -18,13 +18,52 @@ export async function POST(request: Request) {
 
     if (busy) return NextResponse.json({ error: "Busy" }, { status: 409 });
 
-    // СОХРАНЯЕМ CLIENT_TG_ID В БАЗУ
+    // --- УМНАЯ CRM: СОЗДАЕМ ИЛИ ИЩЕМ КЛИЕНТА ---
+    let clientId = null;
+    
+    // Ищем клиента по номеру телефона у конкретного мастера
+    const { data: existingClient } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("master_id", masterId)
+        .eq("phone", clientPhone)
+        .maybeSingle();
+
+    if (existingClient) {
+        clientId = existingClient.id;
+    } else {
+        // Если клиент новый, создаем его профиль
+        const { data: newClient, error: clientError } = await supabase
+            .from("clients")
+            .insert({
+                master_id: masterId,
+                name: clientName,
+                phone: clientPhone,
+                telegram_id: clientTgId
+            })
+            .select("id")
+            .single();
+            
+        if (clientError) console.error("Client Creation Error:", clientError);
+        if (newClient) clientId = newClient.id;
+    }
+
+    // Сохраняем саму запись с привязкой к client_id
     const { error: insertError } = await supabase.from("appointments")
-      .insert({ master_id: masterId, service_id: serviceId, client_name: clientName, client_phone: clientPhone, start_time: startTime, client_tg_id: clientTgId });
+      .insert({ 
+          master_id: masterId, 
+          service_id: serviceId, 
+          client_name: clientName, 
+          client_phone: clientPhone, 
+          start_time: startTime, 
+          client_tg_id: clientTgId,
+          client_id: clientId // ПРИВЯЗКА К CRM
+      });
 
     if (insertError) throw insertError;
 
-    const { data: m } = await supabase.from("profiles").select("telegram_chat_id, business_name").eq("id", masterId).single();
+    // Отправка уведомления в Телеграм
+    const { data: m } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
     if (m?.telegram_chat_id && botToken) {
