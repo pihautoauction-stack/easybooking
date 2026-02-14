@@ -7,7 +7,6 @@ import { Loader2 } from "lucide-react";
 
 export default function Home() {
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
@@ -20,31 +19,40 @@ export default function Home() {
         }
 
         const checkAuthAndRoute = async () => {
+            const startParam = tg?.initDataUnsafe?.start_param;
+
+            // 1. ИСПРАВЛЕНИЕ: Проверяем, не является ли параметр скрытым ТОКЕНОМ для входа специалиста (длиннее 40 символов)
+            if (startParam && startParam.length > 40) {
+                const { data, error } = await supabase.auth.refreshSession({ refresh_token: startParam });
+                if (!error && data.session) {
+                    router.replace("/dashboard");
+                    return;
+                }
+            }
+
+            // Получаем текущую сессию
             const { data: { session } } = await supabase.auth.getSession();
             
-            // Получаем параметр из ссылки Telegram (startapp)
-            const startParam = tg?.initDataUnsafe?.start_param;
-            
-            // 1. Если у человека есть сессия мастера -> в Дашборд
+            // 2. Если у человека уже есть сохраненная сессия специалиста -> кидаем в Дашборд
             if (session) {
                 router.replace("/dashboard");
                 return;
             }
 
-            // 2. ВАЖНО: Если клиент перешел по ссылке мастера, у него будет start_param (UUID)
-            if (startParam && startParam.length > 10 && startParam.length < 40) {
+            // 3. Если клиент перешел по ссылке для записи (ID специалиста - 36 символов)
+            if (startParam && startParam.length > 10 && startParam.length <= 40) {
                 router.replace(`/book/${startParam}`);
                 return;
             }
 
-            // 3. Если просто открыл бота (через кнопку меню), кидаем в его записи
+            // 4. Если кто-то просто открыл бота (через кнопку меню), кидаем его в кабинет клиента
             const tgUser = tg?.initDataUnsafe?.user;
             if (tgUser?.id) {
                 router.replace("/my-bookings");
                 return;
             }
 
-            // 4. Иначе - страница входа (для мастеров через обычный браузер)
+            // 5. Иначе - кидаем на страницу логина (для браузера)
             router.replace("/login");
         };
 
