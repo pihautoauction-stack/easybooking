@@ -6,10 +6,12 @@ import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays } from "lu
 import { format, setHours, setMinutes, startOfToday, addMinutes, isBefore } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
+import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
 
 export default function BookingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
+    const router = useRouter();
 
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
@@ -81,10 +83,19 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else setBookingStatus("error");
     };
 
+    // Функция для создания новой записи без перезагрузки вкладки
+    const resetBooking = () => {
+        setBookingStatus("idle");
+        setSelectedService(null);
+        setSelectedDate(undefined);
+        setSelectedTime(null);
+        setClientName("");
+        setClientPhone("");
+    };
+
     if (loading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white"><div className="p-4 sm:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)]"><Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-blue-500" /></div></div>;
     if (!profile) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white/50 text-sm font-sans">Мастер не найден.</div>;
 
-    // ИДЕАЛЬНО АДАПТИРОВАННЫЙ ЭКРАН УСПЕХА ДЛЯ МОБИЛОК
     if (bookingStatus === "success") {
         return (
             <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(255,255,255,0))] flex flex-col items-center justify-center text-white p-4 font-sans text-center">
@@ -97,8 +108,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         Ждем вас <br/><span className="text-white font-medium">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
                     </p>
                     <div className="space-y-3 w-full">
-                        <button onClick={() => window.location.href = "https://t.me/my_cool_booking_bot/app?startapp=my_bookings"} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
-                        <button onClick={() => window.location.reload()} className="w-full bg-white/5 text-white/70 font-bold py-4 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
+                        {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ ВМЕСТО ССЫЛКИ */}
+                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
+                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-4 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
                     </div>
                 </div>
             </div>
@@ -109,7 +121,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white p-4 font-sans pb-24 selection:bg-blue-500/30">
             <div className="max-w-md mx-auto w-full">
                 
-                {/* ХЕДЕР С КНОПКОЙ "МОИ ЗАПИСИ" */}
                 <div className="flex items-center gap-3 mb-6 pt-2">
                     {selectedService && (
                         <button onClick={() => setSelectedService(null)} className="p-2.5 bg-white/5 backdrop-blur-md rounded-xl border border-white/10 active:scale-95 shrink-0 hover:bg-white/10 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
@@ -118,8 +129,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         <h1 className="text-lg font-bold uppercase tracking-widest text-blue-400/90 drop-shadow-md truncate">{profile.business_name}</h1>
                         <p className="text-[10px] text-white/40 font-medium tracking-wider mt-0.5">ОНЛАЙН-ЗАПИСЬ</p>
                     </div>
-                    {/* Кнопка "Мои записи" всегда доступна в правом углу */}
-                    <button onClick={() => window.location.href = "https://t.me/my_cool_booking_bot/app?startapp=my_bookings"} className="flex items-center justify-center p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl active:scale-95 transition-all shadow-lg shrink-0">
+                    {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ ВМЕСТО ССЫЛКИ */}
+                    <button onClick={() => router.push('/my-bookings')} className="flex items-center justify-center p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl active:scale-95 transition-all shadow-lg shrink-0">
                         <CalendarDays className="w-5 h-5 text-blue-400" />
                     </button>
                 </div>

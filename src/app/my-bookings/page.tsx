@@ -5,8 +5,10 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, Calendar, Scissors, Trash2, CalendarX2 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { useRouter } from "next/navigation";
 
 export default function MyBookings() {
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -45,7 +47,6 @@ export default function MyBookings() {
         setCancellingId(app.id);
 
         try {
-            // ИСПРАВЛЕННЫЙ ПУТЬ К API:
             const res = await fetch('/api/notify/cancel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -58,15 +59,14 @@ export default function MyBookings() {
                 }),
             });
 
-            if (!res.ok) throw new Error("Ошибка удаления");
+            if (!res.ok) throw new Error("База данных отклонила запрос");
 
-            // Удаляем визуально только после успеха
             setAppointments(prev => prev.filter(a => a.id !== app.id));
             if (window.Telegram?.WebApp?.showPopup) {
                 window.Telegram.WebApp.showPopup({ message: "Запись успешно отменена" });
             }
-        } catch (error) {
-            alert("Не удалось отменить запись. Попробуйте еще раз.");
+        } catch (error: any) {
+            alert("Ошибка: " + error.message);
         } finally {
             setCancellingId(null);
         }
@@ -87,7 +87,8 @@ export default function MyBookings() {
                     <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 drop-shadow-md">
                         <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
                     </h1>
-                    <button onClick={() => window.history.back()} className="text-xs font-bold text-white/50 bg-white/5 px-3 py-1.5 rounded-lg active:scale-95 transition-all hover:bg-white/10">Назад</button>
+                    {/* КНОПКА ВОЗВРАТА ЧЕРЕЗ РОУТЕР */}
+                    <button onClick={() => router.back()} className="text-xs font-bold text-white/50 bg-white/5 px-4 py-2 rounded-lg active:scale-95 transition-all hover:bg-white/10">Назад</button>
                 </div>
 
                 <div className="space-y-4">
