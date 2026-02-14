@@ -35,15 +35,17 @@ export default function Dashboard() {
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [clients, setClients] = useState<any[]>([]);
-    const [employees, setEmployees] = useState<any[]>([]); // Для мульти-мастера
+    const [employees, setEmployees] = useState<any[]>([]); 
     
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
     
+    // Услуги (Вот эту переменную мы случайно удалили в прошлом шаге)
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
+    const [addingService, setAddingService] = useState(false);
     
-    // Форма нового сотрудника
+    // Сотрудники
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
     const [addingEmp, setAddingEmp] = useState(false);
@@ -164,7 +166,10 @@ export default function Dashboard() {
     };
 
     const handleDeleteService = async (id: string) => {
-        if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); await loadData(user.id); }
+        if (confirm("Удалить эту услугу? (Существующие записи не удалятся)")) {
+            await supabase.from("services").delete().eq("id", id);
+            await loadData(user.id);
+        }
     };
 
     const handleAddEmployee = async () => {
@@ -427,7 +432,6 @@ export default function Dashboard() {
                 {activeTab === 'profile' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         
-                        {/* Ссылка */}
                         <div className="relative overflow-hidden bg-white/[0.03] backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-xl">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
                             <h2 className="text-[10px] sm:text-[11px] font-bold uppercase text-blue-400/80 mb-3 tracking-widest flex items-center gap-2"><LinkIcon className="w-3 h-3" /> Ссылка для клиентов</h2>
@@ -437,7 +441,6 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* НАСТРОЙКИ КОМАНДЫ (ТОЛЬКО ДЛЯ САЛОНОВ) */}
                         {role === 'owner' && (
                             <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-indigo-500/20 shadow-xl relative overflow-hidden">
                                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -z-10"></div>
