@@ -83,7 +83,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else setBookingStatus("error");
     };
 
-    // Функция для создания новой записи без перезагрузки вкладки
+    // Функция для сброса состояния (Новая запись без перезагрузки)
     const resetBooking = () => {
         setBookingStatus("idle");
         setSelectedService(null);
@@ -99,18 +99,18 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     if (bookingStatus === "success") {
         return (
             <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(255,255,255,0))] flex flex-col items-center justify-center text-white p-4 font-sans text-center">
-                <div className="w-full max-w-xs flex flex-col items-center">
-                    <div className="bg-emerald-500/10 p-6 rounded-full mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.2)] backdrop-blur-xl">
-                        <CheckCircle className="w-16 h-16 text-emerald-400 drop-shadow-md" />
+                <div className="w-full max-w-[300px] flex flex-col items-center">
+                    <div className="bg-emerald-500/10 p-5 rounded-full mb-5 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.2)] backdrop-blur-xl">
+                        <CheckCircle className="w-14 h-14 text-emerald-400 drop-shadow-md" />
                     </div>
-                    <h1 className="text-2xl sm:text-3xl font-bold mb-2 drop-shadow-md">Вы записаны!</h1>
+                    <h1 className="text-2xl font-bold mb-2 drop-shadow-md">Вы записаны!</h1>
                     <p className="text-white/50 mb-8 text-sm leading-relaxed">
                         Ждем вас <br/><span className="text-white font-medium">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
                     </p>
                     <div className="space-y-3 w-full">
-                        {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ ВМЕСТО ССЫЛКИ */}
-                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
-                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-4 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
+                        {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ */}
+                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-3.5 rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.3)] active:scale-95 text-sm transition-all">Мои записи</button>
+                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-bold py-3.5 rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 text-sm transition-all">Новая запись</button>
                     </div>
                 </div>
             </div>
@@ -129,7 +129,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         <h1 className="text-lg font-bold uppercase tracking-widest text-blue-400/90 drop-shadow-md truncate">{profile.business_name}</h1>
                         <p className="text-[10px] text-white/40 font-medium tracking-wider mt-0.5">ОНЛАЙН-ЗАПИСЬ</p>
                     </div>
-                    {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ ВМЕСТО ССЫЛКИ */}
+                    {/* ИСПОЛЬЗУЕМ ВНУТРЕННИЙ РОУТИНГ */}
                     <button onClick={() => router.push('/my-bookings')} className="flex items-center justify-center p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl active:scale-95 transition-all shadow-lg shrink-0">
                         <CalendarDays className="w-5 h-5 text-blue-400" />
                     </button>
