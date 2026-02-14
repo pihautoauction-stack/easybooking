@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Settings, Calendar as CalendarIcon, Save, Copy, Plus, 
     Loader2, Link as LinkIcon, User, ExternalLink, 
-    Clock, CheckCircle2, Scissors, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban, BarChart3, TrendingUp, ImagePlus
+    Clock, CheckCircle2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, RefreshCw, Users, Search, Ban, BarChart3, TrendingUp, ImagePlus
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -23,7 +23,6 @@ export default function Dashboard() {
 
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
 
-    // Настройки профиля
     const [role, setRole] = useState("solo");
     const [businessName, setBusinessName] = useState("");
     const [telegramChatId, setTelegramChatId] = useState(""); 
@@ -31,7 +30,6 @@ export default function Dashboard() {
     const [workEnd, setWorkEnd] = useState(21);
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
     
-    // Списки
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [clients, setClients] = useState<any[]>([]);
@@ -40,13 +38,11 @@ export default function Dashboard() {
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
     
-    // Услуги
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
-    const [newServiceEmpId, setNewServiceEmpId] = useState(""); // Выбор мастера для услуги
+    const [newServiceEmpId, setNewServiceEmpId] = useState(""); 
     const [addingService, setAddingService] = useState(false);
     
-    // Сотрудники
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
     const [addingEmp, setAddingEmp] = useState(false);
@@ -125,7 +121,6 @@ export default function Dashboard() {
                 if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
             }
             
-            // Теперь грузим услуги вместе с именем мастера, к которому они привязаны
             const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
             setServices(s || []);
             
@@ -199,7 +194,7 @@ export default function Dashboard() {
                 if (error) throw error; 
                 await loadData(user.id); setSelectedApp(null); 
                 if (window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({ message: "Успешно отменено" });
-            } catch (err: any) { alert("Ошибка удаления (Supabase RLS): " + err.message); }
+            } catch (err: any) { alert("Ошибка удаления: " + err.message); }
         }
     };
 
@@ -320,7 +315,7 @@ export default function Dashboard() {
 
                                     <div className="flex flex-col gap-2 pt-4 border-t border-white/5">
                                         <div className="flex justify-between items-center text-xs sm:text-sm text-white/60">
-                                            <div className="flex items-center gap-2"><Scissors className="w-4 h-4 text-pink-400/70" /><span className="truncate">{app.service?.name || "Услуга удалена"}</span></div>
+                                            <div className="flex items-center gap-2"><Briefcase className="w-4 h-4 text-blue-400/70" /><span className="truncate">{app.service?.name || "Услуга удалена"}</span></div>
                                             {app.employee?.name && <span className="bg-white/5 px-2 py-1 rounded-md text-[10px] border border-white/5 text-white/50">{app.employee.name}</span>}
                                         </div>
                                     </div>
@@ -334,16 +329,15 @@ export default function Dashboard() {
                 {activeTab === 'services' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -z-10"></div>
-                            <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Plus className="w-4 h-4 sm:w-5 sm:h-5 text-pink-400 drop-shadow-[0_0_10px_rgba(244,114,182,0.5)]"/> Добавить услугу</h2>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -z-10"></div>
+                            <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Plus className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]"/> Добавить услугу</h2>
                             
                             <div className="flex flex-col gap-3">
-                                {/* Выбор мастера, если это салон */}
                                 {role === 'owner' && (
                                     <select 
                                         value={newServiceEmpId} 
                                         onChange={e => setNewServiceEmpId(e.target.value)} 
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-white/90"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-white/90"
                                     >
                                         <option value="" className="bg-slate-900">Общая услуга (выполняют все)</option>
                                         {employees.map(emp => (
@@ -353,10 +347,10 @@ export default function Dashboard() {
                                 )}
                                 
                                 <div className="flex flex-col sm:flex-row gap-3">
-                                    <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Стрижка, Маникюр..." className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50" />
+                                    <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название (Диагностика, Стрижка...)" className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
                                     <div className="flex gap-3">
-                                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-full sm:w-32 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-center" />
-                                        <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-500/80 backdrop-blur-md px-6 rounded-xl sm:rounded-2xl active:scale-95 border border-pink-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center"><Loader2 className={`w-5 h-5 ${addingService ? 'animate-spin' : 'hidden'} text-white`} /><Plus className={`w-5 h-5 text-white ${addingService ? 'hidden' : ''}`} /></button>
+                                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-full sm:w-32 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50 text-center" />
+                                        <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-blue-600/80 backdrop-blur-md px-6 rounded-xl sm:rounded-2xl active:scale-95 border border-blue-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center"><Loader2 className={`w-5 h-5 ${addingService ? 'animate-spin' : 'hidden'} text-white`} /><Plus className={`w-5 h-5 text-white ${addingService ? 'hidden' : ''}`} /></button>
                                     </div>
                                 </div>
                             </div>
@@ -369,10 +363,10 @@ export default function Dashboard() {
                                     <div className="flex justify-between items-center mb-3">
                                         <div>
                                             <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
-                                            {s.employee?.name && <span className="block text-[10px] text-indigo-400 mt-1 uppercase tracking-widest">Мастер: {s.employee.name}</span>}
+                                            {s.employee?.name && <span className="block text-[10px] text-indigo-400 mt-1 uppercase tracking-widest">Специалист: {s.employee.name}</span>}
                                         </div>
                                         <div className="flex items-center gap-3 shrink-0">
-                                            <span className="text-pink-400 font-bold px-3 py-1.5 bg-pink-500/10 rounded-lg border border-pink-500/10">{s.price} ₽</span>
+                                            <span className="text-blue-400 font-bold px-3 py-1.5 bg-blue-500/10 rounded-lg border border-blue-500/10">{s.price} ₽</span>
                                             <label className="text-white/50 hover:text-blue-400 hover:bg-blue-500/10 p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer">
                                                 {uploadingImageId === s.id ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-blue-400" /> : <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5" />}
                                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, s.id, s.image_urls || [])} />
@@ -457,7 +451,7 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* 🟣 ПРОФИЛЬ (И КОМАНДА САЛОНА) */}
+                {/* 🟣 ПРОФИЛЬ (И СВОИ СОТРУДНИКИ) */}
                 {activeTab === 'profile' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                         
@@ -473,12 +467,12 @@ export default function Dashboard() {
                         {role === 'owner' && (
                             <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-indigo-500/20 shadow-xl relative overflow-hidden">
                                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -z-10"></div>
-                                <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"/> Команда салона</h2>
+                                <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"/> Сотрудники</h2>
                                 
                                 <div className="flex flex-col gap-3 mb-5">
-                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Имя мастера (напр. Анна)" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs sm:text-sm outline-none focus:border-indigo-500/50" />
+                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Имя (напр. Анна, Алексей)" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs sm:text-sm outline-none focus:border-indigo-500/50" />
                                     <div className="flex gap-3">
-                                        <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} placeholder="Специализация (Маникюр)" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs sm:text-sm outline-none focus:border-indigo-500/50" />
+                                        <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} placeholder="Должность (Механик, Врач...)" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs sm:text-sm outline-none focus:border-indigo-500/50" />
                                         <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="bg-indigo-500/80 backdrop-blur-md px-6 rounded-xl active:scale-95 border border-indigo-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center">
                                             {addingEmp ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Plus className="w-5 h-5 text-white" />}
                                         </button>
@@ -495,7 +489,7 @@ export default function Dashboard() {
                                             <button onClick={() => handleDeleteEmployee(emp.id)} className="text-white/30 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
                                         </div>
                                     ))}
-                                    {employees.length === 0 && <p className="text-xs text-white/40 text-center py-2">Добавьте сотрудников, чтобы клиенты могли к ним записываться.</p>}
+                                    {employees.length === 0 && <p className="text-xs text-white/40 text-center py-2">Вы еще не добавили сотрудников.</p>}
                                 </div>
                             </div>
                         )}
@@ -504,8 +498,8 @@ export default function Dashboard() {
                             <h2 className="text-base sm:text-lg font-bold mb-5 flex items-center gap-2"><Settings className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]"/> Настройки бизнеса</h2>
                             <div className="space-y-5">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название</label>
-                                    <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Мой салон..." className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
+                                    <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider ml-1">Название компании</label>
+                                    <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Моя компания..." className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-blue-500/50" />
                                 </div>
                                 <div className="pt-2">
                                     <label className="text-[10px] sm:text-[11px] text-white/50 uppercase font-bold tracking-wider block mb-3 ml-1">Дни работы</label>
@@ -535,7 +529,7 @@ export default function Dashboard() {
             <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-2 sm:px-6 pb-6">
                 <div className="flex justify-between items-center max-w-sm mx-auto pt-2 px-2">
                     <button onClick={() => setActiveTab('appointments')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'appointments' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'appointments' ? 'bg-blue-500/10' : 'bg-transparent'}`}><CalendarDays className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Записи</span></button>
-                    <button onClick={() => setActiveTab('services')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-pink-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-pink-500/10' : 'bg-transparent'}`}><Scissors className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Услуги</span></button>
+                    <button onClick={() => setActiveTab('services')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'services' ? 'text-blue-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'services' ? 'bg-blue-500/10' : 'bg-transparent'}`}><Briefcase className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Услуги</span></button>
                     <button onClick={() => setActiveTab('clients')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'clients' ? 'text-indigo-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'clients' ? 'bg-indigo-500/10' : 'bg-transparent'}`}><Users className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Клиенты</span></button>
                     <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'analytics' ? 'text-emerald-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'analytics' ? 'bg-emerald-500/10' : 'bg-transparent'}`}><BarChart3 className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Доход</span></button>
                     <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'profile' ? 'text-gray-400 scale-110' : 'text-white/40 hover:text-white/70'}`}><div className={`p-2 rounded-xl transition-colors ${activeTab === 'profile' ? 'bg-gray-500/10' : 'bg-transparent'}`}><UserCircle className="w-5 h-5" /></div><span className="text-[9px] font-bold tracking-wider">Профиль</span></button>
@@ -559,7 +553,7 @@ export default function Dashboard() {
                                 <div>
                                     <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-1">Услуга</p>
                                     <p className="text-sm font-bold text-white/90">{selectedApp.service?.name}</p>
-                                    {selectedApp.employee?.name && <p className="text-[10px] text-indigo-400 uppercase tracking-widest mt-1">К мастеру: {selectedApp.employee.name}</p>}
+                                    {selectedApp.employee?.name && <p className="text-[10px] text-indigo-400 uppercase tracking-widest mt-1">К специалисту: {selectedApp.employee.name}</p>}
                                 </div>
                             </div>
                             <div className="flex flex-col gap-3 pt-2">

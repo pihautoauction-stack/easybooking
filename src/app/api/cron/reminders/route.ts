@@ -31,15 +31,13 @@ export async function GET(request: Request) {
 
         let sentCount = 0;
 
-        // Добавлено (as any[]) для обхода строгой типизации Vercel
         for (const app of appointments as any[]) {
             const time = new Date(app.start_time).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
             
-            // Надежное извлечение названия (даже если база вернет массив)
             const serviceName = Array.isArray(app.service) ? app.service[0]?.name : app.service?.name;
             const masterName = Array.isArray(app.master) ? app.master[0]?.business_name : app.master?.business_name;
             
-            const msg = `🔔 *Напоминание о записи!*\n\nЖдем вас завтра в *${time}*.\n💇‍♀️ Услуга: ${serviceName || 'Услуга'}\n📍 Студия: ${masterName || 'Студия'}\n\n_Если ваши планы изменились, пожалуйста, отмените запись в Личном кабинете._`;
+            const msg = `🔔 *Напоминание о записи!*\n\nЖдем вас завтра в *${time}*.\n📌 Услуга: ${serviceName || 'Услуга'}\n🏢 Место: ${masterName || 'Компания'}\n\n_Если ваши планы изменились, пожалуйста, отмените запись в Личном кабинете._`;
 
             await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                 method: "POST", headers: { "Content-Type": "application/json" },

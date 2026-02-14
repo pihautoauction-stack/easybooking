@@ -56,7 +56,6 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         
-        // ИСПРАВЛЕНИЕ: Используем UPSERT, чтобы гарантированно создать профиль!
         const { error } = await supabase.from('profiles').upsert({ 
             id: userId, 
             role: setupRole, 
@@ -127,15 +126,15 @@ export default function LoginPage() {
                             </div>
                             <div onClick={() => setSetupRole("owner")} className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col items-center gap-2 ${setupRole === "owner" ? "bg-purple-600/20 border-purple-500/50 text-purple-400" : "bg-black/40 border-white/10 text-white/40 hover:bg-white/5"}`}>
                                 <Building2 className="w-8 h-8" />
-                                <span className="text-xs font-bold text-center">У меня<br/>салон</span>
+                                <span className="text-xs font-bold text-center">У меня<br/>команда</span>
                             </div>
                         </div>
                         
                         <div className="space-y-2">
                             <label className="text-[10px] sm:text-xs text-white/50 uppercase font-bold tracking-wider ml-1">
-                                {setupRole === "solo" ? "Ваше имя или название" : "Название салона"}
+                                {setupRole === "solo" ? "Ваше имя или название" : "Название компании"}
                             </label>
-                            <input required value={setupName} onChange={e => setSetupName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500/50" placeholder={setupRole === "solo" ? "Иван Иванов" : "Студия красоты Beauty"} />
+                            <input required value={setupName} onChange={e => setSetupName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-sm text-white outline-none focus:border-blue-500/50" placeholder={setupRole === "solo" ? "Иван Иванов" : "Автосервис, Клиника, Студия..."} />
                         </div>
 
                         <button type="submit" disabled={loading || !setupName} className="w-full bg-white text-black font-bold py-3.5 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-95 text-sm transition-all mt-4 flex justify-center">

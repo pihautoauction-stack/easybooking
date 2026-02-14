@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Calendar, Scissors, Trash2, CalendarX2 } from "lucide-react";
+import { Loader2, Calendar, Briefcase, Trash2, CalendarX2, X } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRouter } from "next/navigation";
@@ -87,7 +87,6 @@ export default function MyBookings() {
                     <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 drop-shadow-md">
                         <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
                     </h1>
-                    {/* КНОПКА ВОЗВРАТА ЧЕРЕЗ РОУТЕР */}
                     <button onClick={() => router.back()} className="text-xs font-bold text-white/50 bg-white/5 px-4 py-2 rounded-lg active:scale-95 transition-all hover:bg-white/10">Назад</button>
                 </div>
 
@@ -111,14 +110,14 @@ export default function MyBookings() {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-white/90 text-sm sm:text-base font-bold truncate max-w-[120px] sm:max-w-[150px]">{app.master?.business_name || "Мастер"}</div>
+                                    <div className="text-white/90 text-sm sm:text-base font-bold truncate max-w-[120px] sm:max-w-[150px]">{app.master?.business_name || "Специалист"}</div>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-2 text-xs sm:text-sm text-white/70 bg-black/40 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 mb-4">
-                                <Scissors className="w-4 h-4 text-pink-400/70 shrink-0" />
+                                <Briefcase className="w-4 h-4 text-blue-400/70 shrink-0" />
                                 <span className="truncate flex-1">{app.service?.name}</span>
-                                <span className="font-bold text-pink-400 shrink-0">{app.service?.price} ₽</span>
+                                <span className="font-bold text-blue-400 shrink-0">{app.service?.price} ₽</span>
                             </div>
 
                             <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-3.5 rounded-xl sm:rounded-2xl border border-red-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100">

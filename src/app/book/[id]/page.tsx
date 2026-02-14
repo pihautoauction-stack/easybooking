@@ -104,7 +104,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else setBookingStatus("error");
     };
 
-    // ФУНКЦИЯ ОТПРАВКИ В ЛИСТ ОЖИДАНИЯ
     const handleWaitlist = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!profile || !selectedDate) return;
@@ -139,7 +138,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     };
 
     if (loading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
-    if (!profile) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white/50">Мастер не найден.</div>;
+    if (!profile) return <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white/50">Профиль не найден.</div>;
 
     if (bookingStatus === "success") {
         return (
@@ -149,7 +148,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <h1 className="text-2xl font-bold mb-2">Вы записаны!</h1>
                     <p className="text-white/50 mb-8 text-sm leading-relaxed">
                         Ждем вас <br/><span className="text-white font-medium">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
-                        {selectedEmployee && <><br/><span className="text-indigo-400 text-xs mt-2 block">К мастеру: {selectedEmployee.name}</span></>}
+                        {selectedEmployee && <><br/><span className="text-indigo-400 text-xs mt-2 block">Специалист: {selectedEmployee.name}</span></>}
                     </p>
                     <div className="space-y-3 w-full">
                         <button onClick={() => router.push('/my-bookings')} className="w-full bg-blue-600/90 border border-blue-400/20 text-white font-bold py-4 rounded-2xl active:scale-95 text-sm transition-all">Мои записи</button>
@@ -173,6 +172,13 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         );
     }
 
+    const filteredServices = services.filter(service => {
+        if (selectedEmployee) {
+            return !service.employee_id || service.employee_id === selectedEmployee.id;
+        }
+        return true;
+    });
+
     return (
         <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white p-4 font-sans pb-24 selection:bg-blue-500/30">
             <div className="max-w-md mx-auto w-full">
@@ -189,7 +195,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
                 {profile.role === 'owner' && !selectedEmployee ? (
                     <div className="space-y-3">
-                        <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите мастера</p>
+                        <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите специалиста</p>
                         {employees.map((emp) => (
                             <div key={emp.id} onClick={() => setSelectedEmployee(emp)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border border-indigo-500/20 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer group flex items-center gap-4">
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl -z-10"></div>
@@ -197,12 +203,13 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                 <div><h3 className="font-bold text-base text-white/90">{emp.name}</h3>{emp.specialty && <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">{emp.specialty}</p>}</div>
                             </div>
                         ))}
+                        {employees.length === 0 && <p className="text-center text-sm text-white/40 pt-10">Специалисты еще не добавлены.</p>}
                     </div>
                 ) : !selectedService ? (
                     <div className="space-y-3">
-                        {selectedEmployee && <div className="mb-4 bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2"><User className="w-4 h-4"/> К мастеру: {selectedEmployee.name}</div>}
+                        {selectedEmployee && <div className="mb-4 bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2"><User className="w-4 h-4"/> К специалисту: {selectedEmployee.name}</div>}
                         <p className="text-sm text-white/50 mb-4 ml-1 font-medium">Выберите услугу</p>
-                        {services.map((service) => (
+                        {filteredServices.map((service) => (
                             <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border border-white/10 active:scale-[0.98] shadow-lg relative overflow-hidden cursor-pointer group flex flex-col">
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/5 rounded-full blur-2xl -z-10"></div>
                                 <div className="flex justify-between items-center gap-2"><h3 className="font-bold text-base text-white/90 line-clamp-2">{service.name}</h3><span className="text-blue-300 font-bold bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 text-sm shrink-0">{service.price} ₽</span></div>
@@ -213,6 +220,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                 )}
                             </div>
                         ))}
+                        {filteredServices.length === 0 && <p className="text-center text-sm text-white/40 pt-10">Для этого специалиста пока нет услуг.</p>}
                     </div>
                 ) : (
                     <div className="space-y-4">
