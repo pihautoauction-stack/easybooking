@@ -43,6 +43,7 @@ export default function Dashboard() {
     // Услуги
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
+    const [newServiceEmpId, setNewServiceEmpId] = useState(""); // Выбор мастера для услуги
     const [addingService, setAddingService] = useState(false);
     
     // Сотрудники
@@ -124,7 +125,8 @@ export default function Dashboard() {
                 if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
             }
             
-            const { data: s } = await supabase.from("services").select("*").eq("user_id", userId).order('created_at');
+            // Теперь грузим услуги вместе с именем мастера, к которому они привязаны
+            const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
             setServices(s || []);
             
             const { data: e } = await supabase.from("employees").select("*").eq("salon_id", userId).order('created_at');
@@ -161,9 +163,14 @@ export default function Dashboard() {
     const handleAddService = async () => {
         if (!newName || !newPrice) return;
         setAddingService(true);
-        const { error } = await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice), image_urls: [] });
+        const insertData: any = { user_id: user.id, name: newName, price: Number(newPrice), image_urls: [] };
+        if (role === 'owner' && newServiceEmpId) {
+            insertData.employee_id = newServiceEmpId;
+        }
+        const { error } = await supabase.from("services").insert(insertData);
         if (error) alert("Ошибка сохранения услуги: " + error.message);
-        setNewName(""); setNewPrice(""); await loadData(user.id); setAddingService(false);
+        
+        setNewName(""); setNewPrice(""); setNewServiceEmpId(""); await loadData(user.id); setAddingService(false);
     };
 
     const handleDeleteService = async (id: string) => {
@@ -329,11 +336,28 @@ export default function Dashboard() {
                         <div className="bg-white/[0.03] backdrop-blur-xl p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -z-10"></div>
                             <h2 className="text-base sm:text-lg font-bold mb-4 sm:mb-5 flex items-center gap-2"><Plus className="w-4 h-4 sm:w-5 sm:h-5 text-pink-400 drop-shadow-[0_0_10px_rgba(244,114,182,0.5)]"/> Добавить услугу</h2>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Стрижка, Маникюр..." className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50" />
-                                <div className="flex gap-3">
-                                    <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-full sm:w-32 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-center" />
-                                    <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-500/80 backdrop-blur-md px-6 rounded-xl sm:rounded-2xl active:scale-95 border border-pink-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center"><Loader2 className={`w-5 h-5 ${addingService ? 'animate-spin' : 'hidden'} text-white`} /><Plus className={`w-5 h-5 text-white ${addingService ? 'hidden' : ''}`} /></button>
+                            
+                            <div className="flex flex-col gap-3">
+                                {/* Выбор мастера, если это салон */}
+                                {role === 'owner' && (
+                                    <select 
+                                        value={newServiceEmpId} 
+                                        onChange={e => setNewServiceEmpId(e.target.value)} 
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-white/90"
+                                    >
+                                        <option value="" className="bg-slate-900">Общая услуга (выполняют все)</option>
+                                        {employees.map(emp => (
+                                            <option key={emp.id} value={emp.id} className="bg-slate-900">Только для: {emp.name}</option>
+                                        ))}
+                                    </select>
+                                )}
+                                
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Стрижка, Маникюр..." className="w-full bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50" />
+                                    <div className="flex gap-3">
+                                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Цена ₽" type="number" className="w-full sm:w-32 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl p-4 text-xs sm:text-sm outline-none focus:border-pink-500/50 text-center" />
+                                        <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="bg-pink-500/80 backdrop-blur-md px-6 rounded-xl sm:rounded-2xl active:scale-95 border border-pink-400/20 shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center"><Loader2 className={`w-5 h-5 ${addingService ? 'animate-spin' : 'hidden'} text-white`} /><Plus className={`w-5 h-5 text-white ${addingService ? 'hidden' : ''}`} /></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -343,7 +367,10 @@ export default function Dashboard() {
                             {services.map(s => (
                                 <div key={s.id} className="flex flex-col bg-black/20 p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-white/5 hover:border-white/10 transition-colors">
                                     <div className="flex justify-between items-center mb-3">
-                                        <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
+                                        <div>
+                                            <span className="text-sm sm:text-base font-bold text-white/90 truncate pr-4">{s.name}</span>
+                                            {s.employee?.name && <span className="block text-[10px] text-indigo-400 mt-1 uppercase tracking-widest">Мастер: {s.employee.name}</span>}
+                                        </div>
                                         <div className="flex items-center gap-3 shrink-0">
                                             <span className="text-pink-400 font-bold px-3 py-1.5 bg-pink-500/10 rounded-lg border border-pink-500/10">{s.price} ₽</span>
                                             <label className="text-white/50 hover:text-blue-400 hover:bg-blue-500/10 p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer">
