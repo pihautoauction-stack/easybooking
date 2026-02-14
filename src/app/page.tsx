@@ -12,14 +12,13 @@ export default function MiniAppEntry() {
       const tg = window.Telegram.WebApp;
       tg.ready();
       tg.expand();
+      if (tg.setHeaderColor) tg.setHeaderColor('#050505');
 
       const startParam = tg.initDataUnsafe?.start_param;
 
-      // Если это UUID мастера (36 символов) — на запись к "Зимней Вишне"
       if (startParam && startParam.length === 36) {
         router.replace(`/book/${startParam}`);
       } else {
-        // Во всех остальных случаях (включая вход по токену) — в кабинет
         router.replace("/dashboard");
       }
     } else {
@@ -28,9 +27,11 @@ export default function MiniAppEntry() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
-      <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
-      <p className="text-slate-400 text-sm animate-pulse">Проверка доступа...</p>
+    <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] flex flex-col items-center justify-center text-white selection:bg-blue-500/30">
+        <div className="p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)] mb-6">
+            <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+        </div>
+        <p className="text-white/40 text-sm animate-pulse tracking-widest uppercase font-mono">Проверка доступа...</p>
     </div>
   );
 }

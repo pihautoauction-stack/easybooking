@@ -1,25 +1,21 @@
-// src/app/api/notify/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // Добавляем поле isTest для проверки связи
     const { masterId, serviceId, clientName, clientPhone, startTime, isTest } = body;
 
     if (!masterId) return NextResponse.json({ error: "Master ID Error" }, { status: 400 });
 
-    // --- ЛОГИКА ТЕСТА СВЯЗИ ---
     if (isTest) {
       const { data: m } = await supabase.from("profiles").select("telegram_chat_id").eq("id", masterId).single();
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
       if (m?.telegram_chat_id && botToken) {
-        const msg = `✅ *Связь установлена!*\n\nАнтон, это тестовое сообщение. Теперь я буду присылать сюда уведомления о новых записях твоих клиентов.`;
+        const msg = `✅ *Связь установлена!*\n\nАнтон, это тестовое сообщение.`;
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chat_id: m.telegram_chat_id, text: msg, parse_mode: "Markdown" })
         });
         return NextResponse.json({ success: true });
@@ -27,7 +23,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chat ID not found" }, { status: 404 });
     }
 
-    // --- ОБЫЧНАЯ ЛОГИКА ЗАПИСИ (оставляем без изменений) ---
     const { data: busy } = await supabase.from("appointments").select("id")
       .eq("master_id", masterId).eq("start_time", startTime).maybeSingle();
 
@@ -42,7 +37,16 @@ export async function POST(request: Request) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
     if (m?.telegram_chat_id && botToken) {
-      const msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 ${clientName}\n📞 ${clientPhone}\n📅 ${new Date(startTime).toLocaleString('ru-RU')}`;
+      // ИСПРАВЛЕНИЕ ВРЕМЕНИ: Форматируем по МСК (UTC+3)
+      const formattedDate = new Date(startTime).toLocaleString('ru-RU', {
+        timeZone: 'Europe/Moscow',
+        day: '2-digit', 
+        month: 'long', 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+
+      const msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 ${clientName}\n📞 ${clientPhone}\n📅 ${formattedDate}`;
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id: m.telegram_chat_id, text: msg, parse_mode: "Markdown" })
