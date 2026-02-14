@@ -13,7 +13,6 @@ export default function LoginPage() {
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
     const router = useRouter();
 
-    // Стейты для Шага 3 (Регистрация)
     const [userId, setUserId] = useState("");
     const [setupRole, setSetupRole] = useState<"solo" | "owner">("solo");
     const [setupName, setSetupName] = useState("");
@@ -42,11 +41,10 @@ export default function LoginPage() {
             setMessage({ type: "error", text: "Неверный код." });
             setLoading(false);
         } else if (data.session) {
-            // Проверяем, настроен ли профиль
             const { data: profile } = await supabase.from('profiles').select('business_name, role').eq('id', data.session.user.id).single();
             if (!profile?.business_name) {
                 setUserId(data.session.user.id);
-                setStep(3); // Отправляем на выбор роли
+                setStep(3); 
                 setLoading(false);
             } else {
                 router.replace("/dashboard");
@@ -57,7 +55,20 @@ export default function LoginPage() {
     const handleSetupProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        await supabase.from('profiles').update({ role: setupRole, business_name: setupName }).eq('id', userId);
+        
+        // ИСПРАВЛЕНИЕ: Используем UPSERT, чтобы гарантированно создать профиль!
+        const { error } = await supabase.from('profiles').upsert({ 
+            id: userId, 
+            role: setupRole, 
+            business_name: setupName 
+        });
+
+        if (error) {
+            alert("Ошибка создания профиля: " + error.message);
+            setLoading(false);
+            return;
+        }
+
         router.replace("/dashboard");
     };
 

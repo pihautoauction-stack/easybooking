@@ -40,7 +40,7 @@ export default function Dashboard() {
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
     
-    // Услуги (Вот эту переменную мы случайно удалили в прошлом шаге)
+    // Услуги
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
     const [addingService, setAddingService] = useState(false);
@@ -161,7 +161,8 @@ export default function Dashboard() {
     const handleAddService = async () => {
         if (!newName || !newPrice) return;
         setAddingService(true);
-        await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice), image_urls: [] });
+        const { error } = await supabase.from("services").insert({ user_id: user.id, name: newName, price: Number(newPrice), image_urls: [] });
+        if (error) alert("Ошибка сохранения услуги: " + error.message);
         setNewName(""); setNewPrice(""); await loadData(user.id); setAddingService(false);
     };
 
@@ -175,7 +176,8 @@ export default function Dashboard() {
     const handleAddEmployee = async () => {
         if (!newEmpName) return;
         setAddingEmp(true);
-        await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec });
+        const { error } = await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec });
+        if (error) alert("Ошибка сохранения сотрудника: " + error.message);
         setNewEmpName(""); setNewEmpSpec(""); await loadData(user.id); setAddingEmp(false);
     };
 
