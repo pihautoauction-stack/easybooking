@@ -44,21 +44,32 @@ export default function MyBookings() {
         if (!confirm("Вы уверены, что хотите отменить запись?")) return;
         setCancellingId(app.id);
 
-        await fetch('/api/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                appointmentId: app.id,
-                masterChatId: app.master?.telegram_chat_id,
-                serviceName: app.service?.name,
-                startTime: app.start_time,
-                clientName: app.client_name
-            }),
-        });
+        try {
+            // ИСПРАВЛЕННЫЙ ПУТЬ К API ОТМЕНЫ
+            const res = await fetch('/api/notify/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    appointmentId: app.id,
+                    masterChatId: app.master?.telegram_chat_id,
+                    serviceName: app.service?.name,
+                    startTime: app.start_time,
+                    clientName: app.client_name
+                }),
+            });
 
-        setAppointments(prev => prev.filter(a => a.id !== app.id));
-        setCancellingId(null);
-        if (window.Telegram?.WebApp?.showPopup) window.Telegram.WebApp.showPopup({ message: "Запись успешно отменена" });
+            if (!res.ok) throw new Error("Ошибка при удалении");
+
+            // Удаляем визуально только после успеха
+            setAppointments(prev => prev.filter(a => a.id !== app.id));
+            if (window.Telegram?.WebApp?.showPopup) {
+                window.Telegram.WebApp.showPopup({ message: "Запись успешно отменена" });
+            }
+        } catch (error) {
+            alert("Не удалось отменить запись. Попробуйте еще раз.");
+        } finally {
+            setCancellingId(null);
+        }
     };
 
     if (loading) return (

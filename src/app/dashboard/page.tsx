@@ -44,6 +44,7 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
+    // ОСНОВНАЯ ИНИЦИАЛИЗАЦИЯ
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -94,6 +95,28 @@ export default function Dashboard() {
         init();
         return () => subscription.unsubscribe();
     }, [router]);
+
+    // REALTIME ОБНОВЛЕНИЯ (МАГИЯ АВТО-ОБНОВЛЕНИЯ ЭКРАНА)
+    useEffect(() => {
+        if (!user?.id) return;
+        
+        const channel = supabase
+            .channel('realtime_appointments')
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'appointments', 
+                filter: `master_id=eq.${user.id}` 
+            }, () => {
+                // Как только база меняется (кто-то записался или удалился) — обновляем список
+                loadData(user.id);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
 
     const loadData = async (userId: string) => {
         const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
@@ -230,7 +253,6 @@ export default function Dashboard() {
                                             </div>
                                             <h3 className="text-white/90 text-sm sm:text-base font-bold">{app.client_name}</h3>
                                         </div>
-                                        {/* Блокируем всплытие клика */}
                                         <button onClick={(e) => { e.stopPropagation(); handleDeleteRecord(app.id); }} className="text-white/20 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-xl transition-all"><Trash2 className="w-4 h-4 sm:w-5 sm:h-5" /></button>
                                     </div>
 
@@ -344,11 +366,9 @@ export default function Dashboard() {
             {selectedApp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
                     <div className="bg-[#0f172a] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-                        
                         <button onClick={() => setSelectedApp(null)} className="absolute top-4 right-4 text-white/40 hover:text-white bg-white/5 p-2 rounded-full transition-colors">
                             <X className="w-5 h-5" />
                         </button>
-                        
                         <h2 className="text-lg font-bold mb-6 text-white/90">Детали записи</h2>
                         
                         <div className="space-y-5">
