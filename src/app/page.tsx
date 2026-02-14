@@ -16,9 +16,15 @@ export default function MiniAppEntry() {
 
       const startParam = tg.initDataUnsafe?.start_param;
 
-      if (startParam && startParam.length === 36) {
+      // ЛОГИКА РАСПРЕДЕЛЕНИЯ ПУТЕЙ:
+      if (startParam === 'my_bookings') {
+        // 1. Клиент хочет посмотреть свои записи
+        router.replace('/my-bookings');
+      } else if (startParam && startParam.length === 36) {
+        // 2. Клиент пришел записаться к мастеру (UUID)
         router.replace(`/book/${startParam}`);
       } else {
+        // 3. Мастер пришел в свой кабинет
         router.replace("/dashboard");
       }
     } else {
