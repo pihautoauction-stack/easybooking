@@ -26,49 +26,71 @@ export default function LoginPage() {
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setMessage(null);
-        const { error } = await supabase.auth.signInWithOtp({ email });
-        if (error) setMessage({ type: "error", text: error.message });
-        else { setMessage({ type: "success", text: "Код отправлен! Проверьте почту." }); setStep(2); }
-        setLoading(false);
+        try {
+            const { error } = await supabase.auth.signInWithOtp({ email });
+            if (error) {
+                setMessage({ type: "error", text: error.message });
+            } else {
+                setMessage({ type: "success", text: "Код отправлен! Проверьте почту." });
+                setStep(2);
+            }
+        } catch (err: any) {
+            setMessage({ type: "error", text: "Ошибка сети: " + err.message });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setMessage(null);
-        const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
         
-        if (error) {
-            setMessage({ type: "error", text: "Неверный код." });
-            setLoading(false);
-        } else if (data.session) {
-            const { data: profile } = await supabase.from('profiles').select('business_name, role').eq('id', data.session.user.id).single();
-            if (!profile?.business_name) {
-                setUserId(data.session.user.id);
-                setStep(3); 
+        try {
+            const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+            
+            if (error) {
+                setMessage({ type: "error", text: "Неверный код." });
                 setLoading(false);
-            } else {
-                router.replace("/dashboard");
+                return;
+            } 
+            
+            if (data?.session?.user) {
+                // ИСПРАВЛЕНИЕ: Используем maybeSingle(), чтобы не было ошибки, если профиль еще не создан
+                const { data: profile, error: profileError } = await supabase.from('profiles')
+                    .select('business_name, role')
+                    .eq('id', data.session.user.id)
+                    .maybeSingle();
+
+                if (!profile?.business_name) {
+                    setUserId(data.session.user.id);
+                    setStep(3); 
+                } else {
+                    router.replace("/dashboard");
+                }
             }
+        } catch (err: any) {
+            setMessage({ type: "error", text: "Системная ошибка: " + err.message });
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSetupProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        
-        const { error } = await supabase.from('profiles').upsert({ 
-            id: userId, 
-            role: setupRole, 
-            business_name: setupName 
-        });
+        try {
+            const { error } = await supabase.from('profiles').upsert({ 
+                id: userId, 
+                role: setupRole, 
+                business_name: setupName 
+            });
 
-        if (error) {
-            alert("Ошибка создания профиля: " + error.message);
+            if (error) throw error;
+            router.replace("/dashboard");
+        } catch (err: any) {
+            alert(`Ошибка сохранения: ${err.message}\n\nВозможно, у таблицы profiles нет Primary Key или включен RLS.`);
             setLoading(false);
-            return;
         }
-
-        router.replace("/dashboard");
     };
 
     return (
