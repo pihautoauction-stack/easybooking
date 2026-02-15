@@ -1,7 +1,9 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { CheckCircle2, ExternalLink } from "lucide-react";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -9,22 +11,16 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
-      // 1. Получаем сессию
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.refresh_token) {
-        // 2. Формируем ссылку для возврата
         const refreshToken = session.refresh_token;
         const botUsername = "my_cool_booking_bot"; // Твой бот
         
-        // Ссылка, которая откроет приложение с токеном
         const url = `https://t.me/${botUsername}/app?startapp=${refreshToken}`;
         setTelegramUrl(url);
-
-        // 3. Пытаемся открыть автоматически (может не сработать в Safari)
         window.location.href = url;
       } else {
-        // Если сессии нет — кидаем на логин
         router.push("/login");
       }
     };
@@ -33,29 +29,26 @@ export default function AuthCallback() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#17212b] text-white flex flex-col items-center justify-center font-sans p-6 text-center">
-      <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
-        <svg className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-        </svg>
-      </div>
-
-      <h1 className="text-2xl font-bold mb-2">Вход успешен!</h1>
-      <p className="text-gray-400 text-sm mb-8">
-        Теперь вернитесь в Telegram, чтобы продолжить.
-      </p>
-      
-      {/* КНОПКА БУДЕТ ВСЕГДА */}
-      {telegramUrl && (
-        <a 
-          href={telegramUrl} 
-          className="bg-[#5288c1] hover:bg-[#4a7db3] text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all transform active:scale-95"
-        >
-          Открыть приложение
-        </a>
-      )}
-
-      {!telegramUrl && <p className="text-xs text-gray-500 animate-pulse">Генерация ссылки...</p>}
+    <div className="min-h-screen bg-[#000000] flex flex-col items-center justify-center p-6 text-center text-white antialiased">
+        <div className="bg-[#1C1C1E] p-10 rounded-[32px] shadow-2xl flex flex-col items-center w-full max-w-sm border border-white/10">
+            <CheckCircle2 className="w-16 h-16 text-[#32D74B] mb-6" />
+            
+            <h1 className="text-2xl font-semibold mb-2 tracking-tight">Вход успешен</h1>
+            <p className="text-white/60 mb-8 text-sm">
+              Теперь вернитесь в Telegram, чтобы продолжить работу.
+            </p>
+            
+            {telegramUrl ? (
+              <a 
+                href={telegramUrl} 
+                className="w-full bg-[#0A84FF] text-white py-4 rounded-2xl font-semibold text-lg shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] flex items-center justify-center gap-2 active:scale-[0.97] transition-all"
+              >
+                <ExternalLink className="w-5 h-5" /> Открыть приложение
+              </a>
+            ) : (
+              <p className="text-sm text-white/40 font-medium animate-pulse">Генерация ссылки...</p>
+            )}
+        </div>
     </div>
   );
 }

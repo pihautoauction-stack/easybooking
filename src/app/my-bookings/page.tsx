@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Calendar, Briefcase, Trash2, CalendarX2 } from "lucide-react";
+import { Loader2, Calendar, Briefcase, Trash2, CalendarX2, ChevronLeft } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRouter } from "next/navigation";
@@ -18,7 +18,8 @@ export default function MyBookings() {
         if (tg) {
             tg.ready();
             tg.expand();
-            if (tg.setHeaderColor) tg.setHeaderColor('#050505');
+            if (tg.setHeaderColor) tg.setHeaderColor('#000000');
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#000000');
             
             const tgId = tg.initDataUnsafe?.user?.id?.toString();
             if (tgId) {
@@ -73,65 +74,70 @@ export default function MyBookings() {
     };
 
     if (loading) return (
-        <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
-            <div className="p-4 sm:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin text-blue-500" />
-            </div>
+        <div className="min-h-screen bg-[#000000] flex items-center justify-center text-white">
+            <Loader2 className="w-8 h-8 animate-spin text-[#0A84FF]" />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))] text-white p-4 sm:p-5 font-sans pb-24 selection:bg-blue-500/30">
-            <div className="max-w-md mx-auto">
-                <div className="flex justify-between items-center mb-6 sm:mb-8 pt-4">
-                    <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 drop-shadow-md">
-                        <Calendar className="w-6 h-6 text-blue-400" /> Ваши записи
-                    </h1>
-                    <button onClick={() => router.back()} className="text-xs font-bold text-white/50 bg-white/5 px-4 py-2 rounded-lg active:scale-95 transition-all hover:bg-white/10">Назад</button>
+        <div className="min-h-screen bg-[#000000] text-white p-5 font-sans pb-24 selection:bg-[#0A84FF]/30 antialiased">
+            <div className="max-w-md mx-auto w-full">
+                
+                {/* HEADER */}
+                <div className="flex items-center gap-3 mb-8 pt-2">
+                    <button onClick={() => router.back()} className="p-2.5 bg-[#1C1C1E] rounded-full border border-white/5 active:scale-95 shrink-0 transition-all">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-xl font-semibold tracking-tight text-white truncate">Ваши записи</h1>
+                        <p className="text-[11px] text-white/50 font-semibold tracking-wider mt-0.5 uppercase">Кабинет клиента</p>
+                    </div>
                 </div>
 
                 <div className="space-y-4">
                     {appointments.length === 0 ? (
-                        <div className="text-center py-12 bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-3xl">
-                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                        <div className="text-center py-12 bg-[#1C1C1E] border border-white/5 rounded-[32px]">
+                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <CalendarX2 className="w-8 h-8 text-white/30" />
                             </div>
-                            <p className="text-white/40 text-sm">У вас нет активных записей</p>
+                            <p className="text-white/50 font-medium text-sm">У вас нет активных записей</p>
                         </div>
                     ) : appointments.map(app => (
-                        <div key={app.id} className="bg-white/[0.03] backdrop-blur-xl rounded-[2rem] p-5 sm:p-6 border border-white/10 shadow-lg relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -z-10"></div>
-                            
+                        <div key={app.id} className="bg-[#1C1C1E] rounded-[24px] p-5 border border-white/10 relative overflow-hidden group">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <div className="text-blue-400 font-bold font-mono text-2xl sm:text-3xl drop-shadow-md leading-none mb-1">{format(new Date(app.start_time), "HH:mm")}</div>
-                                    <div className="text-white/60 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1.5">
+                                    <div className="text-white font-semibold text-3xl tracking-tight leading-none mb-1.5">{format(new Date(app.start_time), "HH:mm")}</div>
+                                    <div className="text-white/60 text-[11px] font-semibold uppercase tracking-wider">
                                         {format(new Date(app.start_time), "d MMMM", { locale: ru })}
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-white/90 text-sm sm:text-base font-bold truncate max-w-[120px] sm:max-w-[150px]">{app.master?.business_name || "Специалист"}</div>
+                                    <div className="text-white font-semibold text-sm truncate max-w-[140px] bg-white/10 px-3 py-1.5 rounded-xl">
+                                        {app.master?.business_name || "Специалист"}
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 text-xs sm:text-sm text-white/70 bg-black/40 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 mb-4">
-                                <Briefcase className="w-4 h-4 text-blue-400/70 shrink-0" />
-                                <span className="truncate flex-1">{app.service?.name}</span>
-                                <span className="font-bold text-blue-400 shrink-0">{app.service?.price} ₽</span>
+                            <div className="flex justify-between items-center text-sm font-medium text-white/70 bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
+                                <div className="flex items-center gap-2 truncate pr-2">
+                                    <Briefcase className="w-4 h-4 text-white/40 shrink-0" />
+                                    <span className="truncate">{app.service?.name}</span>
+                                </div>
+                                <span className="font-semibold text-white shrink-0">{app.service?.price} ₽</span>
                             </div>
 
-                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-3.5 rounded-xl sm:rounded-2xl border border-red-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100">
-                                {cancellingId === app.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Отменить запись <Trash2 className="w-4 h-4" /></>}
+                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-transparent text-[#FF453A] font-semibold py-4 rounded-2xl border border-[#FF453A]/20 hover:bg-[#FF453A]/10 active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+                                {cancellingId === app.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Отменить запись <Trash2 className="w-4 h-4" /></>}
                             </button>
                         </div>
                     ))}
                 </div>
 
-                {/* НОВАЯ КНОПКА ДЛЯ ВХОДА СПЕЦИАЛИСТОВ */}
+                {/* ВХОД ДЛЯ СПЕЦИАЛИСТОВ */}
                 <div className="mt-12 mb-6 text-center">
                     <button 
                         onClick={() => router.push('/login')} 
-                        className="text-[10px] text-white/20 hover:text-white/50 uppercase tracking-widest transition-colors font-bold"
+                        className="text-[11px] text-white/30 hover:text-white/60 uppercase tracking-widest transition-colors font-semibold"
                     >
                         Вход для специалистов
                     </button>

@@ -13,7 +13,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#050505", // Делает шторку телефона в цвет приложения
+  themeColor: "#000000", // Идеальный черный цвет для шторки iOS
 };
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className="bg-slate-900 text-white antialiased">
+      <body className="bg-[#000000] text-white antialiased">
         <Script 
           src="https://telegram.org/js/telegram-web-app.js" 
           strategy="beforeInteractive" 
