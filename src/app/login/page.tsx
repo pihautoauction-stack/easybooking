@@ -25,20 +25,34 @@ export default function LoginPage() {
 
     const handleSendCode = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true); setMessage(null);
-        try {
-            const { error } = await supabase.auth.signInWithOtp({ email });
-            if (error) {
-                setMessage({ type: "error", text: error.message });
-            } else {
-                setMessage({ type: "success", text: "Код отправлен! Проверьте почту." });
-                setStep(2);
+        setLoading(true); 
+        setMessage(null);
+
+        // Внутренняя функция для отправки с автоматическим повтором
+        const trySend = async (isRetry = false) => {
+            try {
+                const { error } = await supabase.auth.signInWithOtp({ email });
+                if (error) {
+                    setMessage({ type: "error", text: error.message });
+                } else {
+                    setMessage({ type: "success", text: "Код отправлен! Проверьте почту." });
+                    setStep(2);
+                }
+            } catch (err: any) {
+                if (!isRetry) {
+                    // Если первая попытка сорвалась (SMTP просыпается), ждем 1.5 секунды и пробуем сами еще раз
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    await trySend(true);
+                } else {
+                    // Если не вышло даже со второго раза, показываем ошибку
+                    setMessage({ type: "error", text: "Ошибка сети: " + err.message });
+                }
             }
-        } catch (err: any) {
-            setMessage({ type: "error", text: "Ошибка сети: " + err.message });
-        } finally {
-            setLoading(false);
-        }
+        };
+
+        // Запускаем процесс
+        await trySend(false);
+        setLoading(false);
     };
 
     const handleVerifyCode = async (e: React.FormEvent) => {
