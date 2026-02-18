@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive
+    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -75,6 +75,11 @@ export default function Dashboard() {
     const [manualTime, setManualTime] = useState("12:00");
     const [addingManual, setAddingManual] = useState(false);
 
+    // CRM: КАРТОЧКА КЛИЕНТА
+    const [selectedClient, setSelectedClient] = useState<any>(null);
+    const [clientNote, setClientNote] = useState("");
+    const [savingNote, setSavingNote] = useState(false);
+
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
@@ -141,13 +146,12 @@ export default function Dashboard() {
             const { data: e } = await supabase.from("employees").select("*").eq("salon_id", userId).order('created_at');
             setEmployees(e || []);
             
-            // Загружаем записи за последние 30 дней (для архива) и будущие
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
             const { data: a } = await supabase.from("appointments")
                 .select("id, client_name, client_phone, start_time, service_id, client_id, status, service:services(name, price, duration), employee:employees(name)")
-                .eq("master_id", userId).gte('start_time', thirtyDaysAgo.toISOString()).order('start_time', { ascending: true });
+                .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
 
             const { data: c } = await supabase.from("clients").select("*").eq("master_id", userId).order('created_at', { ascending: false });
@@ -176,7 +180,6 @@ export default function Dashboard() {
             setNewBreakStart("13:00"); setNewBreakEnd("14:00");
         }
     };
-
     const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
 
     const handleAddService = async () => {
@@ -196,10 +199,7 @@ export default function Dashboard() {
         setNewEmpName(""); setNewEmpSpec(""); await loadData(user.id); setAddingEmp(false);
     };
     const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить сотрудника?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
-
-    const handleDeleteRecord = async (id: string) => {
-        if (confirm("Точно удалить запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); }
-    };
+    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
 
     const handleCompleteRecord = async (app: any) => {
         if (confirm("Успешно завершить визит? Он будет перемещен в Архив.")) {
@@ -214,13 +214,14 @@ export default function Dashboard() {
                 const client = clients.find(c => c.id === targetClientId);
                 if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
             } else if (app.client_phone) {
-                await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false });
+                await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false, notes: "" });
             }
-            await loadData(user.id, true); setSelectedApp(null); setJournalView('archive'); // Автоматически перекидываем в архив
+            await loadData(user.id, true); setSelectedApp(null); setJournalView('archive');
         }
     };
 
-    const handleToggleBlacklist = async (clientId: string, currentStatus: boolean) => {
+    const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => {
+        e.stopPropagation(); 
         if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить в ЧС?")) {
             await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); 
         }
@@ -237,6 +238,7 @@ export default function Dashboard() {
             await loadData(user.id, true);
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setUploadingImageId(null); }
     };
+    
     const handleRemoveImage = async (serviceId: string, urlToRemove: string, currentUrls: string[]) => {
         if (!confirm("Удалить фото?")) return;
         const newUrls = currentUrls.filter(url => url !== urlToRemove);
@@ -259,13 +261,27 @@ export default function Dashboard() {
         } catch (err: any) { alert("Ошибка при добавлении: " + err.message); } finally { setAddingManual(false); }
     };
 
+    const handleSaveClientNote = async () => {
+        if (!selectedClient) return;
+        setSavingNote(true);
+        try {
+            const { error } = await supabase.from('clients').update({ notes: clientNote }).eq('id', selectedClient.id);
+            if (error) throw error;
+            setClients(prev => prev.map(c => c.id === selectedClient.id ? { ...c, notes: clientNote } : c));
+            setSelectedClient({ ...selectedClient, notes: clientNote });
+        } catch (err: any) {
+            alert("Ошибка сохранения заметки: " + err.message);
+        } finally {
+            setSavingNote(false);
+        }
+    };
+
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${user.id}` : "";
     
-    // ФИЛЬТРАЦИЯ И АРХИВ
+    // ИСПРАВЛЕНИЕ ТУПИКА ФИЛЬТРАЦИИ
     const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
     const activeApps = serviceFilteredAppointments.filter(a => a.status === 'active');
-    // Для архива переворачиваем массив, чтобы последние завершенные были сверху
     const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
     const displayApps = journalView === 'active' ? activeApps : archivedApps;
 
@@ -281,7 +297,7 @@ export default function Dashboard() {
     return (
         <div className="flex h-[100dvh] bg-[#F8FAFC] text-slate-900 font-sans selection:bg-violet-200 antialiased overflow-hidden">
             
-            {/* ================= DESKTOP SIDEBAR (ЦВЕТНОЙ АКЦЕНТ) ================= */}
+            {/* ================= DESKTOP SIDEBAR ================= */}
             <aside className="hidden md:flex w-72 bg-white border-r border-slate-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
                 <div className="p-6 flex items-center gap-3 border-b border-slate-100">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/20">
@@ -360,7 +376,6 @@ export default function Dashboard() {
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                                    {/* ПЕРЕКЛЮЧАТЕЛЬ АКТИВНЫЕ / АРХИВ */}
                                     <div className="flex bg-slate-200/60 p-1 rounded-xl w-max shadow-inner">
                                         <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>Активные</button>
                                         <button onClick={() => setJournalView('archive')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${journalView === 'archive' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><Archive className="w-4 h-4"/> Архив</button>
@@ -371,7 +386,8 @@ export default function Dashboard() {
                                     </button>
                                 </div>
 
-                                {services.length > 0 && displayApps.length > 0 && (
+                                {/* ИСПРАВЛЕНИЕ: показываем шторку, если есть услуги и хоть какие-то записи в базе, независимо от фильтра */}
+                                {services.length > 0 && appointments.length > 0 && (
                                     <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 mb-2">
                                         <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === null ? 'bg-slate-800 text-white border-transparent shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>Все</button>
                                         {services.map(s => <button key={s.id} onClick={() => setActiveServiceFilter(s.id)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === s.id ? 'bg-slate-800 text-white border-transparent shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{s.name}</button>)}
@@ -414,7 +430,6 @@ export default function Dashboard() {
                         {activeTab === 'services' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    
                                     <div className="lg:col-span-1 space-y-6">
                                         {role === 'owner' && (
                                             <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.04)]">
@@ -509,7 +524,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟡 КЛИЕНТЫ */}
+                        {/* 🟡 КЛИЕНТЫ (CRM) */}
                         {activeTab === 'clients' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                                 <div className="relative max-w-xl mx-auto md:max-w-none">
@@ -518,14 +533,25 @@ export default function Dashboard() {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {filteredClients.length === 0 ? <p className="text-slate-400 text-center py-10 font-bold text-sm col-span-full">Клиенты не найдены</p> : filteredClients.map(client => (
-                                        <div key={client.id} className={`p-5 rounded-[28px] border transition-all ${client.is_blacklisted ? 'border-rose-100 bg-rose-50/50' : 'bg-white border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.04)]'}`}>
+                                        <div 
+                                            key={client.id} 
+                                            onClick={() => { setSelectedClient(client); setClientNote(client.notes || ""); }}
+                                            className={`p-5 rounded-[28px] border transition-all cursor-pointer hover:shadow-md ${client.is_blacklisted ? 'border-rose-100 bg-rose-50/50' : 'bg-white border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.04)] hover:border-violet-200'}`}
+                                        >
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
                                                     <h3 className={`text-base font-black tracking-tight flex items-center gap-2 ${client.is_blacklisted ? 'text-slate-400' : 'text-slate-900'}`}>{client.name}{client.is_blacklisted && <span className="px-2 py-0.5 bg-rose-500 text-white text-[10px] rounded-md font-black uppercase tracking-widest">В ЧС</span>}</h3>
                                                     <p className="text-slate-500 font-bold text-sm mt-0.5">{client.phone}</p>
                                                 </div>
-                                                <button onClick={() => handleToggleBlacklist(client.id, client.is_blacklisted)} className={`p-2.5 rounded-xl active:scale-[0.92] transition-all shadow-sm ${client.is_blacklisted ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100' : 'text-slate-400 bg-slate-50 hover:bg-rose-50 hover:text-rose-500 border border-slate-100'}`}><Ban className="w-4 h-4" /></button>
+                                                <button onClick={(e) => handleToggleBlacklist(client.id, client.is_blacklisted, e)} className={`p-2.5 rounded-xl active:scale-[0.92] transition-all shadow-sm ${client.is_blacklisted ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100' : 'text-slate-400 bg-slate-50 hover:bg-rose-50 hover:text-rose-500 border border-slate-100'}`}><Ban className="w-4 h-4" /></button>
                                             </div>
+                                            
+                                            {client.notes && (
+                                                <div className="mb-4 bg-yellow-50 border border-yellow-100 p-2.5 rounded-xl text-xs font-medium text-yellow-800 line-clamp-2 leading-relaxed">
+                                                    <Edit3 className="w-3 h-3 inline mr-1 mb-0.5" />{client.notes}
+                                                </div>
+                                            )}
+
                                             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
                                                 <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl"><p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Визиты</p><p className="text-lg font-black tracking-tight text-slate-900">{client.visits_count}</p></div>
                                                 <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Доход</p><p className="text-lg font-black tracking-tight text-emerald-600">{client.total_revenue} ₽</p></div>
@@ -675,6 +701,63 @@ export default function Dashboard() {
                     </div>
                 </nav>
             </div>
+
+            {/* ================= МОДАЛКА: КАРТОЧКА КЛИЕНТА (CRM) ================= */}
+            {selectedClient && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedClient(null)}>
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-slate-100 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setSelectedClient(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-900 bg-slate-50 p-2.5 rounded-full active:scale-90 transition-all border border-slate-100"><X className="w-5 h-5" /></button>
+                        
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-14 h-14 bg-gradient-to-br from-violet-100 to-indigo-100 rounded-full flex items-center justify-center border border-violet-200">
+                                <UserCircle className="w-8 h-8 text-violet-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black tracking-tight text-slate-900 leading-tight">{selectedClient.name}</h2>
+                                <p className="text-sm font-bold text-slate-500 mt-0.5">{selectedClient.phone}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl"><p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Всего визитов</p><p className="text-2xl font-black tracking-tight text-slate-900">{selectedClient.visits_count}</p></div>
+                            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-1">Общий доход</p><p className="text-2xl font-black tracking-tight text-emerald-600">{selectedClient.total_revenue} ₽</p></div>
+                        </div>
+
+                        <div className="space-y-3 mb-6">
+                            <label className="text-[11px] text-slate-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Заметки мастера</label>
+                            <textarea 
+                                value={clientNote} 
+                                onChange={e => setClientNote(e.target.value)} 
+                                placeholder="Любит кофе без сахара, формула окрашивания 6.0 + 3%..."
+                                className="w-full bg-yellow-50/50 border border-yellow-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-yellow-400/30 transition-all text-slate-900 placeholder-yellow-700/40 min-h-[120px] resize-none"
+                            />
+                            <button onClick={handleSaveClientNote} disabled={savingNote} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md hover:bg-black disabled:opacity-50">
+                                {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : "Сохранить заметку"}
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <label className="text-[11px] text-slate-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5"/> История визитов</label>
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                                {appointments.filter(a => a.client_phone === selectedClient.phone).reverse().map(app => (
+                                    <div key={app.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-900">{format(new Date(app.start_time), "d MMMM yyyy", { locale: ru })}</p>
+                                            <p className="text-[10px] text-slate-500 font-bold mt-0.5">{app.service?.name}</p>
+                                        </div>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${app.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>
+                                            {app.status === 'completed' ? 'Был' : 'Записан'}
+                                        </span>
+                                    </div>
+                                ))}
+                                {appointments.filter(a => a.client_phone === selectedClient.phone).length === 0 && (
+                                    <p className="text-xs text-slate-400 font-bold py-2 text-center">Записей не найдено</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ================= МОДАЛКА: РУЧНАЯ ЗАПИСЬ ================= */}
             {showManualModal && (
