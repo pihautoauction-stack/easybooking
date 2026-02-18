@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3, Camera
+    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3, Camera, Calculator
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -17,7 +17,7 @@ const NAV_ITEMS = [
     { id: 'appointments', icon: CalendarDays, label: 'Журнал' },
     { id: 'services', icon: Briefcase, label: 'Услуги' },
     { id: 'clients', icon: Users, label: 'Клиенты' },
-    { id: 'analytics', icon: BarChart3, label: 'Аналитика' },
+    { id: 'analytics', icon: BarChart3, label: 'Финансы' },
     { id: 'profile', icon: UserCircle, label: 'Настройки' }
 ];
 
@@ -52,14 +52,17 @@ export default function Dashboard() {
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
     
+    // Форма услуги
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
     const [newDuration, setNewDuration] = useState("60");
     const [newServiceEmpId, setNewServiceEmpId] = useState(""); 
     const [addingService, setAddingService] = useState(false);
     
+    // Форма сотрудника
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
+    const [newEmpCommission, setNewEmpCommission] = useState("50"); // Процент сотрудника
     const [addingEmp, setAddingEmp] = useState(false);
 
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
@@ -141,7 +144,6 @@ export default function Dashboard() {
                 if (p.work_end_time) setWorkEndTime(p.work_end_time);
                 if (p.schedule_step) setScheduleStep(p.schedule_step);
                 if (p.breaks) setBreaks(typeof p.breaks === 'string' ? JSON.parse(p.breaks) : p.breaks || []);
-                // Загружаем портфолио
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
             }
             
@@ -153,7 +155,7 @@ export default function Dashboard() {
             
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, client_id, status, service:services(name, price, duration), employee:employees(name)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, service:services(name, price, duration), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
 
@@ -179,12 +181,11 @@ export default function Dashboard() {
             setUsername(cleanUsername);
             alert("Настройки успешно сохранены!");
         } catch (err: any) {
-            if (err.code === '23505') alert("Этот короткий никнейм уже занят! Придумайте другой.");
+            if (err.code === '23505') alert("Этот никнейм уже занят! Придумайте другой.");
             else alert("Ошибка: " + err.message);
         } finally { setSaving(false); }
     };
 
-    // ФУНКЦИИ ПОРТФОЛИО
     const handleUploadPortfolioImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]; if (!file) return; 
         setUploadingPortfolio(true);
@@ -219,12 +220,19 @@ export default function Dashboard() {
     };
 
     const handleDeleteService = async (id: string) => { if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); await loadData(user.id); } };
+    
+    // ДОБАВЛЕНИЕ СОТРУДНИКА С ПРОЦЕНТОМ
     const handleAddEmployee = async () => {
         if (!newEmpName) return; setAddingEmp(true);
-        await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec });
-        setNewEmpName(""); setNewEmpSpec(""); await loadData(user.id); setAddingEmp(false);
+        await supabase.from("employees").insert({ 
+            salon_id: user.id, 
+            name: newEmpName, 
+            specialty: newEmpSpec,
+            commission_rate: Number(newEmpCommission) || 50
+        });
+        setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false);
     };
-    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить сотрудника?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
+    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить специалиста?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
     const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
 
     const handleCompleteRecord = async (app: any) => {
@@ -297,14 +305,38 @@ export default function Dashboard() {
 
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
-    const totalRevenue = clients.reduce((acc, c) => acc + Number(c.total_revenue || 0), 0);
-    const totalVisits = clients.reduce((acc, c) => acc + Number(c.visits_count || 0), 0);
+    
+    // ================= ФИНАНСОВЫЙ РАСЧЕТ =================
+    let totalRevenue = 0;
+    let totalPayroll = 0;
+    const employeeStats: Record<string, {name: string, visits: number, earned: number}> = {};
+
+    archivedApps.forEach(app => {
+        const price = Number(app.service?.price || 0);
+        totalRevenue += price;
+
+        if (app.employee_id) {
+            const emp = employees.find(e => e.id === app.employee_id);
+            const rate = emp?.commission_rate || 50;
+            const empCut = (price * rate) / 100;
+            totalPayroll += empCut;
+
+            if (!employeeStats[app.employee_id]) {
+                employeeStats[app.employee_id] = { name: app.employee?.name || 'Удаленный специалист', visits: 0, earned: 0 };
+            }
+            employeeStats[app.employee_id].visits += 1;
+            employeeStats[app.employee_id].earned += empCut;
+        }
+    });
+    
+    const netIncome = totalRevenue - totalPayroll;
+    // =====================================================
 
     const getWhatsAppLink = (app: any) => {
         if (!app.client_phone) return "#";
         const dateStr = format(new Date(app.start_time), "d MMMM", { locale: ru });
         const timeStr = format(new Date(app.start_time), "HH:mm");
-        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи на услугу "${app.service?.name}".\n\n🗓 Дата: ${dateStr}\n⏰ Время: ${timeStr}\n\nБуду вас ждать!`;
+        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи: "${app.service?.name}".\n\n🗓 Дата: ${dateStr}\n⏰ Время: ${timeStr}\n\nЖдем вас!`;
         return `https://wa.me/${getCleanPhone(app.client_phone)}?text=${encodeURIComponent(text)}`;
     };
 
@@ -323,7 +355,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col">
                         <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">EasyBooking</h2>
-                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">Premium</span>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">Business</span>
                     </div>
                 </div>
                 
@@ -357,7 +389,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col justify-center">
                             <div className="flex items-center gap-2 mb-0.5">
-                                <h1 className="text-sm font-black tracking-tight text-stone-900">Кабинет</h1>
+                                <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
                                 <div className="relative flex h-2 w-2 items-center justify-center">
                                     {isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}
                                 </div>
@@ -381,11 +413,11 @@ export default function Dashboard() {
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
                                     <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
-                                        <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Активные</button>
+                                        <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Актуальные</button>
                                         <button onClick={() => setJournalView('archive')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${journalView === 'archive' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><Archive className="w-4 h-4"/> Архив</button>
                                     </div>
                                     <button onClick={() => setShowManualModal(true)} className="bg-gradient-to-r from-rose-400 to-orange-400 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:opacity-90">
-                                        <Plus className="w-4 h-4"/> Ручная запись
+                                        <Plus className="w-4 h-4"/> Создать запись
                                     </button>
                                 </div>
 
@@ -401,7 +433,7 @@ export default function Dashboard() {
                                         <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                             {journalView === 'active' ? <CalendarIcon className="w-7 h-7 text-stone-300" /> : <Archive className="w-7 h-7 text-stone-300" />}
                                         </div>
-                                        <p className="text-stone-400 text-sm font-bold">{journalView === 'active' ? 'Нет активных записей' : 'Архив пуст'}</p>
+                                        <p className="text-stone-400 text-sm font-bold">{journalView === 'active' ? 'Записей пока нет' : 'Архив пуст'}</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -428,7 +460,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🔵 УСЛУГИ */}
+                        {/* 🔵 УСЛУГИ И КОМАНДА */}
                         {activeTab === 'services' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -437,10 +469,14 @@ export default function Dashboard() {
                                             <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
                                                 <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Команда</h2>
                                                 <div className="flex flex-col gap-3 mb-6">
-                                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Имя" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                    <div className="flex gap-2">
-                                                        <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} placeholder="Должность" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                        <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="bg-stone-800 text-white w-12 rounded-xl active:scale-[0.92] transition-all disabled:opacity-50 flex items-center justify-center shrink-0 shadow-md hover:bg-black">
+                                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Имя специалиста" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
+                                                    <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} placeholder="Специализация (Должность)" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
+                                                    <div className="flex gap-2 items-center">
+                                                        <div className="relative flex-1">
+                                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase tracking-widest">% ЗП</span>
+                                                            <input value={newEmpCommission} onChange={e => setNewEmpCommission(e.target.value)} type="number" placeholder="50" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-14 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
+                                                        </div>
+                                                        <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="bg-stone-800 text-white w-12 rounded-xl active:scale-[0.92] transition-all disabled:opacity-50 flex items-center justify-center shrink-0 shadow-md hover:bg-black p-3.5">
                                                             {addingEmp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-5 h-5" />}
                                                         </button>
                                                     </div>
@@ -448,7 +484,10 @@ export default function Dashboard() {
                                                 <div className="space-y-2">
                                                     {employees.map(emp => (
                                                         <div key={emp.id} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                                            <div><p className="text-sm font-bold text-stone-800">{emp.name}</p>{emp.specialty && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest mt-0.5">{emp.specialty}</p>}</div>
+                                                            <div>
+                                                                <p className="text-sm font-bold text-stone-800">{emp.name} <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] ml-1">{emp.commission_rate}%</span></p>
+                                                                {emp.specialty && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest mt-0.5">{emp.specialty}</p>}
+                                                            </div>
                                                             <button onClick={() => handleDeleteEmployee(emp.id)} className="text-rose-500 bg-white p-2 rounded-lg shadow-sm hover:bg-rose-50 transition-all"><Trash2 className="w-4 h-4" /></button>
                                                         </div>
                                                     ))}
@@ -457,15 +496,15 @@ export default function Dashboard() {
                                         )}
 
                                         <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
-                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Добавить услугу</h2>
+                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Создать услугу</h2>
                                             <div className="flex flex-col gap-3">
                                                 {role === 'owner' && (
                                                     <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 appearance-none">
-                                                        <option value="">Общая услуга</option>
+                                                        <option value="">Без привязки к специалисту</option>
                                                         {employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}
                                                     </select>
                                                 )}
-                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название услуги" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
+                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название услуги / работы" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
                                                 
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div className="relative">
@@ -485,7 +524,7 @@ export default function Dashboard() {
                                     </div>
 
                                     <div className="lg:col-span-2 space-y-4">
-                                        <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-widest pl-2 mb-2 hidden lg:block">Все услуги</h3>
+                                        <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-widest pl-2 mb-2 hidden lg:block">Прайс-лист</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {services.length === 0 ? <p className="text-center text-stone-400 text-sm py-4 col-span-full font-bold">Услуг пока нет</p> : services.map(s => (
                                                 <div key={s.id} className="bg-white p-5 rounded-[28px] border border-stone-200 shadow-sm flex flex-col justify-between group hover:border-rose-200 transition-colors">
@@ -496,7 +535,7 @@ export default function Dashboard() {
                                                         </div>
                                                         <div className="flex items-center gap-2 mb-4">
                                                             <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-1 rounded-md font-black uppercase tracking-widest flex items-center gap-1"><Clock className="w-3 h-3"/> {s.duration || 60} мин</span>
-                                                            {s.employee?.name && <span className="text-[10px] bg-rose-50 text-rose-500 px-2 py-1 rounded-md font-black uppercase tracking-widest truncate">Мастер: {s.employee.name}</span>}
+                                                            {s.employee?.name && <span className="text-[10px] bg-rose-50 text-rose-500 px-2 py-1 rounded-md font-black uppercase tracking-widest truncate">Специалист: {s.employee.name}</span>}
                                                         </div>
                                                     </div>
                                                     
@@ -504,7 +543,7 @@ export default function Dashboard() {
                                                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x mb-2">
                                                             {s.image_urls.map((url: string, idx: number) => (
                                                                 <div key={idx} className="relative shrink-0 snap-center">
-                                                                    <img src={url} alt="Услуга" className="w-16 h-16 object-cover rounded-xl shadow-sm border border-stone-100" />
+                                                                    <img src={url} alt="Фото услуги" className="w-16 h-16 object-cover rounded-xl shadow-sm border border-stone-100" />
                                                                     <button onClick={() => handleRemoveImage(s.id, url, s.image_urls)} className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-1 shadow-md active:scale-95"><X className="w-3 h-3" /></button>
                                                                 </div>
                                                             ))}
@@ -513,7 +552,7 @@ export default function Dashboard() {
 
                                                     <div className="flex items-center gap-2 pt-4 border-t border-stone-50">
                                                         <label className="text-rose-500 bg-rose-50 hover:bg-rose-100 p-2.5 rounded-xl transition-all active:scale-[0.92] cursor-pointer font-bold text-xs uppercase tracking-widest flex items-center gap-2 flex-1 justify-center">
-                                                            {uploadingImageId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ImagePlus className="w-4 h-4" /> Фотографии</>}
+                                                            {uploadingImageId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ImagePlus className="w-4 h-4" /> Иллюстрация</>}
                                                             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, s.id, s.image_urls || [])} />
                                                         </label>
                                                         <button onClick={() => handleDeleteService(s.id)} className="text-stone-400 hover:text-rose-500 bg-stone-50 hover:bg-rose-50 p-2.5 rounded-xl active:scale-[0.92] transition-all shrink-0"><Trash2 className="w-4 h-4" /></button>
@@ -526,15 +565,15 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟡 КЛИЕНТЫ (CRM) */}
+                        {/* 🟡 БАЗА КЛИЕНТОВ (CRM) */}
                         {activeTab === 'clients' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
                                 <div className="relative max-w-xl mx-auto md:max-w-none">
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
-                                    <input value={clientSearchQuery} onChange={e => setClientSearchQuery(e.target.value)} placeholder="Поиск по имени или телефону..." className="w-full bg-white border border-stone-200 shadow-sm rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400" />
+                                    <input value={clientSearchQuery} onChange={e => setClientSearchQuery(e.target.value)} placeholder="Поиск клиента..." className="w-full bg-white border border-stone-200 shadow-sm rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400" />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {filteredClients.length === 0 ? <p className="text-stone-400 text-center py-10 font-bold text-sm col-span-full">Клиенты не найдены</p> : filteredClients.map(client => (
+                                    {filteredClients.length === 0 ? <p className="text-stone-400 text-center py-10 font-bold text-sm col-span-full">Нет данных</p> : filteredClients.map(client => (
                                         <div 
                                             key={client.id} 
                                             onClick={() => { setSelectedClient(client); setClientNote(client.notes || ""); }}
@@ -556,7 +595,7 @@ export default function Dashboard() {
 
                                             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-stone-100">
                                                 <div className="bg-stone-50 border border-stone-100 p-3 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-0.5">Визиты</p><p className="text-lg font-black tracking-tight text-stone-800">{client.visits_count}</p></div>
-                                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Доход</p><p className="text-lg font-black tracking-tight text-emerald-600">{client.total_revenue} ₽</p></div>
+                                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Выручка</p><p className="text-lg font-black tracking-tight text-emerald-600">{client.total_revenue} ₽</p></div>
                                             </div>
                                         </div>
                                     ))}
@@ -564,43 +603,69 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟢 АНАЛИТИКА */}
+                        {/* 🟢 АНАЛИТИКА И ФИНАНСЫ (НОВЫЙ БЛОК) */}
                         {activeTab === 'analytics' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <div className="col-span-2 bg-gradient-to-br from-emerald-400 to-emerald-500 p-6 rounded-[32px] shadow-lg shadow-emerald-500/20 text-white flex flex-col justify-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                                        <p className="text-xs text-emerald-100 font-black uppercase tracking-widest mb-1 relative z-10">Общий доход</p>
-                                        <p className="text-4xl font-black tracking-tight relative z-10">{totalRevenue} <span className="text-2xl opacity-80">₽</span></p>
+                                
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
+                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Общая выручка</p>
+                                        <p className="text-3xl font-black tracking-tight text-stone-900">{totalRevenue} <span className="text-xl text-stone-400">₽</span></p>
                                     </div>
-                                    <div className="col-span-2 bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                        <p className="text-xs text-rose-500 font-black uppercase tracking-widest mb-1">Всего визитов</p>
-                                        <p className="text-4xl font-black tracking-tight text-stone-800">{totalVisits}</p>
+                                    <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
+                                        <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5"/> Фонд ЗП (Сотрудники)</p>
+                                        <p className="text-3xl font-black tracking-tight text-stone-900">{totalPayroll} <span className="text-xl text-stone-400">₽</span></p>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-emerald-400 to-emerald-500 p-6 rounded-[32px] shadow-lg shadow-emerald-500/20 text-white flex flex-col justify-center relative overflow-hidden">
+                                        <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                                        <p className="text-xs text-emerald-100 font-black uppercase tracking-widest mb-1 relative z-10">Чистая прибыль</p>
+                                        <p className="text-4xl font-black tracking-tight relative z-10">{netIncome} <span className="text-2xl opacity-80">₽</span></p>
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
-                                    <h3 className="text-xl font-black tracking-tight text-stone-800 mb-6 flex items-center gap-2">Топ-5 клиентов</h3>
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        {clients.filter(c => c.total_revenue > 0).sort((a,b) => b.total_revenue - a.total_revenue).slice(0, 5).map((c, i) => (
-                                            <div key={c.id} className="flex justify-between items-center bg-stone-50 border border-stone-100 p-4 sm:p-5 rounded-2xl hover:border-rose-200 hover:shadow-sm transition-all">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shadow-sm ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-400 text-white' : i === 1 ? 'bg-gradient-to-br from-stone-300 to-stone-400 text-white' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-orange-400 text-white' : 'bg-white text-stone-400 border border-stone-200'}`}>{i + 1}</div>
-                                                    <div>
-                                                        <span className="text-base font-bold text-stone-800 block">{c.name}</span>
-                                                        <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Визитов: {c.visits_count}</span>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* БЛОК: РАСЧЕТ ЗАРПЛАТ */}
+                                    <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
+                                        <h3 className="text-xl font-black tracking-tight text-stone-800 mb-6 flex items-center gap-2">Расчет зарплат</h3>
+                                        <div className="space-y-3">
+                                            {Object.keys(employeeStats).length === 0 ? <p className="text-center text-stone-400 text-sm py-4 font-bold">Нет данных для расчета</p> : 
+                                                Object.values(employeeStats).map((stat, i) => (
+                                                    <div key={i} className="flex justify-between items-center bg-stone-50 border border-stone-100 p-4 rounded-2xl">
+                                                        <div>
+                                                            <span className="text-base font-bold text-stone-800 block">{stat.name}</span>
+                                                            <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Оказано услуг: {stat.visits}</span>
+                                                        </div>
+                                                        <span className="text-lg font-black tracking-tight text-stone-900 bg-white px-3 py-1.5 rounded-xl border border-stone-200">{stat.earned} ₽</span>
                                                     </div>
+                                                ))
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {/* БЛОК: ТОП КЛИЕНТОВ */}
+                                    <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
+                                        <h3 className="text-xl font-black tracking-tight text-stone-800 mb-6 flex items-center gap-2">Топ-5 клиентов</h3>
+                                        <div className="space-y-3">
+                                            {clients.filter(c => c.total_revenue > 0).sort((a,b) => b.total_revenue - a.total_revenue).slice(0, 5).map((c, i) => (
+                                                <div key={c.id} className="flex justify-between items-center bg-stone-50 border border-stone-100 p-4 rounded-2xl hover:border-rose-200 hover:shadow-sm transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shadow-sm ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-400 text-white' : i === 1 ? 'bg-gradient-to-br from-stone-300 to-stone-400 text-white' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-orange-400 text-white' : 'bg-white text-stone-400 border border-stone-200'}`}>{i + 1}</div>
+                                                        <div>
+                                                            <span className="text-sm font-bold text-stone-800 block">{c.name}</span>
+                                                            <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Визитов: {c.visits_count}</span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm font-black tracking-tight text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded-lg border border-emerald-100">{c.total_revenue} ₽</span>
                                                 </div>
-                                                <span className="text-lg font-black tracking-tight text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">{c.total_revenue} ₽</span>
-                                            </div>
-                                        ))}
-                                        {clients.filter(c => c.total_revenue > 0).length === 0 && <p className="text-center text-stone-400 text-sm py-4 col-span-full font-bold">Пока нет данных для топа</p>}
+                                            ))}
+                                            {clients.filter(c => c.total_revenue > 0).length === 0 && <p className="text-center text-stone-400 text-sm py-4 font-bold">Пока нет данных для топа</p>}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ (С ПОРТФОЛИО) */}
+                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ */}
                         {activeTab === 'profile' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
                                 
@@ -611,7 +676,7 @@ export default function Dashboard() {
                                         <input readOnly value={clientLink} className="flex-1 bg-black/10 border border-white/20 rounded-2xl p-4 text-sm font-bold text-white outline-none truncate font-mono shadow-inner placeholder-white/50" />
                                         <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Ссылка скопирована!"); }} className="bg-white text-rose-500 px-8 py-4 rounded-2xl active:scale-[0.96] transition-all shadow-md font-black flex justify-center items-center gap-2 hover:bg-stone-50"><Copy className="w-5 h-5" /> Скопировать</button>
                                     </div>
-                                    <p className="text-[11px] text-rose-100 mt-4 relative z-10 font-bold uppercase tracking-widest">Разместите эту ссылку в Instagram, WhatsApp или VK.</p>
+                                    <p className="text-[11px] text-rose-100 mt-4 relative z-10 font-bold uppercase tracking-widest">Разместите эту ссылку в Instagram, WhatsApp, VK или Telegram.</p>
                                 </div>
 
                                 <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
@@ -620,20 +685,20 @@ export default function Dashboard() {
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
                                         <div className="space-y-6">
                                             <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Ваше Имя / Название</label>
-                                                <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Anna Nails" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название (для шапки сайта)</label>
+                                                <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Правовой центр / Автосервис V8" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                                             </div>
 
                                             <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Короткая ссылка (Никнейм)</label>
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1">Короткая ссылка (Никнейм)</label>
                                                 <div className="relative">
                                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold">.../book/</span>
-                                                    <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="anna-nails" className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pr-4 pl-20 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
+                                                    <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="v8-auto" className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pr-4 pl-20 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                                                 </div>
                                             </div>
                                             
                                             <div className="space-y-2 pt-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block ml-1 mb-2">Рабочие дни (Зеленые)</label>
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block ml-1 mb-2">Рабочие дни</label>
                                                 <div className="flex justify-between gap-1.5 sm:gap-2">
                                                     {DAYS.map((d) => (
                                                         <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-3.5 sm:py-4 rounded-2xl text-[11px] sm:text-xs font-black transition-all active:scale-95 ${!disabledDays.includes(d.id) ? "bg-emerald-400 text-white shadow-md shadow-emerald-400/20" : "bg-stone-100 text-stone-400 hover:bg-stone-200"}`}>{d.label}</button>
@@ -689,13 +754,13 @@ export default function Dashboard() {
 
                                     {/* БЛОК ПОРТФОЛИО */}
                                     <div className="mt-8 pt-8 border-t border-stone-100">
-                                        <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-4"><Camera className="w-4 h-4 text-rose-400"/> Галерея работ</h3>
-                                        <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-4">Эти фотографии будут видны всем клиентам на вашей странице записи</p>
+                                        <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-4"><Camera className="w-4 h-4 text-rose-400"/> Галерея работ / Примеров</h3>
+                                        <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-4">Эти фотографии будут видны всем клиентам на странице записи</p>
                                         
                                         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
                                             {portfolioUrls.map((url, idx) => (
                                                 <div key={idx} className="relative shrink-0 snap-center">
-                                                    <img src={url} alt="Портфолио" className="w-32 h-32 md:w-40 md:h-40 object-cover rounded-[24px] shadow-sm border border-stone-200" />
+                                                    <img src={url} alt="Пример работы" className="w-32 h-32 md:w-40 md:h-40 object-cover rounded-[24px] shadow-sm border border-stone-200" />
                                                     <button onClick={() => handleRemovePortfolioImage(url)} className="absolute -top-2 -right-2 bg-white text-rose-500 rounded-full p-2 shadow-md border border-rose-100 hover:bg-rose-50 active:scale-95 transition-all"><X className="w-4 h-4" /></button>
                                                 </div>
                                             ))}
@@ -754,15 +819,15 @@ export default function Dashboard() {
 
                         <div className="grid grid-cols-2 gap-3 mb-6">
                             <div className="bg-stone-50 border border-stone-100 p-4 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1">Всего визитов</p><p className="text-2xl font-black tracking-tight text-stone-800">{selectedClient.visits_count}</p></div>
-                            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-1">Общий доход</p><p className="text-2xl font-black tracking-tight text-emerald-600">{selectedClient.total_revenue} ₽</p></div>
+                            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-1">Выручка</p><p className="text-2xl font-black tracking-tight text-emerald-600">{selectedClient.total_revenue} ₽</p></div>
                         </div>
 
                         <div className="space-y-3 mb-6">
-                            <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Заметки мастера</label>
+                            <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Заметки (Детали заказов)</label>
                             <textarea 
                                 value={clientNote} 
                                 onChange={e => setClientNote(e.target.value)} 
-                                placeholder="Любит кофе без сахара, формула окрашивания 6.0 + 3%..."
+                                placeholder="Например: Стучит подвеска, дело о наследстве, подготовка к ЕГЭ..."
                                 className="w-full bg-orange-50/50 border border-orange-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-400/30 transition-all text-stone-800 placeholder-orange-700/40 min-h-[120px] resize-none"
                             />
                             <button onClick={handleSaveClientNote} disabled={savingNote} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md hover:bg-black disabled:opacity-50">
@@ -771,7 +836,7 @@ export default function Dashboard() {
                         </div>
 
                         <div className="space-y-3">
-                            <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5"/> История визитов</label>
+                            <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5"/> История записей</label>
                             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                                 {appointments.filter(a => a.client_phone === selectedClient.phone).reverse().map(app => (
                                     <div key={app.id} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
@@ -790,8 +855,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* МОДАЛКИ ЗАПИСИ (РУЧНАЯ И ДЕТАЛИ) ... */}
-            {/* Оставляю их без изменений чтобы не раздувать сообщение */}
+            {/* РУЧНАЯ ЗАПИСЬ */}
             {showManualModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
@@ -801,9 +865,15 @@ export default function Dashboard() {
                             <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
                             <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
                             <div>
-                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга *</label>
-                                <select required value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="" disabled>Выберите услугу...</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
+                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга / Задача *</label>
+                                <select required value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="" disabled>Выберите...</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
                             </div>
+                            {role === 'owner' && (
+                                <div>
+                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label>
+                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Дата *</label><input required type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
                                 <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Время *</label><input required type="time" value={manualTime} onChange={e => setManualTime(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
@@ -816,11 +886,12 @@ export default function Dashboard() {
                 </div>
             )}
 
+            {/* ДЕТАЛИ ВИЗИТА */}
             {selectedApp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
-                        <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Детали визита</h2>
+                        <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Детали записи</h2>
                         <div className="space-y-6">
                             <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
                                 <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент</p>
@@ -832,11 +903,11 @@ export default function Dashboard() {
                                 <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name}</p></div>
                             </div>
                             <div className="flex flex-col gap-3 pt-2">
-                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-400/30"><CheckCircle2 className="w-6 h-6" /> Завершить визит</button>}
+                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-400/30"><CheckCircle2 className="w-6 h-6" /> Завершить (в Архив)</button>}
                                 {selectedApp.client_phone && (
                                     <div className="grid grid-cols-2 gap-3 mt-1">
                                         <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 hover:bg-black text-white font-bold py-4 rounded-2xl text-center active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-md"><Phone className="w-5 h-5" /> Звонок</a>
-                                        <a href={`https://wa.me/${getCleanPhone(selectedApp.client_phone)}?text=Здравствуйте!`} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-4 rounded-2xl text-center active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#25D366]/30"><MessageCircle className="w-5 h-5" /> Написать</a>
+                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-4 rounded-2xl text-center active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#25D366]/30"><MessageCircle className="w-5 h-5" /> Написать</a>
                                     </div>
                                 )}
                                 <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-4 rounded-2xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 mt-2 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-5 h-5" /> {selectedApp.status === 'completed' ? 'Удалить из архива' : 'Отменить запись'}</button>
