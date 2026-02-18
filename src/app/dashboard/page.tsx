@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee
+    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -26,17 +26,14 @@ export default function Dashboard() {
     const [businessName, setBusinessName] = useState("");
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
     
-    // Новые настройки времени
     const [workStartTime, setWorkStartTime] = useState("09:00");
     const [workEndTime, setWorkEndTime] = useState("20:00");
     const [scheduleStep, setScheduleStep] = useState(30);
     const [breaks, setBreaks] = useState<{start: string, end: string}[]>([]);
     
-    // Состояния форм для перерыва
     const [newBreakStart, setNewBreakStart] = useState("13:00");
     const [newBreakEnd, setNewBreakEnd] = useState("14:00");
     
-    // Данные
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [clients, setClients] = useState<any[]>([]);
@@ -45,14 +42,12 @@ export default function Dashboard() {
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
     
-    // Форма услуги
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
-    const [newDuration, setNewDuration] = useState("60"); // В минутах
+    const [newDuration, setNewDuration] = useState("60");
     const [newServiceEmpId, setNewServiceEmpId] = useState(""); 
     const [addingService, setAddingService] = useState(false);
     
-    // Форма сотрудника
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
     const [addingEmp, setAddingEmp] = useState(false);
@@ -60,6 +55,16 @@ export default function Dashboard() {
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     const [selectedApp, setSelectedApp] = useState<any>(null);
     const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
+
+    // ================= СОСТОЯНИЯ РУЧНОЙ ЗАПИСИ =================
+    const [showManualModal, setShowManualModal] = useState(false);
+    const [manualName, setManualName] = useState("");
+    const [manualPhone, setManualPhone] = useState("");
+    const [manualService, setManualService] = useState("");
+    const [manualEmployee, setManualEmployee] = useState("");
+    const [manualDate, setManualDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [manualTime, setManualTime] = useState("12:00");
+    const [addingManual, setAddingManual] = useState(false);
 
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
@@ -113,7 +118,6 @@ export default function Dashboard() {
                 setBusinessName(p.business_name || "");
                 if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
                 
-                // Новые поля времени
                 if (p.work_start_time) setWorkStartTime(p.work_start_time);
                 if (p.work_end_time) setWorkEndTime(p.work_end_time);
                 if (p.schedule_step) setScheduleStep(p.schedule_step);
@@ -146,14 +150,9 @@ export default function Dashboard() {
     const handleSaveProfile = async () => {
         setSaving(true);
         const { error } = await supabase.from("profiles").upsert({
-            id: user.id, 
-            business_name: businessName, 
-            disabled_days: disabledDays.join(','), 
-            work_start_time: workStartTime,
-            work_end_time: workEndTime,
-            schedule_step: scheduleStep,
-            breaks: breaks,
-            updated_at: new Date(),
+            id: user.id, business_name: businessName, disabled_days: disabledDays.join(','), 
+            work_start_time: workStartTime, work_end_time: workEndTime,
+            schedule_step: scheduleStep, breaks: breaks, updated_at: new Date(),
         });
         setSaving(false);
         alert(error ? error.message : "Настройки успешно сохранены!");
@@ -166,34 +165,21 @@ export default function Dashboard() {
         }
     };
 
-    const handleRemoveBreak = (index: number) => {
-        setBreaks(breaks.filter((_, i) => i !== index));
-    };
+    const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
 
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
-        const insertData: any = { 
-            user_id: user.id, 
-            name: newName, 
-            price: Number(newPrice), 
-            duration: Number(newDuration),
-            image_urls: [] 
-        };
+        const insertData: any = { user_id: user.id, name: newName, price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
         if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
         
         const { error } = await supabase.from("services").insert(insertData);
         if (error) alert("Ошибка сохранения: " + error.message);
-        
-        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); 
-        await loadData(user.id); setAddingService(false);
+        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); await loadData(user.id); setAddingService(false);
     };
 
     const handleDeleteService = async (id: string) => {
-        if (confirm("Удалить эту услугу? (Существующие записи останутся)")) {
-            await supabase.from("services").delete().eq("id", id);
-            await loadData(user.id);
-        }
+        if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); await loadData(user.id); }
     };
 
     const handleAddEmployee = async () => {
@@ -208,29 +194,21 @@ export default function Dashboard() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (confirm("Точно отменить запись клиента?")) {
-            await supabase.from("appointments").delete().eq("id", id);
-            await loadData(user.id); setSelectedApp(null); 
-        }
+        if (confirm("Точно отменить запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); }
     };
 
     const handleCompleteRecord = async (app: any) => {
         if (confirm("Завершить визит?")) {
             await supabase.from("appointments").update({ status: 'completed' }).eq("id", app.id);
-            
             let targetClientId = app.client_id;
             if (!targetClientId && app.client_phone) {
                 const { data: existingClient } = await supabase.from("clients").select("id, visits_count, total_revenue").eq("master_id", user.id).eq("phone", app.client_phone).maybeSingle();
                 if (existingClient) targetClientId = existingClient.id;
             }
-
             const price = Number(app.service?.price || 0);
-
             if (targetClientId) {
                 const client = clients.find(c => c.id === targetClientId);
-                if (client) {
-                    await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
-                }
+                if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
             } else if (app.client_phone) {
                 await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false });
             }
@@ -239,9 +217,8 @@ export default function Dashboard() {
     };
 
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean) => {
-        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить в черный список?")) {
-            await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); 
-            await loadData(user.id, true); 
+        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить в ЧС?")) {
+            await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); 
         }
     };
 
@@ -249,8 +226,7 @@ export default function Dashboard() {
         const file = e.target.files?.[0]; if (!file) return;
         setUploadingImageId(serviceId);
         try {
-            const fileExt = file.name.split('.').pop(); 
-            const fileName = `${Math.random()}.${fileExt}`;
+            const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
             const filePath = `${user.id}/${fileName}`;
             await supabase.storage.from('gallery').upload(filePath, file);
             const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
@@ -262,12 +238,41 @@ export default function Dashboard() {
     const handleRemoveImage = async (serviceId: string, urlToRemove: string, currentUrls: string[]) => {
         if (!confirm("Удалить фото?")) return;
         const newUrls = currentUrls.filter(url => url !== urlToRemove);
-        await supabase.from('services').update({ image_urls: newUrls }).eq('id', serviceId);
-        await loadData(user.id, true);
+        await supabase.from('services').update({ image_urls: newUrls }).eq('id', serviceId); await loadData(user.id, true);
+    };
+
+    // ================= ФУНКЦИЯ РУЧНОЙ ЗАПИСИ =================
+    const handleAddManualBooking = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!manualName || !manualService || !manualDate || !manualTime) return;
+        setAddingManual(true);
+        
+        try {
+            const startDateTime = new Date(`${manualDate}T${manualTime}:00`).toISOString();
+            
+            const { error } = await supabase.from('appointments').insert({
+                master_id: user.id,
+                service_id: manualService,
+                employee_id: manualEmployee || null,
+                client_name: manualName,
+                client_phone: manualPhone,
+                start_time: startDateTime,
+                status: 'active'
+            });
+            
+            if (error) throw error;
+            
+            setShowManualModal(false);
+            setManualName(""); setManualPhone(""); setManualService("");
+            await loadData(user.id, true);
+        } catch (err: any) {
+            alert("Ошибка при добавлении записи: " + err.message);
+        } finally {
+            setAddingManual(false);
+        }
     };
 
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
-    
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${user.id}` : "";
     const filteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
@@ -275,17 +280,14 @@ export default function Dashboard() {
     const totalRevenue = clients.reduce((acc, c) => acc + Number(c.total_revenue || 0), 0);
     const totalVisits = clients.reduce((acc, c) => acc + Number(c.visits_count || 0), 0);
 
-    const handleLogout = async () => { await supabase.auth.signOut(); router.replace("/login"); };
-
     if (loading) return ( <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div> );
 
     return (
         <div className="min-h-screen bg-[#F9FAFB] text-gray-900 font-sans selection:bg-indigo-100 flex flex-col antialiased">
             
-            {/* СВЕТЛЫЙ ПРЕМИУМ HEADER */}
             <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 px-5 py-3.5 flex justify-between items-center transition-all">
                 <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] shrink-0 bg-white flex items-center justify-center border border-gray-100">
+                    <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-sm shrink-0 bg-white flex items-center justify-center border border-gray-100">
                         <span className="font-bold text-indigo-600 text-sm tracking-tight">EB</span>
                     </div>
                     <div className="flex flex-col justify-center">
@@ -295,12 +297,10 @@ export default function Dashboard() {
                                 {isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-gray-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>}
                             </div>
                         </div>
-                        <span className="text-[11px] text-gray-500 truncate max-w-[150px] font-medium leading-none">
-                            {businessName || "Настройте профиль"}
-                        </span>
+                        <span className="text-[11px] text-gray-500 truncate max-w-[150px] font-medium leading-none">{businessName || "Настройте профиль"}</span>
                     </div>
                 </div>
-                <button onClick={handleLogout} className="text-gray-400 hover:text-rose-500 p-2 bg-gray-50 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4" /></button>
+                <button onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }} className="text-gray-400 hover:text-rose-500 p-2 bg-gray-50 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4" /></button>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 sm:p-5 pb-32 space-y-6">
@@ -308,8 +308,17 @@ export default function Dashboard() {
                 {/* 🟢 ЗАПИСИ */}
                 {activeTab === 'appointments' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        
+                        {/* ШАПКА РАЗДЕЛА: Заголовок и кнопка РУЧНОЙ ЗАПИСИ */}
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Журнал</h2>
+                            <button onClick={() => setShowManualModal(true)} className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-1.5 hover:bg-indigo-700">
+                                <Plus className="w-4 h-4"/> Добавить
+                            </button>
+                        </div>
+
                         {services.length > 0 && appointments.length > 0 && (
-                            <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                            <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 mb-2">
                                 <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-[0.97] border ${activeServiceFilter === null ? 'bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-600/20' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>Все записи</button>
                                 {services.map(s => <button key={s.id} onClick={() => setActiveServiceFilter(s.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-[0.97] border ${activeServiceFilter === s.id ? 'bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-600/20' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{s.name}</button>)}
                             </div>
@@ -534,18 +543,17 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                                 
-                                {/* НОВЫЙ БЛОК УМНОГО ВРЕМЕНИ */}
                                 <div className="pt-4 border-t border-gray-100 space-y-5">
                                     <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><Clock className="w-4 h-4 text-indigo-600"/> График работы</h3>
                                     
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Начало</label>
-                                            <input type="time" value={workStartTime} onChange={e => setWorkStartTime(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-lg font-black outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 text-center transition-all" />
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-1 space-y-1.5">
+                                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider ml-1">Начало</label>
+                                            <input type="time" value={workStartTime} onChange={e => setWorkStartTime(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm sm:text-base font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 text-center transition-all shadow-sm" />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Конец</label>
-                                            <input type="time" value={workEndTime} onChange={e => setWorkEndTime(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-lg font-black outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 text-center transition-all" />
+                                        <div className="flex-1 space-y-1.5">
+                                            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider ml-1">Конец</label>
+                                            <input type="time" value={workEndTime} onChange={e => setWorkEndTime(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm sm:text-base font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 text-center transition-all shadow-sm" />
                                         </div>
                                     </div>
 
@@ -590,7 +598,7 @@ export default function Dashboard() {
                 )}
             </main>
 
-            {/* СВЕТЛЫЙ NAV BAR */}
+            {/* NAV BAR */}
             <nav className="fixed bottom-0 left-0 w-full z-40 bg-white/90 backdrop-blur-xl border-t border-gray-200 pb-safe pt-2 sm:px-6">
                 <div className="flex justify-between items-center max-w-sm mx-auto px-4 pb-4 pt-1">
                     {[
@@ -608,7 +616,58 @@ export default function Dashboard() {
                 </div>
             </nav>
 
-            {/* MODAL - ДЕТАЛИ ЗАПИСИ */}
+            {/* ================= МОДАЛКА: РУЧНАЯ ЗАПИСЬ ================= */}
+            {showManualModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white p-6 rounded-[32px] w-full max-w-sm shadow-2xl relative border border-gray-100 overflow-y-auto max-h-[90vh]">
+                        <button onClick={() => setShowManualModal(false)} className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 bg-gray-50 p-2 rounded-full active:scale-90 transition-all"><X className="w-5 h-5" /></button>
+                        <h2 className="text-xl font-bold tracking-tight mb-6 text-gray-900 flex items-center gap-2"><UserPlus className="w-6 h-6 text-indigo-600"/> Новая запись</h2>
+                        
+                        <form onSubmit={handleAddManualBooking} className="space-y-4">
+                            <div>
+                                <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Имя клиента *</label>
+                                <input required value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Анна" className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Телефон</label>
+                                <input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="+7 (999) 000-00-00" className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Услуга *</label>
+                                <select required value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 appearance-none">
+                                    <option value="" disabled>Выберите услугу...</option>
+                                    {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}
+                                </select>
+                            </div>
+                            {role === 'owner' && (
+                                <div>
+                                    <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Мастер</label>
+                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900 appearance-none">
+                                        <option value="">Без привязки</option>
+                                        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Дата *</label>
+                                    <input required type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900" />
+                                </div>
+                                <div>
+                                    <label className="text-[11px] text-gray-500 font-bold uppercase tracking-wider ml-1">Время *</label>
+                                    <input required type="time" value={manualTime} onChange={e => setManualTime(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-gray-900" />
+                                </div>
+                            </div>
+                            
+                            <button type="submit" disabled={addingManual} className="w-full mt-2 bg-indigo-600 text-white font-bold py-4 rounded-2xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 disabled:opacity-50">
+                                {addingManual ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить запись"}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ================= МОДАЛКА: ДЕТАЛИ ЗАПИСИ ================= */}
             {selectedApp && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
                     <div className="bg-white p-6 rounded-[32px] w-full max-w-sm shadow-2xl relative border border-gray-100" onClick={(e) => e.stopPropagation()}>
@@ -619,7 +678,7 @@ export default function Dashboard() {
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                 <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">Клиент</p>
                                 <p className="text-xl font-black tracking-tight text-gray-900">{selectedApp.client_name}</p>
-                                <p className="text-sm font-bold text-indigo-600 mt-1">{selectedApp.client_phone}</p>
+                                <p className="text-sm font-bold text-indigo-600 mt-1">{selectedApp.client_phone || "Без номера"}</p>
                             </div>
                             
                             <div className="grid grid-cols-2 gap-4 border-y border-gray-100 py-5">
