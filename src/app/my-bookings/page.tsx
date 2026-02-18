@@ -29,11 +29,16 @@ export default function MyBookings() {
 
     const loadBookings = async (targetPhone: string) => {
         setLoading(true);
-        // Ищем будущие записи по номеру телефона
+        
+        // Буфер в 2 часа: чтобы запись не исчезала ровно в минуту начала визита
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+        // Ищем только АКТИВНЫЕ записи клиента
         const { data } = await supabase.from("appointments")
             .select("id, start_time, client_name, service:services(name, price), master:profiles(business_name)")
             .eq("client_phone", targetPhone)
-            .gte("start_time", new Date().toISOString())
+            .eq("status", "active") // <--- ИСПРАВЛЕНИЕ: Скрываем завершенные мастером
+            .gte("start_time", twoHoursAgo) // <--- ИСПРАВЛЕНИЕ: Даем буфер времени, чтобы запись ушла сама
             .order("start_time", { ascending: true });
             
         setAppointments(data || []);
@@ -107,10 +112,6 @@ export default function MyBookings() {
                     <button type="submit" className="w-full bg-[#0A84FF] text-white py-4 rounded-2xl font-semibold active:scale-[0.97] transition-all shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] text-base">
                         Найти визиты
                     </button>
-                    
-                    <button type="button" onClick={() => router.push('/login')} className="w-full text-[11px] text-white/30 hover:text-white/60 uppercase tracking-widest transition-colors font-semibold mt-8">
-                        Вход для специалистов
-                    </button>
                 </form>
             </div>
         );
@@ -176,16 +177,6 @@ export default function MyBookings() {
                             </button>
                         </div>
                     ))}
-                </div>
-
-                {/* ВХОД ДЛЯ СПЕЦИАЛИСТОВ */}
-                <div className="mt-12 mb-6 text-center">
-                    <button 
-                        onClick={() => router.push('/login')} 
-                        className="text-[11px] text-white/30 hover:text-white/60 uppercase tracking-widest transition-colors font-semibold"
-                    >
-                        Вход для специалистов
-                    </button>
                 </div>
 
             </div>
