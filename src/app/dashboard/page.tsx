@@ -14,12 +14,28 @@ import { ru } from "date-fns/locale";
 type Tab = 'appointments' | 'services' | 'clients' | 'analytics' | 'profile';
 
 const NAV_ITEMS = [
-    { id: 'appointments', icon: CalendarDays, label: 'График' },
+    { id: 'appointments', icon: CalendarDays, label: 'Записи' },
     { id: 'services', icon: Briefcase, label: 'Услуги' },
     { id: 'clients', icon: Users, label: 'Клиенты' },
     { id: 'analytics', icon: BarChart3, label: 'Финансы' },
     { id: 'profile', icon: UserCircle, label: 'Настройки' }
 ];
+
+// Умная генерация цветов для карточек на основе ID услуги или мастера
+const getServiceColor = (id: string | undefined) => {
+    if (!id) return { border: 'border-l-stone-400', badge: 'bg-stone-100 text-stone-600' };
+    const colors = [
+        { border: 'border-l-rose-400', badge: 'bg-rose-100 text-rose-700' },
+        { border: 'border-l-blue-400', badge: 'bg-blue-100 text-blue-700' },
+        { border: 'border-l-emerald-400', badge: 'bg-emerald-100 text-emerald-700' },
+        { border: 'border-l-amber-400', badge: 'bg-amber-100 text-amber-700' },
+        { border: 'border-l-violet-400', badge: 'bg-violet-100 text-violet-700' },
+        { border: 'border-l-cyan-400', badge: 'bg-cyan-100 text-cyan-700' },
+    ];
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash += id.charCodeAt(i);
+    return colors[hash % colors.length];
+};
 
 export default function Dashboard() {
     const router = useRouter();
@@ -30,9 +46,8 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
     const [journalView, setJournalView] = useState<'active' | 'archive'>('active');
 
-    // ПЛАНИРОВЩИК (TIMELINE)
+    // ПЛАНИРОВЩИК (НАВИГАЦИЯ ПО ДНЯМ)
     const [viewDate, setViewDate] = useState(startOfToday());
-    const [currentTimePosition, setCurrentTimePosition] = useState(0);
 
     // Настройки профиля
     const [role, setRole] = useState("solo");
@@ -100,7 +115,7 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
-    // Инициализация и таймер линии времени
+    // Инициализация
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session?.user) { setUser(session.user); loadData(session.user.id); } 
@@ -118,16 +133,8 @@ export default function Dashboard() {
 
         init();
 
-        const timer = setInterval(() => {
-            const now = new Date();
-            setCurrentTimePosition(now.getHours() * 60 + now.getMinutes());
-        }, 60000);
-        const now = new Date();
-        setCurrentTimePosition(now.getHours() * 60 + now.getMinutes());
-
         return () => {
             subscription.unsubscribe();
-            clearInterval(timer);
         };
     }, [router]);
 
@@ -320,25 +327,18 @@ export default function Dashboard() {
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
     };
 
+    const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
     
-    // ФИЛЬТРАЦИЯ
+    // ФИЛЬТРАЦИЯ ДЛЯ КАРТОЧЕК
     const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
     
-    // ТАЙМЛАЙН ЛОГИКА
-    const timeSlots = useMemo(() => Array.from({length: 24}, (_, i) => `${i.toString().padStart(2, '0')}:00`), []);
-    const filteredTimelineApps = useMemo(() => serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [serviceFilteredAppointments, viewDate]);
-    
-    const getAppStyle = (app: any) => {
-        const date = new Date(app.start_time);
-        const startMinutes = date.getHours() * 60 + date.getMinutes();
-        const duration = app.service?.duration || 60; // Если услуга не выбрана (ручная задача), ставим 1 час
-        return {
-            top: `${startMinutes}px`,
-            height: `${duration}px`,
-        };
-    };
+    // Активные берем ТОЛЬКО на выбранный день (viewDate)
+    const activeDailyApps = useMemo(() => {
+        return serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active');
+    }, [serviceFilteredAppointments, viewDate]);
 
+    // Архив берем весь, но переворачиваем
     const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
 
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
@@ -384,7 +384,7 @@ export default function Dashboard() {
     if (loading) return ( <div className="h-screen w-full bg-[#FAF9F6] flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-rose-400" /></div> );
 
     return (
-        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden">
+        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-100 antialiased overflow-hidden">
             
             {/* SIDEBAR */}
             <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
@@ -394,7 +394,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col">
                         <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">EasyBooking</h2>
-                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">Business</span>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">Professional</span>
                     </div>
                 </div>
                 
@@ -449,7 +449,7 @@ export default function Dashboard() {
                 <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8">
                     <div className="max-w-6xl mx-auto space-y-6">
                         
-                        {/* 🟢 ЖУРНАЛ (ГРАФИК И АРХИВ) */}
+                        {/* 🟢 ЖУРНАЛ (КАРТОЧКИ АКТИВНЫЕ И АРХИВ) */}
                         {activeTab === 'appointments' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
@@ -475,7 +475,7 @@ export default function Dashboard() {
                                     </button>
                                 </div>
 
-                                {/* Шторка фильтров (только для архива, чтобы график не ломался фильтрами) */}
+                                {/* Шторка фильтров (только для архива, чтобы активный день не пустел) */}
                                 {services.length > 0 && appointments.length > 0 && journalView === 'archive' && (
                                     <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 mb-2">
                                         <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === null ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>Все</button>
@@ -516,58 +516,59 @@ export default function Dashboard() {
                                     </>
                                 )}
 
-                                {/* АКТИВНЫЙ ГРАФИК (TIMELINE) */}
+                                {/* АКТИВНЫЙ ГРАФИК (СЕТКА КАРТОЧЕК С ЦВЕТАМИ) */}
                                 {journalView === 'active' && (
-                                    <div className="min-w-[600px] md:min-w-0 bg-white rounded-[32px] border border-stone-200 shadow-sm overflow-hidden flex">
-                                        {/* Шкала времени */}
-                                        <div className="w-16 flex-shrink-0 border-r border-stone-100 bg-stone-50/50 pt-[1px]">
-                                            {timeSlots.map(time => (
-                                                <div key={time} className="h-[60px] flex items-start justify-center pt-2">
-                                                    <span className="text-[10px] font-black text-stone-400 tabular-nums">{time}</span>
+                                    <>
+                                        {activeDailyApps.length === 0 ? (
+                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm">
+                                                <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                    <CalendarIcon className="w-7 h-7 text-stone-300" />
                                                 </div>
-                                            ))}
-                                        </div>
+                                                <p className="text-stone-400 text-base font-black mb-2">На этот день записей нет</p>
+                                                <p className="text-stone-400 text-sm font-medium">Отдохните или добавьте новую задачу вручную.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                                {activeDailyApps.map(app => {
+                                                    // Получаем уникальный цвет для услуги или мастера
+                                                    const colorTheme = getServiceColor(app.service_id || app.employee_id || app.id);
+                                                    const duration = app.service?.duration || 60;
+                                                    const endTime = new Date(new Date(app.start_time).getTime() + duration * 60000);
 
-                                        {/* Сетка записей */}
-                                        <div className="flex-1 relative h-[1440px] bg-[linear-gradient(to_bottom,#f5f5f5_1px,transparent_1px)] bg-[size:100%_60px]">
-                                            
-                                            {/* Линия ТЕКУЩЕГО ВРЕМЕНИ */}
-                                            {isSameDay(viewDate, new Date()) && (
-                                                <div className="absolute left-0 right-0 z-20 flex items-center pointer-events-none" style={{ top: `${currentTimePosition}px` }}>
-                                                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500 -ml-[5px] shadow-sm"></div>
-                                                    <div className="flex-1 h-[2px] bg-rose-500/60 shadow-sm"></div>
-                                                </div>
-                                            )}
-
-                                            {/* Рендерим Записи на сетке */}
-                                            {filteredTimelineApps.map(app => (
-                                                <div 
-                                                    key={app.id} 
-                                                    onClick={() => setSelectedApp(app)}
-                                                    className="absolute left-2 right-2 md:left-4 md:right-4 rounded-2xl p-3 border shadow-sm cursor-pointer hover:scale-[1.01] transition-all overflow-hidden z-10 bg-rose-50/90 border-rose-200 hover:bg-rose-100 hover:shadow-md" 
-                                                    style={getAppStyle(app)}
-                                                >
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="min-w-0">
-                                                            <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest truncate">{format(new Date(app.start_time), "HH:mm")} - {format(new Date(new Date(app.start_time).getTime() + (app.service?.duration || 60) * 60000), "HH:mm")}</p>
-                                                            <p className="font-black text-sm text-stone-900 truncate leading-tight mt-0.5">{app.client_name}</p>
+                                                    return (
+                                                        <div 
+                                                            key={app.id} 
+                                                            onClick={() => setSelectedApp(app)} 
+                                                            className={`bg-white rounded-[24px] p-5 border-y border-r border-stone-200 border-l-8 ${colorTheme.border} shadow-sm hover:shadow-md cursor-pointer transition-all active:scale-[0.98] flex flex-col justify-between min-h-[160px]`}
+                                                        >
+                                                            <div>
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div>
+                                                                        <p className="text-2xl font-black text-stone-800 leading-none">
+                                                                            {format(new Date(app.start_time), "HH:mm")} 
+                                                                            <span className="text-sm text-stone-400 font-bold ml-1">- {format(endTime, "HH:mm")}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                    {app.employee?.name && (
+                                                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md truncate max-w-[100px] ${colorTheme.badge}`}>
+                                                                            {app.employee.name}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <h3 className="font-black text-stone-900 text-lg mb-1 leading-tight">{app.client_name}</h3>
+                                                                {app.client_phone && <p className="text-xs font-bold text-stone-500 mb-4">{app.client_phone}</p>}
+                                                            </div>
+                                                            
+                                                            <div className="flex items-center gap-2 pt-4 border-t border-stone-100">
+                                                                <Briefcase className="w-4 h-4 text-stone-400" />
+                                                                <span className="text-xs font-bold text-stone-600 truncate">{app.service?.name || "Свое время / Задача"}</span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex gap-1 shrink-0">
-                                                            <div className="w-6 h-6 bg-white rounded-lg border border-rose-100 flex items-center justify-center shadow-sm"><Briefcase className="w-3 h-3 text-rose-500" /></div>
-                                                        </div>
-                                                    </div>
-                                                    {app.service && <p className="text-[10px] font-bold text-stone-500 mt-1.5 truncate uppercase tracking-widest flex items-center gap-1"><Clock className="w-3 h-3"/> {app.service.name}</p>}
-                                                </div>
-                                            ))}
-
-                                            {filteredTimelineApps.length === 0 && (
-                                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-40">
-                                                    <CalendarIcon className="w-12 h-12 text-stone-300 mb-2"/>
-                                                    <p className="text-lg font-black uppercase tracking-widest text-stone-400">Окон нет</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         )}
@@ -775,7 +776,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ (С УМНЫМ РАСПИСАНИЕМ) */}
+                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ */}
                         {activeTab === 'profile' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
                                 
@@ -976,23 +977,23 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* РУЧНАЯ ЗАПИСЬ (БЛОКИРОВКА ВРЕМЕНИ) */}
+            {/* РУЧНАЯ ЗАПИСЬ */}
             {showManualModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
                         <button onClick={() => setShowManualModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black tracking-tight mb-8 text-stone-800 flex items-center gap-3"><UserPlus className="w-7 h-7 text-rose-500 bg-rose-50 p-1.5 rounded-xl"/> Новая запись</h2>
                         <form onSubmit={handleAddManualBooking} className="space-y-5">
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Клиент или Описание задачи *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Например: 'Ремонт двигателя'" className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон (если есть)</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="+7 (999) 000-00-00" className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
                             <div>
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга / Задача *</label>
-                                <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Выбрать из прайса (или оставить пустым)</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
+                                <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Свое время / Без услуги</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
                             </div>
                             {role === 'owner' && (
                                 <div>
                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label>
-                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки (Выполняю я)</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
                                 </div>
                             )}
                             <div className="grid grid-cols-2 gap-4">
@@ -1015,13 +1016,13 @@ export default function Dashboard() {
                         <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Детали записи</h2>
                         <div className="space-y-6">
                             <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
-                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент / Задача</p>
+                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент</p>
                                 <p className="text-2xl font-black tracking-tight text-stone-800">{selectedApp.client_name}</p>
                                 <p className="text-sm font-bold text-rose-500 mt-1">{selectedApp.client_phone || "Без номера"}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-6">
                                 <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-base font-bold text-stone-800">{format(new Date(selectedApp.start_time), "d MMMM", { locale: ru })}</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md mt-1">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name || "Свое время"}</p></div>
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name || "Свое время / Задача"}</p></div>
                             </div>
                             <div className="flex flex-col gap-3 pt-2">
                                 {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-400/30"><CheckCircle2 className="w-6 h-6" /> Завершить (в Архив)</button>}
