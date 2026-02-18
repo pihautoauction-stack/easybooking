@@ -47,6 +47,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     profileData.portfolio_urls = JSON.parse(profileData.portfolio_urls);
                 }
                 
+                // Парсим новые настройки расписания по дням
+                if (typeof profileData.weekly_settings === 'string') {
+                    profileData.weekly_settings = JSON.parse(profileData.weekly_settings);
+                }
+
                 setProfile(profileData);
                 const { data: servicesData } = await supabase.from("services").select("*").eq("user_id", profileData.id);
                 setServices(servicesData || []);
@@ -73,6 +78,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             const now = new Date();
             const startDay = new Date(selectedDate); startDay.setHours(0,0,0,0);
             const endDay = new Date(selectedDate); endDay.setHours(23,59,59,999);
+            const dayOfWeek = startDay.getDay(); // 0 - Вс, 1 - Пн и т.д.
             
             let query = supabase.from("appointments").select("start_time, service:services(duration)").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString()).eq("status", "active");
             if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
@@ -93,8 +99,18 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 return { start: sH * 60 + sM, end: eH * 60 + eM };
             });
 
-            const [wStartH, wStartM] = (profile.work_start_time || "09:00").split(':').map(Number);
-            const [wEndH, wEndM] = (profile.work_end_time || "20:00").split(':').map(Number);
+            // ЧИТАЕМ ГРАФИК ИМЕННО ДЛЯ ВЫБРАННОГО ДНЯ НЕДЕЛИ
+            let wStartH, wStartM, wEndH, wEndM;
+            
+            if (profile.weekly_settings && profile.weekly_settings[dayOfWeek] && profile.weekly_settings[dayOfWeek].active) {
+                [wStartH, wStartM] = profile.weekly_settings[dayOfWeek].start.split(':').map(Number);
+                [wEndH, wEndM] = profile.weekly_settings[dayOfWeek].end.split(':').map(Number);
+            } else {
+                // Страховочный вариант на случай отсутствия настроек
+                [wStartH, wStartM] = (profile.work_start_time || "09:00").split(':').map(Number);
+                [wEndH, wEndM] = (profile.work_end_time || "20:00").split(':').map(Number);
+            }
+
             const workStartMins = wStartH * 60 + wStartM;
             const workEndMins = wEndH * 60 + wEndM;
 
@@ -252,7 +268,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <button onClick={() => router.push('/my-bookings')} className="p-3 bg-rose-50 rounded-full border border-rose-100 active:scale-95 transition-all shrink-0"><CalendarDays className="w-5 h-5 text-rose-500" /></button>
                 </div>
 
-                {/* НОВЫЙ БЛОК: ПОРТФОЛИО */}
+                {/* БЛОК: ПОРТФОЛИО */}
                 {profile?.portfolio_urls && profile.portfolio_urls.length > 0 && !selectedService && !showWaitlist && (
                     <div className="mb-6 animate-in fade-in duration-500">
                         <p className="text-[11px] text-stone-400 uppercase tracking-widest mb-3 ml-2 font-black">Галерея работ</p>
@@ -310,7 +326,24 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                 <p className="text-[11px] text-stone-400 uppercase tracking-widest ml-2 font-black">Выберите дату и время</p>
                                 <div className="bg-white rounded-[32px] p-5 border border-stone-100 shadow-sm overflow-x-auto w-full flex justify-center">
                                     <style>{`.rdp { --rdp-cell-size: min(12vw, 42px); --rdp-accent-color: #f43f5e; --rdp-background-color: #FAF9F6; margin: 0 auto; width: 100%; max-width: 100%; display: flex; justify-content: center; font-family: inherit; } .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: var(--rdp-accent-color); color: white; font-weight: 800; border-radius: 12px; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: var(--rdp-background-color); border-radius: 12px; color: #f43f5e; } .rdp-day { border-radius: 12px; font-size: min(4vw, 15px); font-weight: 700; color: #292524; } .rdp-caption_label { font-size: min(4.5vw, 17px); font-weight: 800; color: #292524; } .rdp-head_cell { font-size: min(3.5vw, 13px); font-weight: 800; color: #78716c; text-transform: uppercase; } .rdp-day_outside { color: #d6d3d1; } .rdp-day_disabled { color: #e7e5e4; opacity: 0.5; }`}</style>
-                                    <DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ru} disabled={[{ before: startOfToday() }, { dayOfWeek: profile.disabled_days ? profile.disabled_days.split(',').map(Number) : [] }]} />
+                                    <DayPicker 
+                                        mode="single" 
+                                        selected={selectedDate} 
+                                        onSelect={setSelectedDate} 
+                                        locale={ru} 
+                                        disabled={[
+                                            { before: startOfToday() }, 
+                                            // УМНАЯ БЛОКИРОВКА ВЫХОДНЫХ ДНЕЙ НА ОСНОВЕ НОВОГО РАСПИСАНИЯ
+                                            (date) => {
+                                                if (profile?.weekly_settings) {
+                                                    const daySetting = profile.weekly_settings[date.getDay()];
+                                                    if (daySetting) return !daySetting.active; // Блокируем, если день не активен
+                                                }
+                                                // Страховка на случай старых настроек
+                                                return profile?.disabled_days ? profile.disabled_days.split(',').map(Number).includes(date.getDay()) : false;
+                                            }
+                                        ]} 
+                                    />
                                 </div>
 
                                 {selectedDate && (
