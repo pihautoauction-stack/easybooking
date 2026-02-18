@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3, Camera, Calculator
+    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
 
 type Tab = 'appointments' | 'services' | 'clients' | 'analytics' | 'profile';
 
 const NAV_ITEMS = [
-    { id: 'appointments', icon: CalendarDays, label: 'Журнал' },
+    { id: 'appointments', icon: CalendarDays, label: 'График' },
     { id: 'services', icon: Briefcase, label: 'Услуги' },
     { id: 'clients', icon: Users, label: 'Клиенты' },
     { id: 'analytics', icon: BarChart3, label: 'Финансы' },
@@ -30,14 +30,21 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
     const [journalView, setJournalView] = useState<'active' | 'archive'>('active');
 
+    // ПЛАНИРОВЩИК (TIMELINE)
+    const [viewDate, setViewDate] = useState(startOfToday());
+    const [currentTimePosition, setCurrentTimePosition] = useState(0);
+
     // Настройки профиля
     const [role, setRole] = useState("solo");
     const [businessName, setBusinessName] = useState("");
     const [username, setUsername] = useState("");
-    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
+    const [weeklySettings, setWeeklySettings] = useState<any>({});
     
+    // Оставляем для совместимости
     const [workStartTime, setWorkStartTime] = useState("09:00");
     const [workEndTime, setWorkEndTime] = useState("20:00");
+    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
+
     const [scheduleStep, setScheduleStep] = useState(30);
     const [breaks, setBreaks] = useState<{start: string, end: string}[]>([]);
     
@@ -62,7 +69,7 @@ export default function Dashboard() {
     // Форма сотрудника
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
-    const [newEmpCommission, setNewEmpCommission] = useState("50"); // Процент сотрудника
+    const [newEmpCommission, setNewEmpCommission] = useState("50"); 
     const [addingEmp, setAddingEmp] = useState(false);
 
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
@@ -93,6 +100,7 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
+    // Инициализация и таймер линии времени
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session?.user) { setUser(session.user); loadData(session.user.id); } 
@@ -109,7 +117,18 @@ export default function Dashboard() {
         };
 
         init();
-        return () => subscription.unsubscribe();
+
+        const timer = setInterval(() => {
+            const now = new Date();
+            setCurrentTimePosition(now.getHours() * 60 + now.getMinutes());
+        }, 60000);
+        const now = new Date();
+        setCurrentTimePosition(now.getHours() * 60 + now.getMinutes());
+
+        return () => {
+            subscription.unsubscribe();
+            clearInterval(timer);
+        };
     }, [router]);
 
     useEffect(() => {
@@ -145,6 +164,7 @@ export default function Dashboard() {
                 if (p.schedule_step) setScheduleStep(p.schedule_step);
                 if (p.breaks) setBreaks(typeof p.breaks === 'string' ? JSON.parse(p.breaks) : p.breaks || []);
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
+                if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
             }
             
             const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
@@ -173,9 +193,10 @@ export default function Dashboard() {
         const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
         try {
             const { error } = await supabase.from("profiles").upsert({
-                id: user.id, business_name: businessName, username: cleanUsername || null, disabled_days: disabledDays.join(','), 
-                work_start_time: workStartTime, work_end_time: workEndTime,
-                schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls, updated_at: new Date(),
+                id: user.id, business_name: businessName, username: cleanUsername || null, 
+                disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime,
+                schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls, 
+                weekly_settings: weeklySettings, updated_at: new Date(),
             });
             if (error) throw error;
             setUsername(cleanUsername);
@@ -221,7 +242,6 @@ export default function Dashboard() {
 
     const handleDeleteService = async (id: string) => { if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); await loadData(user.id); } };
     
-    // ДОБАВЛЕНИЕ СОТРУДНИКА С ПРОЦЕНТОМ
     const handleAddEmployee = async () => {
         if (!newEmpName) return; setAddingEmp(true);
         await supabase.from("employees").insert({ 
@@ -233,10 +253,10 @@ export default function Dashboard() {
         setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false);
     };
     const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить специалиста?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
-    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
+    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить событие/запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
 
     const handleCompleteRecord = async (app: any) => {
-        if (confirm("Успешно завершить визит? Он будет перемещен в Архив.")) {
+        if (confirm("Успешно завершить? Запись будет перемещена в Архив.")) {
             await supabase.from("appointments").update({ status: 'completed' }).eq("id", app.id);
             let targetClientId = app.client_id;
             if (!targetClientId && app.client_phone) {
@@ -250,7 +270,7 @@ export default function Dashboard() {
             } else if (app.client_phone) {
                 await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false, notes: "" });
             }
-            await loadData(user.id, true); setSelectedApp(null); setJournalView('archive');
+            await loadData(user.id, true); setSelectedApp(null);
         }
     };
 
@@ -276,13 +296,18 @@ export default function Dashboard() {
     };
 
     const handleAddManualBooking = async (e: React.FormEvent) => {
-        e.preventDefault(); if (!manualName || !manualService || !manualDate || !manualTime) return; setAddingManual(true);
+        e.preventDefault(); 
+        if (!manualName || !manualDate || !manualTime) return; 
+        setAddingManual(true);
         try {
+            const startDateTime = new Date(`${manualDate}T${manualTime}:00`).toISOString();
             await supabase.from('appointments').insert({
-                master_id: user.id, service_id: manualService, employee_id: manualEmployee || null,
-                client_name: manualName, client_phone: manualPhone, start_time: new Date(`${manualDate}T${manualTime}:00`).toISOString(), status: 'active'
+                master_id: user.id, service_id: manualService || null, employee_id: manualEmployee || null,
+                client_name: manualName, client_phone: manualPhone, start_time: startDateTime, status: 'active'
             });
-            setShowManualModal(false); setManualName(""); setManualPhone(""); setManualService(""); await loadData(user.id, true); setJournalView('active');
+            setShowManualModal(false); setManualName(""); setManualPhone(""); setManualService(""); 
+            setViewDate(new Date(`${manualDate}T00:00:00`)); // Перемещаемся на день, куда добавили запись
+            await loadData(user.id, true); setJournalView('active');
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setAddingManual(false); }
     };
 
@@ -295,13 +320,26 @@ export default function Dashboard() {
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
     };
 
-    const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
     
+    // ФИЛЬТРАЦИЯ
     const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
-    const activeApps = serviceFilteredAppointments.filter(a => a.status === 'active');
+    
+    // ТАЙМЛАЙН ЛОГИКА
+    const timeSlots = useMemo(() => Array.from({length: 24}, (_, i) => `${i.toString().padStart(2, '0')}:00`), []);
+    const filteredTimelineApps = useMemo(() => serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [serviceFilteredAppointments, viewDate]);
+    
+    const getAppStyle = (app: any) => {
+        const date = new Date(app.start_time);
+        const startMinutes = date.getHours() * 60 + date.getMinutes();
+        const duration = app.service?.duration || 60; // Если услуга не выбрана (ручная задача), ставим 1 час
+        return {
+            top: `${startMinutes}px`,
+            height: `${duration}px`,
+        };
+    };
+
     const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
-    const displayApps = journalView === 'active' ? activeApps : archivedApps;
 
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
@@ -322,7 +360,7 @@ export default function Dashboard() {
             totalPayroll += empCut;
 
             if (!employeeStats[app.employee_id]) {
-                employeeStats[app.employee_id] = { name: app.employee?.name || 'Удаленный специалист', visits: 0, earned: 0 };
+                employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
             }
             employeeStats[app.employee_id].visits += 1;
             employeeStats[app.employee_id].earned += empCut;
@@ -336,7 +374,8 @@ export default function Dashboard() {
         if (!app.client_phone) return "#";
         const dateStr = format(new Date(app.start_time), "d MMMM", { locale: ru });
         const timeStr = format(new Date(app.start_time), "HH:mm");
-        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи: "${app.service?.name}".\n\n🗓 Дата: ${dateStr}\n⏰ Время: ${timeStr}\n\nЖдем вас!`;
+        const serviceName = app.service?.name ? `"${app.service.name}"` : "задачу/визит";
+        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи на ${serviceName}.\n\n🗓 Дата: ${dateStr}\n⏰ Время: ${timeStr}\n\nЖдем вас!`;
         return `https://wa.me/${getCleanPhone(app.client_phone)}?text=${encodeURIComponent(text)}`;
     };
 
@@ -402,59 +441,132 @@ export default function Dashboard() {
 
                 <header className="hidden md:flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-stone-200 px-8 py-5 z-10 shrink-0">
                     <h1 className="text-2xl font-black tracking-tight text-stone-900">{NAV_ITEMS.find(t => t.id === activeTab)?.label}</h1>
-                    <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span>
+                    </div>
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8">
                     <div className="max-w-6xl mx-auto space-y-6">
                         
-                        {/* 🟢 ЖУРНАЛ */}
+                        {/* 🟢 ЖУРНАЛ (ГРАФИК И АРХИВ) */}
                         {activeTab === 'appointments' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                                    <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
-                                        <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Актуальные</button>
-                                        <button onClick={() => setJournalView('archive')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${journalView === 'archive' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><Archive className="w-4 h-4"/> Архив</button>
+                                    
+                                    <div className="flex flex-wrap items-center gap-4">
+                                        <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
+                                            <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>График</button>
+                                            <button onClick={() => setJournalView('archive')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${journalView === 'archive' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><Archive className="w-4 h-4"/> Архив</button>
+                                        </div>
+
+                                        {/* НАВИГАЦИЯ ПО ДАТАМ (Только для активного графика) */}
+                                        {journalView === 'active' && (
+                                            <div className="flex items-center bg-white border border-stone-200 rounded-xl p-1 shadow-sm gap-1">
+                                                <button onClick={() => setViewDate(addDays(viewDate, -1))} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-all"><ChevronLeft className="w-4 h-4"/></button>
+                                                <span className="text-xs font-black px-3 text-stone-700 uppercase tracking-widest min-w-[110px] text-center">{format(viewDate, "d MMMM", { locale: ru })}</span>
+                                                <button onClick={() => setViewDate(addDays(viewDate, 1))} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-all"><ChevronRight className="w-4 h-4"/></button>
+                                            </div>
+                                        )}
                                     </div>
+
                                     <button onClick={() => setShowManualModal(true)} className="bg-gradient-to-r from-rose-400 to-orange-400 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:opacity-90">
-                                        <Plus className="w-4 h-4"/> Создать запись
+                                        <Plus className="w-4 h-4"/> Добавить задачу
                                     </button>
                                 </div>
 
-                                {services.length > 0 && appointments.length > 0 && (
+                                {/* Шторка фильтров (только для архива, чтобы график не ломался фильтрами) */}
+                                {services.length > 0 && appointments.length > 0 && journalView === 'archive' && (
                                     <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 mb-2">
                                         <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === null ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>Все</button>
                                         {services.map(s => <button key={s.id} onClick={() => setActiveServiceFilter(s.id)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === s.id ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>{s.name}</button>)}
                                     </div>
                                 )}
 
-                                {displayApps.length === 0 ? (
-                                    <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm">
-                                        <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            {journalView === 'active' ? <CalendarIcon className="w-7 h-7 text-stone-300" /> : <Archive className="w-7 h-7 text-stone-300" />}
-                                        </div>
-                                        <p className="text-stone-400 text-sm font-bold">{journalView === 'active' ? 'Записей пока нет' : 'Архив пуст'}</p>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {displayApps.map(app => (
-                                            <div key={app.id} onClick={() => setSelectedApp(app)} className={`rounded-[28px] p-5 relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all bg-white border ${journalView === 'archive' ? 'border-l-4 border-l-emerald-300 border-y-stone-100 border-r-stone-100 opacity-80 shadow-sm' : 'border-l-4 border-l-rose-400 border-y-stone-100 border-r-stone-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:border-rose-200 hover:shadow-md'}`}>
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className={`font-black text-2xl tracking-tight ${journalView === 'archive' ? 'text-stone-400' : 'text-stone-800'}`}>{format(new Date(app.start_time), "HH:mm")}</div>
-                                                            <div className="px-2 py-1 bg-stone-100 rounded-lg text-[10px] text-stone-500 font-black uppercase tracking-widest">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
-                                                            {journalView === 'archive' && <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] rounded-lg font-black uppercase tracking-widest">Завершено</div>}
-                                                        </div>
-                                                        <h3 className="text-stone-800 text-base font-black tracking-tight">{app.client_name}</h3>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center text-sm text-stone-500 pt-4 mt-2 border-t border-stone-50">
-                                                    <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-2 py-1 rounded-md font-bold text-xs"><Briefcase className="w-3.5 h-3.5" /><span className="truncate">{app.service?.name || "Услуга удалена"}</span></div>
-                                                    {app.employee?.name && <span className="text-stone-400 font-bold text-[11px] truncate max-w-[100px]">{app.employee.name}</span>}
-                                                </div>
+                                {/* АРХИВ (СПИСОК) */}
+                                {journalView === 'archive' && (
+                                    <>
+                                        {archivedApps.length === 0 ? (
+                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm">
+                                                <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><Archive className="w-7 h-7 text-stone-300" /></div>
+                                                <p className="text-stone-400 text-sm font-bold">Архив пуст</p>
                                             </div>
-                                        ))}
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {archivedApps.map(app => (
+                                                    <div key={app.id} onClick={() => setSelectedApp(app)} className="rounded-[28px] p-5 relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all bg-white border border-l-4 border-l-emerald-300 border-y-stone-100 border-r-stone-100 opacity-80 shadow-sm hover:border-emerald-400">
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-2">
+                                                                    <div className="font-black text-2xl tracking-tight text-stone-400">{format(new Date(app.start_time), "HH:mm")}</div>
+                                                                    <div className="px-2 py-1 bg-stone-100 rounded-lg text-[10px] text-stone-500 font-black uppercase tracking-widest">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
+                                                                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] rounded-lg font-black uppercase tracking-widest">Завершено</div>
+                                                                </div>
+                                                                <h3 className="text-stone-800 text-base font-black tracking-tight">{app.client_name}</h3>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm text-stone-500 pt-4 mt-2 border-t border-stone-50">
+                                                            <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-2 py-1 rounded-md font-bold text-xs"><Briefcase className="w-3.5 h-3.5" /><span className="truncate">{app.service?.name || "Услуга удалена"}</span></div>
+                                                            {app.employee?.name && <span className="text-stone-400 font-bold text-[11px] truncate max-w-[100px]">{app.employee.name}</span>}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* АКТИВНЫЙ ГРАФИК (TIMELINE) */}
+                                {journalView === 'active' && (
+                                    <div className="min-w-[600px] md:min-w-0 bg-white rounded-[32px] border border-stone-200 shadow-sm overflow-hidden flex">
+                                        {/* Шкала времени */}
+                                        <div className="w-16 flex-shrink-0 border-r border-stone-100 bg-stone-50/50 pt-[1px]">
+                                            {timeSlots.map(time => (
+                                                <div key={time} className="h-[60px] flex items-start justify-center pt-2">
+                                                    <span className="text-[10px] font-black text-stone-400 tabular-nums">{time}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Сетка записей */}
+                                        <div className="flex-1 relative h-[1440px] bg-[linear-gradient(to_bottom,#f5f5f5_1px,transparent_1px)] bg-[size:100%_60px]">
+                                            
+                                            {/* Линия ТЕКУЩЕГО ВРЕМЕНИ */}
+                                            {isSameDay(viewDate, new Date()) && (
+                                                <div className="absolute left-0 right-0 z-20 flex items-center pointer-events-none" style={{ top: `${currentTimePosition}px` }}>
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500 -ml-[5px] shadow-sm"></div>
+                                                    <div className="flex-1 h-[2px] bg-rose-500/60 shadow-sm"></div>
+                                                </div>
+                                            )}
+
+                                            {/* Рендерим Записи на сетке */}
+                                            {filteredTimelineApps.map(app => (
+                                                <div 
+                                                    key={app.id} 
+                                                    onClick={() => setSelectedApp(app)}
+                                                    className="absolute left-2 right-2 md:left-4 md:right-4 rounded-2xl p-3 border shadow-sm cursor-pointer hover:scale-[1.01] transition-all overflow-hidden z-10 bg-rose-50/90 border-rose-200 hover:bg-rose-100 hover:shadow-md" 
+                                                    style={getAppStyle(app)}
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest truncate">{format(new Date(app.start_time), "HH:mm")} - {format(new Date(new Date(app.start_time).getTime() + (app.service?.duration || 60) * 60000), "HH:mm")}</p>
+                                                            <p className="font-black text-sm text-stone-900 truncate leading-tight mt-0.5">{app.client_name}</p>
+                                                        </div>
+                                                        <div className="flex gap-1 shrink-0">
+                                                            <div className="w-6 h-6 bg-white rounded-lg border border-rose-100 flex items-center justify-center shadow-sm"><Briefcase className="w-3 h-3 text-rose-500" /></div>
+                                                        </div>
+                                                    </div>
+                                                    {app.service && <p className="text-[10px] font-bold text-stone-500 mt-1.5 truncate uppercase tracking-widest flex items-center gap-1"><Clock className="w-3 h-3"/> {app.service.name}</p>}
+                                                </div>
+                                            ))}
+
+                                            {filteredTimelineApps.length === 0 && (
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-40">
+                                                    <CalendarIcon className="w-12 h-12 text-stone-300 mb-2"/>
+                                                    <p className="text-lg font-black uppercase tracking-widest text-stone-400">Окон нет</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -496,7 +608,7 @@ export default function Dashboard() {
                                         )}
 
                                         <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
-                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Создать услугу</h2>
+                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Создать услугу / Задачу</h2>
                                             <div className="flex flex-col gap-3">
                                                 {role === 'owner' && (
                                                     <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 appearance-none">
@@ -504,7 +616,7 @@ export default function Dashboard() {
                                                         {employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}
                                                     </select>
                                                 )}
-                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название услуги / работы" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
+                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
                                                 
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div className="relative">
@@ -603,7 +715,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟢 АНАЛИТИКА И ФИНАНСЫ (НОВЫЙ БЛОК) */}
+                        {/* 🟢 АНАЛИТИКА И ФИНАНСЫ */}
                         {activeTab === 'analytics' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
                                 
@@ -624,7 +736,6 @@ export default function Dashboard() {
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {/* БЛОК: РАСЧЕТ ЗАРПЛАТ */}
                                     <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
                                         <h3 className="text-xl font-black tracking-tight text-stone-800 mb-6 flex items-center gap-2">Расчет зарплат</h3>
                                         <div className="space-y-3">
@@ -642,7 +753,6 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    {/* БЛОК: ТОП КЛИЕНТОВ */}
                                     <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
                                         <h3 className="text-xl font-black tracking-tight text-stone-800 mb-6 flex items-center gap-2">Топ-5 клиентов</h3>
                                         <div className="space-y-3">
@@ -665,7 +775,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ */}
+                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ (С УМНЫМ РАСПИСАНИЕМ) */}
                         {activeTab === 'profile' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
                                 
@@ -679,10 +789,10 @@ export default function Dashboard() {
                                     <p className="text-[11px] text-rose-100 mt-4 relative z-10 font-bold uppercase tracking-widest">Разместите эту ссылку в Instagram, WhatsApp, VK или Telegram.</p>
                                 </div>
 
-                                <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm">
+                                <div className="bg-white p-6 md:p-8 rounded-[40px] border border-stone-200 shadow-sm">
                                     <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Настройки кабинета</h2>
                                     
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 mb-8">
                                         <div className="space-y-6">
                                             <div className="space-y-2">
                                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название (для шапки сайта)</label>
@@ -696,33 +806,11 @@ export default function Dashboard() {
                                                     <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="v8-auto" className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pr-4 pl-20 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                                                 </div>
                                             </div>
-                                            
-                                            <div className="space-y-2 pt-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block ml-1 mb-2">Рабочие дни</label>
-                                                <div className="flex justify-between gap-1.5 sm:gap-2">
-                                                    {DAYS.map((d) => (
-                                                        <button key={d.id} onClick={() => toggleDay(d.id)} className={`flex-1 py-3.5 sm:py-4 rounded-2xl text-[11px] sm:text-xs font-black transition-all active:scale-95 ${!disabledDays.includes(d.id) ? "bg-emerald-400 text-white shadow-md shadow-emerald-400/20" : "bg-stone-100 text-stone-400 hover:bg-stone-200"}`}>{d.label}</button>
-                                                    ))}
-                                                </div>
-                                            </div>
                                         </div>
-                                        
-                                        <div className="space-y-6 lg:border-l lg:border-stone-100 lg:pl-12">
-                                            <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest"><Clock className="w-4 h-4 text-rose-400"/> Расписание</h3>
-                                            
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] text-stone-400 font-bold uppercase tracking-widest ml-1">Начало работы</label>
-                                                    <input type="time" value={workStartTime} onChange={e => setWorkStartTime(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl p-4 text-base font-black outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 text-center transition-all shadow-sm hover:border-rose-300" />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] text-stone-400 font-bold uppercase tracking-widest ml-1">Конец работы</label>
-                                                    <input type="time" value={workEndTime} onChange={e => setWorkEndTime(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl p-4 text-base font-black outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 text-center transition-all shadow-sm hover:border-rose-300" />
-                                                </div>
-                                            </div>
 
+                                        <div className="space-y-6 lg:border-l lg:border-stone-100 lg:pl-12">
                                             <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Сетка времени</label>
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Сетка времени на сайте</label>
                                                 <div className="relative">
                                                     <select value={scheduleStep} onChange={e => setScheduleStep(Number(e.target.value))} className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none transition-all cursor-pointer hover:bg-stone-100">
                                                         <option value={15}>Каждые 15 минут</option>
@@ -734,7 +822,7 @@ export default function Dashboard() {
                                             </div>
 
                                             <div className="space-y-3 pt-4 border-t border-stone-100">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Coffee className="w-3 h-3"/> Перерывы</label>
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Coffee className="w-3 h-3"/> Перерывы (Ежедневные)</label>
                                                 {breaks.map((br, idx) => (
                                                     <div key={idx} className="flex items-center gap-3 bg-stone-50 border border-stone-200 p-3 rounded-2xl shadow-sm">
                                                         <span className="flex-1 font-black text-stone-800 text-center tracking-wider">{br.start} — {br.end}</span>
@@ -749,6 +837,40 @@ export default function Dashboard() {
                                                     <button onClick={handleAddBreak} className="bg-stone-800 text-white p-3 rounded-xl font-bold active:scale-95 transition-all shadow-sm hover:bg-black"><Plus className="w-5 h-5"/></button>
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    {/* УМНОЕ РАСПИСАНИЕ ПО ДНЯМ */}
+                                    <div className="pt-8 border-t border-stone-100">
+                                        <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-6"><Clock className="w-4 h-4 text-rose-400"/> Рабочие часы по дням недели</h3>
+                                        <div className="space-y-4">
+                                            {DAYS.map(day => {
+                                                const config = weeklySettings[day.id] || { start: "09:00", end: "18:00", active: false };
+                                                return (
+                                                    <div key={day.id} className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-[24px] border transition-all ${config.active ? 'bg-rose-50/30 border-rose-100 shadow-sm' : 'bg-stone-50 border-stone-100 opacity-60'}`}>
+                                                        <div className="flex items-center gap-4 mb-4 md:mb-0">
+                                                            <button 
+                                                                onClick={() => setWeeklySettings({...weeklySettings, [day.id]: {...config, active: !config.active}})}
+                                                                className={`w-12 h-6 rounded-full transition-all relative ${config.active ? 'bg-rose-400' : 'bg-stone-300'}`}
+                                                            >
+                                                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${config.active ? 'left-7' : 'left-1'}`}></div>
+                                                            </button>
+                                                            <div>
+                                                                <p className="font-black text-stone-900 uppercase tracking-widest text-xs">{day.label}</p>
+                                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{config.active ? 'Рабочий день' : 'Выходной'}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        {config.active && (
+                                                            <div className="flex items-center gap-3">
+                                                                <input type="time" value={config.start} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, start: e.target.value}})} className="bg-white border border-stone-200 rounded-xl p-2.5 text-sm font-black text-stone-900 shadow-sm outline-none focus:border-rose-400" />
+                                                                <div className="w-2 h-0.5 bg-stone-300"></div>
+                                                                <input type="time" value={config.end} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, end: e.target.value}})} className="bg-white border border-stone-200 rounded-xl p-2.5 text-sm font-black text-stone-900 shadow-sm outline-none focus:border-rose-400" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
@@ -777,11 +899,10 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    <div className="mt-8 pt-8 border-t border-stone-100">
-                                        <button onClick={handleSaveProfile} disabled={saving} className="w-full md:w-auto md:min-w-[240px] md:float-right bg-stone-900 text-white py-4 px-8 rounded-2xl font-black text-base shadow-lg shadow-stone-900/20 active:scale-[0.98] transition-all flex items-center justify-center hover:bg-black">
+                                    <div className="mt-10 pt-8 border-t border-stone-100 flex justify-end">
+                                        <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-black">
                                             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить настройки"}
                                         </button>
-                                        <div className="clear-both"></div>
                                     </div>
                                 </div>
                             </div>
@@ -855,23 +976,23 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* РУЧНАЯ ЗАПИСЬ */}
+            {/* РУЧНАЯ ЗАПИСЬ (БЛОКИРОВКА ВРЕМЕНИ) */}
             {showManualModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
                         <button onClick={() => setShowManualModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black tracking-tight mb-8 text-stone-800 flex items-center gap-3"><UserPlus className="w-7 h-7 text-rose-500 bg-rose-50 p-1.5 rounded-xl"/> Новая запись</h2>
                         <form onSubmit={handleAddManualBooking} className="space-y-5">
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Клиент или Описание задачи *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Например: 'Ремонт двигателя'" className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон (если есть)</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="+7 (999) 000-00-00" className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
                             <div>
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга / Задача *</label>
-                                <select required value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="" disabled>Выберите...</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
+                                <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Выбрать из прайса (или оставить пустым)</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
                             </div>
                             {role === 'owner' && (
                                 <div>
                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label>
-                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки (Выполняю я)</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
                                 </div>
                             )}
                             <div className="grid grid-cols-2 gap-4">
@@ -894,13 +1015,13 @@ export default function Dashboard() {
                         <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Детали записи</h2>
                         <div className="space-y-6">
                             <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
-                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент</p>
+                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент / Задача</p>
                                 <p className="text-2xl font-black tracking-tight text-stone-800">{selectedApp.client_name}</p>
                                 <p className="text-sm font-bold text-rose-500 mt-1">{selectedApp.client_phone || "Без номера"}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-6">
                                 <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-base font-bold text-stone-800">{format(new Date(selectedApp.start_time), "d MMMM", { locale: ru })}</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md mt-1">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name}</p></div>
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name || "Свое время"}</p></div>
                             </div>
                             <div className="flex flex-col gap-3 pt-2">
                                 {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-400/30"><CheckCircle2 className="w-6 h-6" /> Завершить (в Архив)</button>}
