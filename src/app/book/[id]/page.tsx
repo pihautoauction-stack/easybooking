@@ -2,8 +2,8 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing } from "lucide-react";
-import { format, setHours, setMinutes, startOfToday, addMinutes, isBefore } from "date-fns";
+import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing, Clock } from "lucide-react";
+import { format, startOfToday } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import { useRouter } from "next/navigation";
@@ -24,7 +24,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     
-    // Данные клиента из памяти браузера
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
     
@@ -46,59 +45,124 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 }
             }
             
-            // Подтягиваем сохраненные данные клиента, если он уже записывался ранее
             setClientName(localStorage.getItem('eb_name') || "");
             setClientPhone(localStorage.getItem('eb_phone') || "");
-            
             setLoading(false);
         };
         fetchData();
     }, [id]);
 
     useEffect(() => {
-        if (!selectedDate || !profile) return;
+        if (!selectedDate || !profile || !selectedService) return;
         setShowWaitlist(false);
         setWaitlistStatus("idle");
 
         const generateSlots = async () => {
-            const slots: string[] = [];
             const now = new Date();
             const startDay = new Date(selectedDate); startDay.setHours(0,0,0,0);
             const endDay = new Date(selectedDate); endDay.setHours(23,59,59,999);
             
-            let query = supabase.from("appointments").select("start_time").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString());
-            if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
+            // Получаем активные записи на этот день с длительностью их услуг
+            let query = supabase.from("appointments")
+                .select("start_time, service:services(duration)")
+                .eq("master_id", profile.id)
+                .gte("start_time", startDay.toISOString())
+                .lte("start_time", endDay.toISOString())
+                .eq("status", "active"); // Учитываем только активные!
             
+            if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
             const { data: busy } = await query;
-            const busyTimes = busy?.map(b => format(new Date(b.start_time), "HH:mm")) || [];
 
-            let current = setMinutes(setHours(selectedDate, profile.work_start_hour || 9), 0);
-            const end = setMinutes(setHours(selectedDate, profile.work_end_hour || 21), 0);
+            // 1. Превращаем занятое время в интервалы [старт в минутах, конец в минутах от начала дня]
+            const busyIntervals = (busy || []).map(b => {
+                const d = new Date(b.start_time);
+                const startMins = d.getHours() * 60 + d.getMinutes();
+                const duration = b.service?.duration || 60; // Если длительности нет, по умолчанию 1 час
+                return { start: startMins, end: startMins + duration };
+            });
 
-            while (isBefore(current, end)) {
-                const timeStr = format(current, "HH:mm");
-                if (isBefore(now, current) && !busyTimes.includes(timeStr)) slots.push(timeStr);
-                current = addMinutes(current, 30);
+            // 2. Достаем перерывы
+            const rawBreaks = typeof profile.breaks === 'string' ? JSON.parse(profile.breaks) : (profile.breaks || []);
+            const breakIntervals = rawBreaks.map((br: any) => {
+                const [sH, sM] = br.start.split(':').map(Number);
+                const [eH, eM] = br.end.split(':').map(Number);
+                return { start: sH * 60 + sM, end: eH * 60 + eM };
+            });
+
+            // 3. Рабочие часы
+            const [wStartH, wStartM] = (profile.work_start_time || "09:00").split(':').map(Number);
+            const [wEndH, wEndM] = (profile.work_end_time || "20:00").split(':').map(Number);
+            const workStartMins = wStartH * 60 + wStartM;
+            const workEndMins = wEndH * 60 + wEndM;
+
+            const step = profile.schedule_step || 30; // Шаг расписания (15, 30, 60)
+            const serviceDuration = selectedService.duration || 60; // Длительность текущей услуги
+
+            const slots: string[] = [];
+            let currentMins = workStartMins;
+
+            const isToday = startDay.toDateString() === now.toDateString();
+            const currentNowMins = now.getHours() * 60 + now.getMinutes();
+
+            // ПРОХОДИМСЯ ПО ВСЕМУ РАБОЧЕМУ ДНЮ ШАГОМ
+            while (currentMins + serviceDuration <= workEndMins) {
+                const slotStart = currentMins;
+                const slotEnd = currentMins + serviceDuration;
+                let isValid = true;
+
+                // Проверка: не прошло ли уже время (если день сегодня)
+                if (isToday && slotStart <= currentNowMins) {
+                    isValid = false;
+                }
+
+                // Проверка: не пересекается ли слот с уже занятыми записями
+                if (isValid) {
+                    for (const b of busyIntervals) {
+                        // Логика пересечения отрезков: (Старт1 < Конец2) И (Конец1 > Старт2)
+                        if (slotStart < b.end && slotEnd > b.start) {
+                            isValid = false; break;
+                        }
+                    }
+                }
+
+                // Проверка: не пересекается ли слот с перерывами (Обед)
+                if (isValid) {
+                    for (const br of breakIntervals) {
+                        if (slotStart < br.end && slotEnd > br.start) {
+                            isValid = false; break;
+                        }
+                    }
+                }
+
+                // Если всё ок - добавляем слот
+                if (isValid) {
+                    const h = Math.floor(slotStart / 60).toString().padStart(2, '0');
+                    const m = (slotStart % 60).toString().padStart(2, '0');
+                    slots.push(`${h}:${m}`);
+                }
+
+                currentMins += step; // Идем дальше на шаг (например, +30 мин)
             }
             setAvailableSlots(slots);
         };
         generateSlots();
-    }, [selectedDate, profile, selectedEmployee]);
+    }, [selectedDate, profile, selectedEmployee, selectedService]);
 
     const handleBooking = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTime || !profile) return;
         setBookingStatus("submitting");
 
-        // Сохраняем данные в браузер на будущее
         localStorage.setItem('eb_name', clientName);
         localStorage.setItem('eb_phone', clientPhone);
 
         const [h, m] = selectedTime.split(":").map(Number);
-        const startTime = setMinutes(setHours(selectedDate!, h), m).toISOString();
+        const startDateTime = new Date(selectedDate!);
+        startDateTime.setHours(h, m, 0, 0);
+        const startTimeStr = startDateTime.toISOString();
 
-        // Проверяем, не заняли ли слот прямо сейчас
-        let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", startTime);
+        // Проверяем конфликты в базе перед самой записью
+        let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", startTimeStr).eq("status", "active");
         if (selectedEmployee) busyQuery = busyQuery.eq("employee_id", selectedEmployee.id);
         const { data: busy } = await busyQuery.maybeSingle();
         
@@ -107,20 +171,18 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
-        // Записываем напрямую в Supabase
         const { error } = await supabase.from("appointments").insert({
             master_id: profile.id,
             service_id: selectedService.id,
             employee_id: selectedEmployee?.id,
             client_name: clientName,
             client_phone: clientPhone,
-            start_time: startTime,
+            start_time: startTimeStr,
             status: 'active'
         });
 
         if (!error) {
             setBookingStatus("success");
-            // Через пару секунд кидаем в "Мои записи"
             setTimeout(() => router.push('/my-bookings'), 2000);
         } else {
             setBookingStatus("error");
@@ -135,7 +197,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         localStorage.setItem('eb_name', clientName);
         localStorage.setItem('eb_phone', clientPhone);
 
-        // Записываем заявку в лист ожидания напрямую в БД
         const { error } = await supabase.from('waitlist').insert({
             master_id: profile.id,
             date: selectedDate.toISOString(),
@@ -160,22 +221,21 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else if (selectedEmployee) setSelectedEmployee(null);
     };
 
-    if (loading) return <div className="min-h-screen bg-[#000000] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#0A84FF]" /></div>;
-    if (!profile) return <div className="min-h-screen bg-[#000000] flex items-center justify-center text-white/50 font-medium">Профиль не найден.</div>;
+    if (loading) return <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>;
+    if (!profile) return <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center text-gray-500 font-medium">Профиль не найден.</div>;
 
     if (bookingStatus === "success") {
         return (
-            <div className="min-h-screen bg-[#000000] flex flex-col items-center justify-center text-white p-6 font-sans text-center antialiased">
-                <div className="w-full max-w-[320px] flex flex-col items-center">
-                    <div className="bg-[#32D74B]/15 p-6 rounded-full mb-6 border border-[#32D74B]/20"><CheckCircle className="w-16 h-16 text-[#32D74B]" /></div>
-                    <h1 className="text-2xl font-semibold mb-3 tracking-tight">Вы успешно записаны</h1>
-                    <p className="text-white/60 mb-10 text-base leading-relaxed">
-                        Ждем вас <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
-                        {selectedEmployee && <><br/><span className="text-[#0A84FF] text-sm mt-2 block font-medium">Специалист: {selectedEmployee.name}</span></>}
+            <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center text-gray-900 p-6 font-sans text-center antialiased">
+                <div className="w-full max-w-[320px] flex flex-col items-center bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100">
+                    <div className="bg-emerald-50 p-6 rounded-full mb-6 border border-emerald-100"><CheckCircle className="w-16 h-16 text-emerald-500" /></div>
+                    <h1 className="text-2xl font-black mb-3 tracking-tight text-gray-900">Вы успешно записаны</h1>
+                    <p className="text-gray-500 mb-8 text-sm font-medium leading-relaxed">
+                        Ждем вас <span className="text-gray-900 font-bold">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
+                        {selectedEmployee && <><br/><span className="text-indigo-600 mt-2 block font-bold">Специалист: {selectedEmployee.name}</span></>}
                     </p>
-                    <div className="space-y-4 w-full">
-                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-[#0A84FF] text-white font-semibold py-4 rounded-2xl active:scale-[0.97] text-base transition-all shadow-[0_4px_14px_0_rgba(10,132,255,0.39)]">Мои записи</button>
-                        <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-semibold py-4 rounded-2xl active:scale-[0.97] text-base transition-all">Новая запись</button>
+                    <div className="space-y-3 w-full">
+                        <button onClick={() => router.push('/my-bookings')} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl active:scale-[0.97] transition-all shadow-md shadow-indigo-600/20">Мои записи</button>
                     </div>
                 </div>
             </div>
@@ -184,12 +244,12 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
     if (waitlistStatus === "success") {
         return (
-            <div className="min-h-screen bg-[#000000] flex flex-col items-center justify-center text-white p-6 font-sans text-center antialiased">
-                <div className="w-full max-w-[320px] flex flex-col items-center">
-                    <div className="bg-[#BF5AF2]/15 p-6 rounded-full mb-6 border border-[#BF5AF2]/20"><BellRing className="w-16 h-16 text-[#BF5AF2]" /></div>
-                    <h1 className="text-2xl font-semibold mb-3 tracking-tight">Вы в листе ожидания</h1>
-                    <p className="text-white/60 mb-10 text-base leading-relaxed">Если появится свободное окно на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>, специалист свяжется с вами.</p>
-                    <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-semibold py-4 rounded-2xl active:scale-[0.97] text-base transition-all">Вернуться в начало</button>
+            <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center text-gray-900 p-6 font-sans text-center antialiased">
+                <div className="w-full max-w-[320px] flex flex-col items-center bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100">
+                    <div className="bg-purple-50 p-6 rounded-full mb-6 border border-purple-100"><BellRing className="w-16 h-16 text-purple-600" /></div>
+                    <h1 className="text-2xl font-black mb-3 tracking-tight text-gray-900">Вы в листе ожидания</h1>
+                    <p className="text-gray-500 mb-8 text-sm font-medium leading-relaxed">Если появится окно на <span className="text-gray-900 font-bold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>, мы свяжемся с вами.</p>
+                    <button onClick={resetBooking} className="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-2xl active:scale-[0.97] transition-all">Вернуться в начало</button>
                 </div>
             </div>
         );
@@ -201,70 +261,79 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     });
 
     return (
-        <div className="min-h-screen bg-[#000000] text-white p-5 font-sans pb-24 selection:bg-[#0A84FF]/30 antialiased">
-            <div className="max-w-md mx-auto w-full">
+        <div className="min-h-screen bg-[#F9FAFB] text-gray-900 p-4 sm:p-5 font-sans pb-24 selection:bg-indigo-100 antialiased">
+            <div className="max-w-md mx-auto w-full space-y-6">
                 
                 {/* HEADER КЛИЕНТА */}
-                <div className="flex items-center gap-3 mb-8 pt-2">
+                <div className="flex items-center gap-3 pt-2">
                     {(selectedEmployee || selectedService || showWaitlist) && (
-                        <button onClick={handleBack} className="p-2.5 bg-[#1C1C1E] rounded-full border border-white/5 active:scale-95 shrink-0 transition-all"><ChevronLeft className="w-5 h-5" /></button>
+                        <button onClick={handleBack} className="p-3 bg-white rounded-full border border-gray-200 shadow-sm active:scale-95 shrink-0 transition-all text-gray-600"><ChevronLeft className="w-5 h-5" /></button>
                     )}
                     <div className="min-w-0 flex-1">
-                        <h1 className="text-xl font-semibold tracking-tight text-white truncate">{profile.business_name}</h1>
-                        <p className="text-[11px] text-[#0A84FF] font-semibold tracking-wider mt-0.5 uppercase">Онлайн-запись</p>
+                        <h1 className="text-xl font-black tracking-tight text-gray-900 truncate">{profile.business_name}</h1>
+                        <p className="text-[11px] text-indigo-600 font-bold tracking-widest mt-0.5 uppercase">Онлайн-запись</p>
                     </div>
-                    <button onClick={() => router.push('/my-bookings')} className="p-3 bg-[#0A84FF]/10 rounded-full active:scale-95 transition-all shrink-0"><CalendarDays className="w-5 h-5 text-[#0A84FF]" /></button>
+                    <button onClick={() => router.push('/my-bookings')} className="p-3 bg-indigo-50 rounded-full border border-indigo-100 active:scale-95 transition-all shrink-0"><CalendarDays className="w-5 h-5 text-indigo-600" /></button>
                 </div>
 
                 {profile.role === 'owner' && !selectedEmployee ? (
                     <div className="space-y-3">
-                        <p className="text-sm text-white/50 mb-3 ml-2 font-medium">Выберите специалиста</p>
+                        <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-3 ml-2 font-bold">1. Выберите специалиста</p>
                         {employees.map((emp) => (
-                            <div key={emp.id} onClick={() => setSelectedEmployee(emp)} className="bg-[#1C1C1E] rounded-[24px] p-5 border border-white/5 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-4">
-                                <div className="w-14 h-14 bg-[#BF5AF2]/10 rounded-full flex items-center justify-center shrink-0"><User className="w-6 h-6 text-[#BF5AF2]" /></div>
-                                <div><h3 className="font-semibold text-base text-white">{emp.name}</h3>{emp.specialty && <p className="text-[12px] text-white/50 font-medium mt-1">{emp.specialty}</p>}</div>
+                            <div key={emp.id} onClick={() => setSelectedEmployee(emp)} className="bg-white rounded-[28px] p-5 border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-4">
+                                <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0 border border-indigo-100"><User className="w-6 h-6 text-indigo-600" /></div>
+                                <div><h3 className="font-bold text-base text-gray-900">{emp.name}</h3>{emp.specialty && <p className="text-xs text-indigo-600 font-bold mt-1">{emp.specialty}</p>}</div>
                             </div>
                         ))}
                     </div>
                 ) : !selectedService ? (
-                    <div className="space-y-3">
-                        {selectedEmployee && <div className="mb-5 bg-[#BF5AF2]/10 p-4 rounded-[20px] text-sm text-[#BF5AF2] font-semibold flex items-center gap-2"><User className="w-5 h-5"/> Мастер: {selectedEmployee.name}</div>}
-                        <p className="text-sm text-white/50 mb-3 ml-2 font-medium">Выберите услугу</p>
+                    <div className="space-y-4">
+                        {selectedEmployee && <div className="bg-indigo-50 p-4 rounded-2xl text-sm text-indigo-600 font-bold flex items-center gap-2 border border-indigo-100 shadow-sm"><User className="w-5 h-5"/> Выбран мастер: {selectedEmployee.name}</div>}
+                        <p className="text-[11px] text-gray-500 uppercase tracking-widest mb-3 ml-2 font-bold">Выберите услугу</p>
                         {filteredServices.map((service) => (
-                            <div key={service.id} onClick={() => setSelectedService(service)} className="bg-[#1C1C1E] rounded-[24px] p-5 border border-white/5 active:scale-[0.98] transition-all cursor-pointer flex flex-col">
-                                <div className="flex justify-between items-center gap-3"><h3 className="font-semibold text-base text-white line-clamp-2 leading-tight">{service.name}</h3><span className="text-white font-semibold bg-white/10 px-3.5 py-1.5 rounded-xl text-sm shrink-0">{service.price} ₽</span></div>
+                            <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white rounded-[32px] p-6 border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] active:scale-[0.98] transition-all cursor-pointer flex flex-col group hover:border-indigo-100">
+                                <div className="flex justify-between items-start gap-4">
+                                    <h3 className="font-bold text-lg text-gray-900 leading-tight group-hover:text-indigo-600 transition-colors">{service.name}</h3>
+                                    <span className="text-gray-900 font-black bg-gray-50 px-3.5 py-1.5 rounded-xl text-base shrink-0 border border-gray-200">{service.price} ₽</span>
+                                </div>
+                                <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 font-bold">
+                                    <Clock className="w-4 h-4" /> {service.duration || 60} мин.
+                                </div>
                                 {service.image_urls && service.image_urls.length > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x mt-4">
-                                        {service.image_urls.map((url: string, idx: number) => (<img key={idx} src={url} alt="Услуга" className="w-24 h-24 object-cover rounded-[16px] shrink-0 snap-center" />))}
+                                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x mt-5">
+                                        {service.image_urls.map((url: string, idx: number) => (<img key={idx} src={url} alt="Услуга" className="w-24 h-24 object-cover rounded-2xl shrink-0 snap-center shadow-sm border border-gray-100" />))}
                                     </div>
                                 )}
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="space-y-5">
-                        <div className="bg-[#1C1C1E] p-5 rounded-[24px] border border-white/5 text-center">
-                            <h3 className="font-semibold text-lg mb-2 text-white">{selectedService.name}</h3>
-                            <p className="text-white font-medium text-sm bg-white/10 inline-block px-3 py-1 rounded-lg">{selectedService.price} ₽</p>
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] flex justify-between items-center gap-4">
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 leading-tight">{selectedService.name}</h3>
+                                <p className="text-gray-500 text-xs font-bold mt-1.5 flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {selectedService.duration || 60} мин.</p>
+                            </div>
+                            <span className="text-gray-900 font-black bg-gray-50 border border-gray-200 px-4 py-2 rounded-2xl text-base">{selectedService.price} ₽</span>
                         </div>
 
                         {!showWaitlist ? (
                             <>
-                                <p className="text-sm text-white/50 ml-2 font-medium">Выберите дату и время</p>
-                                <div className="flex justify-center bg-[#1C1C1E] rounded-[28px] p-5 border border-white/5 overflow-x-auto w-full">
-                                    <style>{`.rdp { --rdp-cell-size: min(12vw, 42px); --rdp-accent-color: #0A84FF; --rdp-background-color: transparent; margin: 0 auto; width: 100%; max-width: 100%; display: flex; justify-content: center; } .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: #0A84FF; color: white; font-weight: 600; border-radius: 12px; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: rgba(255,255,255,0.08); border-radius: 12px; } .rdp-day { border-radius: 12px; font-size: min(4vw, 15px); font-weight: 500; } .rdp-caption_label { font-size: min(4.5vw, 17px); font-weight: 600; } .rdp-head_cell { font-size: min(3.5vw, 13px); font-weight: 500; color: rgba(255,255,255,0.3); }`}</style>
+                                <p className="text-[11px] text-gray-500 uppercase tracking-widest ml-2 font-bold">Выберите дату и время</p>
+                                <div className="bg-white rounded-[32px] p-5 border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] overflow-x-auto w-full flex justify-center">
+                                    <style>{`.rdp { --rdp-cell-size: min(12vw, 42px); --rdp-accent-color: #4F46E5; --rdp-background-color: #F9FAFB; margin: 0 auto; width: 100%; max-width: 100%; display: flex; justify-content: center; font-family: inherit; } .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: var(--rdp-accent-color); color: white; font-weight: 700; border-radius: 12px; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: var(--rdp-background-color); border-radius: 12px; } .rdp-day { border-radius: 12px; font-size: min(4vw, 15px); font-weight: 600; color: #111827; } .rdp-caption_label { font-size: min(4.5vw, 17px); font-weight: 800; color: #111827; } .rdp-head_cell { font-size: min(3.5vw, 13px); font-weight: 700; color: #6B7280; text-transform: uppercase; } .rdp-day_outside { color: #D1D5DB; } .rdp-day_disabled { color: #E5E7EB; opacity: 0.5; }`}</style>
                                     <DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ru} disabled={[{ before: startOfToday() }, { dayOfWeek: profile.disabled_days ? profile.disabled_days.split(',').map(Number) : [] }]} />
                                 </div>
 
                                 {selectedDate && (
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-2 animate-in fade-in slide-in-from-bottom-2">
                                         {availableSlots.length > 0 ? availableSlots.map(t => (
-                                            <button key={t} onClick={() => setSelectedTime(t)} className={`py-3.5 rounded-2xl text-sm font-semibold transition-all ${selectedTime === t ? "bg-[#0A84FF] text-white shadow-[0_4px_14px_0_rgba(10,132,255,0.39)]" : "bg-[#1C1C1E] text-white/70 active:scale-95"}`}>{t}</button>
+                                            <button key={t} onClick={() => setSelectedTime(t)} className={`py-4 rounded-2xl text-sm font-bold transition-all ${selectedTime === t ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-indigo-200 active:scale-95 shadow-sm"}`}>{t}</button>
                                         )) : (
                                             <div className="col-span-3 sm:col-span-4 mt-2">
-                                                <div className="text-center text-[#FF453A] font-medium text-sm py-4 bg-[#FF453A]/10 rounded-2xl mb-3">Мест нет</div>
-                                                <button onClick={() => setShowWaitlist(true)} className="w-full bg-white/5 text-white font-semibold py-4 rounded-2xl active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2">
-                                                    <BellRing className="w-5 h-5 text-[#BF5AF2]" /> Сообщить об окне
+                                                <div className="text-center text-rose-600 font-bold text-sm py-4 bg-rose-50 border border-rose-100 rounded-2xl mb-3 shadow-sm">Нет свободных мест</div>
+                                                <button onClick={() => setShowWaitlist(true)} className="w-full bg-white border border-gray-200 text-gray-900 font-bold py-4 rounded-2xl active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50">
+                                                    <BellRing className="w-5 h-5 text-indigo-600" /> Сообщить, если освободится
                                                 </button>
                                             </div>
                                         )}
@@ -272,26 +341,26 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                 )}
 
                                 {selectedTime && (
-                                    <form onSubmit={handleBooking} className="space-y-4 pt-6 mt-4 border-t border-white/10 animate-in fade-in slide-in-from-bottom-2">
+                                    <form onSubmit={handleBooking} className="space-y-4 pt-6 mt-6 border-t border-gray-200 animate-in fade-in slide-in-from-bottom-2">
                                         <div className="space-y-3">
-                                            <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#0A84FF]/50 transition-all placeholder-white/40" placeholder="Ваше имя" /></div>
-                                            <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#0A84FF]/50 transition-all placeholder-white/40" placeholder="+7 (999) 000-00-00" /></div>
+                                            <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder-gray-400 shadow-sm" placeholder="Ваше имя" /></div>
+                                            <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder-gray-400 shadow-sm" placeholder="+7 (999) 000-00-00" /></div>
                                         </div>
                                         
-                                        {bookingStatus === "conflict" && <p className="text-[#FF453A] text-sm text-center">Это время только что заняли. Выберите другое.</p>}
+                                        {bookingStatus === "conflict" && <p className="text-rose-500 font-bold text-sm text-center bg-rose-50 py-3 rounded-xl border border-rose-100">Это время только что заняли. Выберите другое.</p>}
                                         
-                                        <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-[#0A84FF] text-white font-semibold py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] transition-all disabled:opacity-50">{bookingStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Подтвердить запись"}</button>
+                                        <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50 mt-2">{bookingStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Подтвердить запись"}</button>
                                     </form>
                                 )}
                             </>
                         ) : (
-                            <form onSubmit={handleWaitlist} className="space-y-5 pt-4 border-t border-white/10 animate-in fade-in">
-                                <p className="text-sm text-white/60 mb-2 leading-relaxed">Оставьте контакты, и мы сообщим вам, если освободится место на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>.</p>
+                            <form onSubmit={handleWaitlist} className="space-y-5 pt-6 mt-6 border-t border-gray-200 animate-in fade-in">
+                                <p className="text-sm text-gray-500 font-medium mb-2 leading-relaxed">Оставьте контакты, и мы сообщим вам, если освободится место на <span className="text-gray-900 font-bold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>.</p>
                                 <div className="space-y-3">
-                                    <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#BF5AF2]/50 transition-all placeholder-white/40" placeholder="Ваше имя" /></div>
-                                    <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#BF5AF2]/50 transition-all placeholder-white/40" placeholder="+7 (999) 000-00-00" /></div>
+                                    <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all placeholder-gray-400 shadow-sm" placeholder="Ваше имя" /></div>
+                                    <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all placeholder-gray-400 shadow-sm" placeholder="+7 (999) 000-00-00" /></div>
                                 </div>
-                                <button type="submit" disabled={waitlistStatus === "submitting"} className="w-full bg-white/10 text-white font-semibold py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 transition-all disabled:opacity-50">{waitlistStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Встать в лист ожидания"}</button>
+                                <button type="submit" disabled={waitlistStatus === "submitting"} className="w-full bg-purple-600 text-white font-bold py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md shadow-purple-600/20 mt-2">{waitlistStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Встать в лист ожидания"}</button>
                             </form>
                         )}
                     </div>

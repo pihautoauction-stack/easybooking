@@ -4,15 +4,22 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "EasyBooking",
   description: "Онлайн-запись для специалистов",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "EasyBooking",
+  },
+  icons: {
+    apple: '/icon-192.png', // Иконка для iPhone
+  }
 };
 
-// Жесткая фиксация масштаба экрана (блокировка зума для мобилок)
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#000000", 
+  themeColor: "#F9FAFB", // Светлый премиальный фон
 };
 
 export default function RootLayout({
@@ -22,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className="bg-[#000000] text-white antialiased">
+      <body className="bg-[#F9FAFB] text-gray-900 antialiased">
         {children}
       </body>
     </html>
