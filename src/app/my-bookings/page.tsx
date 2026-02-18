@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Calendar, Briefcase, Trash2, CalendarX2, ChevronLeft } from "lucide-react";
+import { Loader2, CalendarX2, Briefcase, Trash2, ChevronLeft, Phone, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRouter } from "next/navigation";
@@ -10,32 +10,29 @@ import { useRouter } from "next/navigation";
 export default function MyBookings() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
+    const [phone, setPhone] = useState("");
+    const [isPhoneSet, setIsPhoneSet] = useState(false);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
 
     useEffect(() => {
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-            tg.ready();
-            tg.expand();
-            if (tg.setHeaderColor) tg.setHeaderColor('#000000');
-            if (tg.setBackgroundColor) tg.setBackgroundColor('#000000');
-            
-            const tgId = tg.initDataUnsafe?.user?.id?.toString();
-            if (tgId) {
-                loadBookings(tgId);
-            } else {
-                setLoading(false);
-            }
+        // Проверяем память браузера на наличие номера телефона клиента
+        const savedPhone = localStorage.getItem('eb_phone');
+        if (savedPhone) {
+            setPhone(savedPhone);
+            setIsPhoneSet(true);
+            loadBookings(savedPhone);
         } else {
             setLoading(false);
         }
     }, []);
 
-    const loadBookings = async (tgId: string) => {
+    const loadBookings = async (targetPhone: string) => {
+        setLoading(true);
+        // Ищем будущие записи по номеру телефона
         const { data } = await supabase.from("appointments")
-            .select("id, start_time, client_name, service:services(name, price), master:profiles(business_name, telegram_chat_id)")
-            .eq("client_tg_id", tgId)
+            .select("id, start_time, client_name, service:services(name, price), master:profiles(business_name)")
+            .eq("client_phone", targetPhone)
             .gte("start_time", new Date().toISOString())
             .order("start_time", { ascending: true });
             
@@ -43,33 +40,37 @@ export default function MyBookings() {
         setLoading(false);
     };
 
+    const handleSetPhone = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (phone.length < 5) return;
+        
+        localStorage.setItem('eb_phone', phone);
+        setIsPhoneSet(true);
+        loadBookings(phone);
+    };
+
     const handleCancel = async (app: any) => {
-        if (!confirm("Вы уверены, что хотите отменить запись?")) return;
+        if (!confirm("Вы уверены, что хотите отменить эту запись?")) return;
         setCancellingId(app.id);
 
         try {
-            const res = await fetch('/api/notify/cancel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    appointmentId: app.id,
-                    masterChatId: app.master?.telegram_chat_id,
-                    serviceName: app.service?.name,
-                    startTime: app.start_time,
-                    clientName: app.client_name
-                }),
-            });
-
-            if (!res.ok) throw new Error("База данных отклонила запрос");
+            // Удаляем запись напрямую из БД
+            const { error } = await supabase.from('appointments').delete().eq('id', app.id);
+            if (error) throw error;
 
             setAppointments(prev => prev.filter(a => a.id !== app.id));
-            if (window.Telegram?.WebApp?.showPopup) {
-                window.Telegram.WebApp.showPopup({ message: "Запись успешно отменена" });
-            }
         } catch (error: any) {
-            alert("Ошибка: " + error.message);
+            alert("Ошибка при отмене: " + error.message);
         } finally {
             setCancellingId(null);
+        }
+    };
+
+    const handleLogout = () => {
+        if (confirm("Выйти из профиля?")) {
+            localStorage.removeItem('eb_phone');
+            localStorage.removeItem('eb_name');
+            window.location.reload();
         }
     };
 
@@ -78,6 +79,42 @@ export default function MyBookings() {
             <Loader2 className="w-8 h-8 animate-spin text-[#0A84FF]" />
         </div>
     );
+
+    // Экран входа по номеру телефона (если телефон не сохранен в браузере)
+    if (!isPhoneSet) {
+        return (
+            <div className="min-h-screen bg-[#000000] p-6 flex flex-col items-center justify-center text-white antialiased">
+                <div className="w-16 h-16 bg-[#1C1C1E] rounded-2xl mb-8 border border-white/10 flex items-center justify-center shadow-lg">
+                    <span className="font-bold text-[#0A84FF] text-xl">EB</span>
+                </div>
+                
+                <form onSubmit={handleSetPhone} className="bg-[#1C1C1E] p-8 rounded-[32px] w-full max-w-sm border border-white/5 shadow-2xl">
+                    <h2 className="text-2xl font-bold mb-2 tracking-tight">Мои записи</h2>
+                    <p className="text-sm text-white/50 mb-8 font-medium">Введите номер телефона, который вы указывали при бронировании</p>
+                    
+                    <div className="relative mb-6">
+                        <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                        <input 
+                            required 
+                            type="tel" 
+                            placeholder="+7 (999) 000-00-00" 
+                            value={phone} 
+                            onChange={e => setPhone(e.target.value)} 
+                            className="w-full bg-[#000000]/40 border border-white/5 pl-14 pr-5 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#0A84FF]/50 transition-all text-base font-medium" 
+                        />
+                    </div>
+                    
+                    <button type="submit" className="w-full bg-[#0A84FF] text-white py-4 rounded-2xl font-semibold active:scale-[0.97] transition-all shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] text-base">
+                        Найти визиты
+                    </button>
+                    
+                    <button type="button" onClick={() => router.push('/login')} className="w-full text-[11px] text-white/30 hover:text-white/60 uppercase tracking-widest transition-colors font-semibold mt-8">
+                        Вход для специалистов
+                    </button>
+                </form>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#000000] text-white p-5 font-sans pb-24 selection:bg-[#0A84FF]/30 antialiased">
@@ -90,8 +127,11 @@ export default function MyBookings() {
                     </button>
                     <div className="min-w-0 flex-1">
                         <h1 className="text-xl font-semibold tracking-tight text-white truncate">Ваши записи</h1>
-                        <p className="text-[11px] text-white/50 font-semibold tracking-wider mt-0.5 uppercase">Кабинет клиента</p>
+                        <p className="text-[10px] text-[#32D74B] font-bold tracking-wider mt-0.5 uppercase bg-[#32D74B]/10 inline-block px-2 py-0.5 rounded">Номер: {phone}</p>
                     </div>
+                    <button onClick={handleLogout} className="p-2.5 bg-[#FF453A]/10 text-[#FF453A] rounded-full border border-[#FF453A]/20 active:scale-95 shrink-0 transition-all">
+                        <LogOut className="w-5 h-5" />
+                    </button>
                 </div>
 
                 <div className="space-y-4">
@@ -104,30 +144,35 @@ export default function MyBookings() {
                         </div>
                     ) : appointments.map(app => (
                         <div key={app.id} className="bg-[#1C1C1E] rounded-[24px] p-5 border border-white/10 relative overflow-hidden group">
-                            <div className="flex justify-between items-start mb-4">
+                            {/* Декоративный блик */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#0A84FF]/5 blur-3xl rounded-full pointer-events-none"></div>
+
+                            <div className="flex justify-between items-start mb-4 relative z-10">
                                 <div>
-                                    <div className="text-white font-semibold text-3xl tracking-tight leading-none mb-1.5">{format(new Date(app.start_time), "HH:mm")}</div>
+                                    <div className="text-[#0A84FF] font-semibold text-3xl tracking-tight leading-none mb-1.5">{format(new Date(app.start_time), "HH:mm")}</div>
                                     <div className="text-white/60 text-[11px] font-semibold uppercase tracking-wider">
                                         {format(new Date(app.start_time), "d MMMM", { locale: ru })}
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-white font-semibold text-sm truncate max-w-[140px] bg-white/10 px-3 py-1.5 rounded-xl">
+                                    <div className="text-white font-semibold text-xs truncate max-w-[140px] bg-white/10 px-3 py-1.5 rounded-xl border border-white/5">
                                         {app.master?.business_name || "Специалист"}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex justify-between items-center text-sm font-medium text-white/70 bg-white/5 p-4 rounded-2xl border border-white/5 mb-4">
+                            <div className="flex justify-between items-center text-sm font-medium text-white/70 bg-black/30 p-4 rounded-2xl border border-white/5 mb-4 relative z-10">
                                 <div className="flex items-center gap-2 truncate pr-2">
-                                    <Briefcase className="w-4 h-4 text-white/40 shrink-0" />
-                                    <span className="truncate">{app.service?.name}</span>
+                                    <div className="w-8 h-8 bg-[#0A84FF]/10 rounded-lg flex items-center justify-center shrink-0">
+                                        <Briefcase className="w-4 h-4 text-[#0A84FF]" />
+                                    </div>
+                                    <span className="truncate font-semibold text-white">{app.service?.name}</span>
                                 </div>
-                                <span className="font-semibold text-white shrink-0">{app.service?.price} ₽</span>
+                                <span className="font-semibold text-[#32D74B] shrink-0">{app.service?.price} ₽</span>
                             </div>
 
-                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-transparent text-[#FF453A] font-semibold py-4 rounded-2xl border border-[#FF453A]/20 hover:bg-[#FF453A]/10 active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-                                {cancellingId === app.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Отменить запись <Trash2 className="w-4 h-4" /></>}
+                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-transparent text-[#FF453A] font-semibold py-4 rounded-2xl border border-[#FF453A]/20 hover:bg-[#FF453A]/10 active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 relative z-10">
+                                {cancellingId === app.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Отменить визит <Trash2 className="w-4 h-4" /></>}
                             </button>
                         </div>
                     ))}

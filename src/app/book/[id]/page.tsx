@@ -24,6 +24,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     
+    // Данные клиента из памяти браузера
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
     
@@ -44,6 +45,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     setEmployees(empData || []);
                 }
             }
+            
+            // Подтягиваем сохраненные данные клиента, если он уже записывался ранее
+            setClientName(localStorage.getItem('eb_name') || "");
+            setClientPhone(localStorage.getItem('eb_phone') || "");
+            
             setLoading(false);
         };
         fetchData();
@@ -84,22 +90,41 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         if (!selectedTime || !profile) return;
         setBookingStatus("submitting");
 
+        // Сохраняем данные в браузер на будущее
+        localStorage.setItem('eb_name', clientName);
+        localStorage.setItem('eb_phone', clientPhone);
+
         const [h, m] = selectedTime.split(":").map(Number);
         const startTime = setMinutes(setHours(selectedDate!, h), m).toISOString();
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        const clientTgId = tgUser?.id?.toString() || null;
 
-        const res = await fetch('/api/notify', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                masterId: profile.id, serviceId: selectedService.id, employeeId: selectedEmployee?.id, 
-                employeeName: selectedEmployee?.name, clientName, clientPhone, startTime, clientTgId 
-            }),
+        // Проверяем, не заняли ли слот прямо сейчас
+        let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", startTime);
+        if (selectedEmployee) busyQuery = busyQuery.eq("employee_id", selectedEmployee.id);
+        const { data: busy } = await busyQuery.maybeSingle();
+        
+        if (busy) {
+            setBookingStatus("conflict");
+            return;
+        }
+
+        // Записываем напрямую в Supabase
+        const { error } = await supabase.from("appointments").insert({
+            master_id: profile.id,
+            service_id: selectedService.id,
+            employee_id: selectedEmployee?.id,
+            client_name: clientName,
+            client_phone: clientPhone,
+            start_time: startTime,
+            status: 'active'
         });
 
-        if (res.status === 409) setBookingStatus("conflict");
-        else if (res.ok) setBookingStatus("success");
-        else setBookingStatus("error");
+        if (!error) {
+            setBookingStatus("success");
+            // Через пару секунд кидаем в "Мои записи"
+            setTimeout(() => router.push('/my-bookings'), 2000);
+        } else {
+            setBookingStatus("error");
+        }
     };
 
     const handleWaitlist = async (e: React.FormEvent) => {
@@ -107,24 +132,24 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         if (!profile || !selectedDate) return;
         setWaitlistStatus("submitting");
 
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        const clientTgId = tgUser?.id?.toString() || null;
+        localStorage.setItem('eb_name', clientName);
+        localStorage.setItem('eb_phone', clientPhone);
 
-        const res = await fetch('/api/waitlist', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                masterId: profile.id, date: selectedDate.toISOString(),
-                clientName, clientPhone, clientTgId
-            }),
+        // Записываем заявку в лист ожидания напрямую в БД
+        const { error } = await supabase.from('waitlist').insert({
+            master_id: profile.id,
+            date: selectedDate.toISOString(),
+            client_name: clientName,
+            client_phone: clientPhone
         });
 
-        if (res.ok) setWaitlistStatus("success");
+        if (!error) setWaitlistStatus("success");
         else alert("Ошибка. Попробуйте позже.");
     };
 
     const resetBooking = () => {
         setBookingStatus("idle"); setSelectedEmployee(null); setSelectedService(null);
-        setSelectedDate(undefined); setSelectedTime(null); setClientName(""); setClientPhone("");
+        setSelectedDate(undefined); setSelectedTime(null);
         setShowWaitlist(false); setWaitlistStatus("idle");
     };
 
@@ -163,7 +188,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 <div className="w-full max-w-[320px] flex flex-col items-center">
                     <div className="bg-[#BF5AF2]/15 p-6 rounded-full mb-6 border border-[#BF5AF2]/20"><BellRing className="w-16 h-16 text-[#BF5AF2]" /></div>
                     <h1 className="text-2xl font-semibold mb-3 tracking-tight">Вы в листе ожидания</h1>
-                    <p className="text-white/60 mb-10 text-base leading-relaxed">Мы сообщим вам в Telegram, если освободится место на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>.</p>
+                    <p className="text-white/60 mb-10 text-base leading-relaxed">Если появится свободное окно на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>, специалист свяжется с вами.</p>
                     <button onClick={resetBooking} className="w-full bg-white/5 text-white/70 font-semibold py-4 rounded-2xl active:scale-[0.97] text-base transition-all">Вернуться в начало</button>
                 </div>
             </div>
@@ -252,13 +277,16 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                             <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#0A84FF]/50 transition-all placeholder-white/40" placeholder="Ваше имя" /></div>
                                             <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#0A84FF]/50 transition-all placeholder-white/40" placeholder="+7 (999) 000-00-00" /></div>
                                         </div>
+                                        
+                                        {bookingStatus === "conflict" && <p className="text-[#FF453A] text-sm text-center">Это время только что заняли. Выберите другое.</p>}
+                                        
                                         <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-[#0A84FF] text-white font-semibold py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(10,132,255,0.39)] transition-all disabled:opacity-50">{bookingStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Подтвердить запись"}</button>
                                     </form>
                                 )}
                             </>
                         ) : (
                             <form onSubmit={handleWaitlist} className="space-y-5 pt-4 border-t border-white/10 animate-in fade-in">
-                                <p className="text-sm text-white/60 mb-2 leading-relaxed">Оставьте контакты, и мы напишем в Telegram, если освободится место на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>.</p>
+                                <p className="text-sm text-white/60 mb-2 leading-relaxed">Оставьте контакты, и мы сообщим вам, если освободится место на <span className="text-white font-semibold">{format(selectedDate!, "d MMMM", { locale: ru })}</span>.</p>
                                 <div className="space-y-3">
                                     <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#BF5AF2]/50 transition-all placeholder-white/40" placeholder="Ваше имя" /></div>
                                     <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-medium text-white outline-none focus:ring-2 focus:ring-[#BF5AF2]/50 transition-all placeholder-white/40" placeholder="+7 (999) 000-00-00" /></div>
