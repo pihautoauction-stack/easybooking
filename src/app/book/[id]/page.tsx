@@ -68,7 +68,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 .eq("master_id", profile.id)
                 .gte("start_time", startDay.toISOString())
                 .lte("start_time", endDay.toISOString())
-                .eq("status", "active"); // Учитываем только активные!
+                .eq("status", "active");
             
             if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
             const { data: busy } = await query;
@@ -77,7 +77,13 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             const busyIntervals = (busy || []).map(b => {
                 const d = new Date(b.start_time);
                 const startMins = d.getHours() * 60 + d.getMinutes();
-                const duration = b.service?.duration || 60; // Если длительности нет, по умолчанию 1 час
+                
+                // ИСПРАВЛЕНИЕ ОШИБКИ TYPESCRIPT (приводим к типу any)
+                const serviceData = b.service as any;
+                
+                // Если данные пришли массивом (иногда Supabase так делает), берем первый элемент, иначе берем объект
+                const duration = (Array.isArray(serviceData) ? serviceData[0]?.duration : serviceData?.duration) || 60;
+                
                 return { start: startMins, end: startMins + duration };
             });
 
@@ -118,7 +124,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 // Проверка: не пересекается ли слот с уже занятыми записями
                 if (isValid) {
                     for (const b of busyIntervals) {
-                        // Логика пересечения отрезков: (Старт1 < Конец2) И (Конец1 > Старт2)
                         if (slotStart < b.end && slotEnd > b.start) {
                             isValid = false; break;
                         }
