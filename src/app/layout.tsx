@@ -1,17 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "EasyBooking",
-  description: "Система онлайн-записи",
+  description: "Запись клиентов в Telegram",
 };
 
+// Жесткая фиксация масштаба экрана (блокировка зума для iOS/Android)
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#000000",
+  themeColor: "#000000", // Идеальный черный цвет для шторки iOS
 };
 
 export default function RootLayout({
@@ -21,7 +23,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <body className="bg-[#000000] text-white antialiased overflow-x-hidden">
+      <body className="bg-[#000000] text-white antialiased">
+        <Script 
+          src="https://telegram.org/js/telegram-web-app.js" 
+          strategy="beforeInteractive" 
+        />
         {children}
       </body>
     </html>
