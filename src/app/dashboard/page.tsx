@@ -6,22 +6,23 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight
+    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, 
+    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
 
-type Tab = 'appointments' | 'services' | 'clients' | 'analytics' | 'profile';
+type Tab = 'appointments' | 'services' | 'clients' | 'inventory' | 'analytics' | 'profile';
 
 const NAV_ITEMS = [
     { id: 'appointments', icon: CalendarDays, label: 'Записи' },
-    { id: 'services', icon: Briefcase, label: 'Услуги' },
+    { id: 'services', icon: ListTree, label: 'Прайс' },
     { id: 'clients', icon: Users, label: 'Клиенты' },
+    { id: 'inventory', icon: Package, label: 'Склад' },
     { id: 'analytics', icon: BarChart3, label: 'Финансы' },
     { id: 'profile', icon: UserCircle, label: 'Настройки' }
 ];
 
-// Умная генерация цветов для карточек на основе ID услуги или мастера
 const getServiceColor = (id: string | undefined) => {
     if (!id) return { border: 'border-l-stone-400', badge: 'bg-stone-100 text-stone-600' };
     const colors = [
@@ -45,57 +46,53 @@ export default function Dashboard() {
 
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
     const [journalView, setJournalView] = useState<'active' | 'archive'>('active');
-
-    // ПЛАНИРОВЩИК (НАВИГАЦИЯ ПО ДНЯМ)
     const [viewDate, setViewDate] = useState(startOfToday());
 
-    // Настройки профиля
+    // Профиль
     const [role, setRole] = useState("solo");
     const [businessName, setBusinessName] = useState("");
     const [username, setUsername] = useState("");
     const [weeklySettings, setWeeklySettings] = useState<any>({});
-    
-    // Оставляем для совместимости
-    const [workStartTime, setWorkStartTime] = useState("09:00");
-    const [workEndTime, setWorkEndTime] = useState("20:00");
-    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
-
     const [scheduleStep, setScheduleStep] = useState(30);
     const [breaks, setBreaks] = useState<{start: string, end: string}[]>([]);
-    
     const [newBreakStart, setNewBreakStart] = useState("13:00");
     const [newBreakEnd, setNewBreakEnd] = useState("14:00");
     
+    // Данные
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [clients, setClients] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]); 
+    const [inventory, setInventory] = useState<any[]>([]); 
     
-    const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [saving, setSaving] = useState(false);
+    const [clientSearchQuery, setClientSearchQuery] = useState("");
+    const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     
-    // Форма услуги
+    // Форма Услуги (с Категорией)
+    const [newCategory, setNewCategory] = useState("Общие");
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
     const [newDuration, setNewDuration] = useState("60");
     const [newServiceEmpId, setNewServiceEmpId] = useState(""); 
     const [addingService, setAddingService] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
     
+    // Редактирование услуги
+    const [selectedService, setSelectedService] = useState<any>(null);
+    const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
+
     // Форма сотрудника
     const [newEmpName, setNewEmpName] = useState("");
     const [newEmpSpec, setNewEmpSpec] = useState("");
     const [newEmpCommission, setNewEmpCommission] = useState("50"); 
     const [addingEmp, setAddingEmp] = useState(false);
 
-    const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
-    const [selectedApp, setSelectedApp] = useState<any>(null);
-    const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
-
     // ПОРТФОЛИО
     const [portfolioUrls, setPortfolioUrls] = useState<string[]>([]);
     const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
 
-    // РУЧНАЯ ЗАПИСЬ
+    // ЗАПИСИ
     const [showManualModal, setShowManualModal] = useState(false);
     const [manualName, setManualName] = useState("");
     const [manualPhone, setManualPhone] = useState("");
@@ -104,18 +101,31 @@ export default function Dashboard() {
     const [manualDate, setManualDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [manualTime, setManualTime] = useState("12:00");
     const [addingManual, setAddingManual] = useState(false);
+    const [selectedApp, setSelectedApp] = useState<any>(null);
 
     // CRM
     const [selectedClient, setSelectedClient] = useState<any>(null);
     const [clientNote, setClientNote] = useState("");
     const [savingNote, setSavingNote] = useState(false);
 
+    // СКЛАД (INVENTORY)
+    const [showInvModal, setShowInvModal] = useState(false);
+    const [invName, setInvName] = useState("");
+    const [invSku, setInvSku] = useState("");
+    const [invUnit, setInvUnit] = useState("шт");
+    const [invQty, setInvQty] = useState("0");
+    const [invCritical, setInvCritical] = useState("5");
+    const [invCost, setInvCost] = useState("0");
+    const [addingInv, setAddingInv] = useState(false);
+
+    // Расходники при завершении визита
+    const [usedMaterials, setUsedMaterials] = useState<{id: string, qty: number}[]>([]);
+
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
-    // Инициализация
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session?.user) { setUser(session.user); loadData(session.user.id); } 
@@ -132,30 +142,8 @@ export default function Dashboard() {
         };
 
         init();
-
-        return () => {
-            subscription.unsubscribe();
-        };
+        return () => subscription.unsubscribe();
     }, [router]);
-
-    useEffect(() => {
-        if (!user?.id) return;
-        const channel = supabase.channel('public:appointments')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => { loadData(user.id, true); }).subscribe();
-        const handleVisibilityChange = () => { if (document.visibilityState === 'visible') loadData(user.id, true); };
-        const handleFocus = () => loadData(user.id, true);
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        window.addEventListener("focus", handleFocus);
-        const silentInterval = setInterval(() => { loadData(user.id, true); }, 15000);
-
-        return () => {
-            supabase.removeChannel(channel);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-            window.removeEventListener("focus", handleFocus);
-            clearInterval(silentInterval);
-        };
-    }, [user?.id]);
 
     const loadData = async (userId: string, isSilent = false) => {
         if (!isSilent) setIsSyncing(true);
@@ -165,10 +153,7 @@ export default function Dashboard() {
                 setRole(p.role || "solo");
                 setBusinessName(p.business_name || "");
                 setUsername(p.username || "");
-                if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
-                if (p.work_start_time) setWorkStartTime(p.work_start_time);
-                if (p.work_end_time) setWorkEndTime(p.work_end_time);
-                if (p.schedule_step) setScheduleStep(p.schedule_step);
+                setScheduleStep(p.schedule_step || 30);
                 if (p.breaks) setBreaks(typeof p.breaks === 'string' ? JSON.parse(p.breaks) : p.breaks || []);
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
                 if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
@@ -179,10 +164,13 @@ export default function Dashboard() {
             
             const { data: e } = await supabase.from("employees").select("*").eq("salon_id", userId).order('created_at');
             setEmployees(e || []);
+
+            const { data: inv } = await supabase.from("inventory").select("*").eq("user_id", userId).order('name');
+            setInventory(inv || []);
             
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, service:services(name, price, duration), employee:employees(name)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, service:services(name, price, duration), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
 
@@ -201,7 +189,6 @@ export default function Dashboard() {
         try {
             const { error } = await supabase.from("profiles").upsert({
                 id: user.id, business_name: businessName, username: cleanUsername || null, 
-                disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime,
                 schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls, 
                 weekly_settings: weeklySettings, updated_at: new Date(),
             });
@@ -214,144 +201,171 @@ export default function Dashboard() {
         } finally { setSaving(false); }
     };
 
-    const handleUploadPortfolioImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (!file) return; 
-        setUploadingPortfolio(true);
-        try {
-            const fileName = `portfolio_${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
-            const filePath = `${user.id}/${fileName}`;
-            await supabase.storage.from('gallery').upload(filePath, file);
-            const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
-            const newUrls = [...portfolioUrls, data.publicUrl];
-            setPortfolioUrls(newUrls);
-            await supabase.from('profiles').update({ portfolio_urls: newUrls }).eq('id', user.id);
-        } catch (err: any) { alert("Ошибка загрузки: " + err.message); } finally { setUploadingPortfolio(false); }
-    };
-
-    const handleRemovePortfolioImage = async (urlToRemove: string) => {
-        if (!confirm("Удалить фото из портфолио?")) return;
-        const newUrls = portfolioUrls.filter(url => url !== urlToRemove);
-        setPortfolioUrls(newUrls);
-        await supabase.from('profiles').update({ portfolio_urls: newUrls }).eq('id', user.id);
-    };
-
-    const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
-    const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
-
+    // ФУНКЦИИ УСЛУГ И КАТЕГОРИЙ
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
-        const insertData: any = { user_id: user.id, name: newName, price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
+        const insertData: any = { user_id: user.id, name: newName, category: newCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
         if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
         await supabase.from("services").insert(insertData);
         setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); await loadData(user.id); setAddingService(false);
     };
 
-    const handleDeleteService = async (id: string) => { if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); await loadData(user.id); } };
-    
-    const handleAddEmployee = async () => {
-        if (!newEmpName) return; setAddingEmp(true);
-        await supabase.from("employees").insert({ 
-            salon_id: user.id, 
-            name: newEmpName, 
-            specialty: newEmpSpec,
-            commission_rate: Number(newEmpCommission) || 50
+    const handleDeleteService = async (id: string) => { 
+        if (confirm("Удалить эту услугу?")) { 
+            await supabase.from("services").delete().eq("id", id); 
+            setSelectedService(null);
+            await loadData(user.id); 
+        } 
+    };
+
+    const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
+
+    const filteredServicesList = services.filter(s => s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) || s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase()));
+    const groupedServices = filteredServicesList.reduce((acc, curr) => {
+        const cat = curr.category || 'Общие';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(curr);
+        return acc;
+    }, {} as Record<string, any[]>);
+
+    // ФУНКЦИИ СКЛАДА
+    const handleAddInventory = async (e: React.FormEvent) => {
+        e.preventDefault(); setAddingInv(true);
+        try {
+            await supabase.from("inventory").insert({
+                user_id: user.id, name: invName, sku: invSku, unit: invUnit, 
+                quantity: Number(invQty), critical_level: Number(invCritical), cost_price: Number(invCost)
+            });
+            setShowInvModal(false); setInvName(""); setInvSku(""); setInvQty("0"); setInvCost("0");
+            await loadData(user.id, true);
+        } catch(err) { alert("Ошибка сохранения"); } finally { setAddingInv(false); }
+    };
+
+    const handleAdjustInventory = async (item: any, type: 'add' | 'deduct') => {
+        const amountStr = prompt(`Введите количество для ${type === 'add' ? 'прихода' : 'списания'} (${item.unit}):`, "1");
+        if (!amountStr) return;
+        const amount = Number(amountStr);
+        if (isNaN(amount) || amount <= 0) return alert("Неверное количество");
+        
+        const newQty = type === 'add' ? item.quantity + amount : item.quantity - amount;
+        
+        await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
+        await supabase.from('inventory_transactions').insert({
+            inventory_id: item.id, user_id: user.id, change_amount: type === 'add' ? amount : -amount, type: type === 'add' ? 'manual_add' : 'manual_deduct'
         });
-        setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false);
+        await loadData(user.id, true);
     };
-    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить специалиста?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
-    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить событие/запись?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
 
-    const handleCompleteRecord = async (app: any) => {
-        if (confirm("Успешно завершить? Запись будет перемещена в Архив.")) {
-            await supabase.from("appointments").update({ status: 'completed' }).eq("id", app.id);
-            let targetClientId = app.client_id;
-            if (!targetClientId && app.client_phone) {
-                const { data: existingClient } = await supabase.from("clients").select("id, visits_count, total_revenue").eq("master_id", user.id).eq("phone", app.client_phone).maybeSingle();
-                if (existingClient) targetClientId = existingClient.id;
-            }
-            const price = Number(app.service?.price || 0);
-            if (targetClientId) {
-                const client = clients.find(c => c.id === targetClientId);
-                if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
-            } else if (app.client_phone) {
-                await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false, notes: "" });
-            }
-            await loadData(user.id, true); setSelectedApp(null);
+    const handleDeleteInventory = async (id: string) => {
+        if(confirm("Удалить позицию со склада?")) {
+            await supabase.from("inventory").delete().eq("id", id);
+            await loadData(user.id, true);
         }
+    }
+
+    // ЗАВЕРШЕНИЕ ВИЗИТА С РАСХОДНИКАМИ
+    const handleCompleteRecord = async (app: any) => {
+        if (!confirm("Завершить визит и списать материалы?")) return;
+        
+        let totalCost = 0;
+        
+        // Списание
+        for (const used of usedMaterials) {
+            if (used.qty > 0) {
+                const item = inventory.find(i => i.id === used.id);
+                if (item) {
+                    totalCost += (item.cost_price * used.qty);
+                    const newQty = item.quantity - used.qty;
+                    await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
+                    await supabase.from('inventory_transactions').insert({
+                        inventory_id: item.id, user_id: user.id, appointment_id: app.id, change_amount: -used.qty, type: 'appointment_usage'
+                    });
+                }
+            }
+        }
+
+        await supabase.from("appointments").update({ status: 'completed', materials_cost: totalCost }).eq("id", app.id);
+        
+        let targetClientId = app.client_id;
+        if (!targetClientId && app.client_phone) {
+            const { data: existingClient } = await supabase.from("clients").select("id, visits_count, total_revenue").eq("master_id", user.id).eq("phone", app.client_phone).maybeSingle();
+            if (existingClient) targetClientId = existingClient.id;
+        }
+        const price = Number(app.service?.price || 0);
+        if (targetClientId) {
+            const client = clients.find(c => c.id === targetClientId);
+            if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
+        } else if (app.client_phone) {
+            await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false, notes: "" });
+        }
+        
+        setUsedMaterials([]);
+        setSelectedApp(null);
+        setJournalView('archive');
+        await loadData(user.id, true); 
     };
 
-    const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => {
-        e.stopPropagation(); 
-        if (confirm(currentStatus ? "Разблокировать клиента?" : "Добавить в ЧС?")) { await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); }
-    };
-
+    // ОСТАЛЬНЫЕ ФУНКЦИИ
+    const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
+    const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
+    const handleAddEmployee = async () => { if (!newEmpName) return; setAddingEmp(true); await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false); };
+    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить специалиста?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
+    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
+    const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => { e.stopPropagation(); if (confirm(currentStatus ? "Разблокировать?" : "В ЧС?")) { await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); } };
+    
     const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>, serviceId: string, currentUrls: string[]) => {
         const file = e.target.files?.[0]; if (!file) return; setUploadingImageId(serviceId);
         try {
-            const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
-            const filePath = `${user.id}/${fileName}`;
+            const filePath = `${user.id}/${Math.random()}.${file.name.split('.').pop()}`;
             await supabase.storage.from('gallery').upload(filePath, file);
             const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
-            await supabase.from('services').update({ image_urls: [...(currentUrls || []), data.publicUrl] }).eq('id', serviceId);
+            const updatedUrls = [...(currentUrls || []), data.publicUrl];
+            await supabase.from('services').update({ image_urls: updatedUrls }).eq('id', serviceId);
+            if (selectedService && selectedService.id === serviceId) setSelectedService({...selectedService, image_urls: updatedUrls});
             await loadData(user.id, true);
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setUploadingImageId(null); }
     };
     const handleRemoveImage = async (serviceId: string, urlToRemove: string, currentUrls: string[]) => {
         if (!confirm("Удалить фото?")) return;
-        await supabase.from('services').update({ image_urls: currentUrls.filter(url => url !== urlToRemove) }).eq('id', serviceId); await loadData(user.id, true);
+        const updatedUrls = currentUrls.filter(url => url !== urlToRemove);
+        await supabase.from('services').update({ image_urls: updatedUrls }).eq('id', serviceId); 
+        if (selectedService && selectedService.id === serviceId) setSelectedService({...selectedService, image_urls: updatedUrls});
+        await loadData(user.id, true);
     };
 
     const handleAddManualBooking = async (e: React.FormEvent) => {
-        e.preventDefault(); 
-        if (!manualName || !manualDate || !manualTime) return; 
-        setAddingManual(true);
+        e.preventDefault(); if (!manualName || !manualDate || !manualTime) return; setAddingManual(true);
         try {
             const startDateTime = new Date(`${manualDate}T${manualTime}:00`).toISOString();
-            await supabase.from('appointments').insert({
-                master_id: user.id, service_id: manualService || null, employee_id: manualEmployee || null,
-                client_name: manualName, client_phone: manualPhone, start_time: startDateTime, status: 'active'
-            });
-            setShowManualModal(false); setManualName(""); setManualPhone(""); setManualService(""); 
-            setViewDate(new Date(`${manualDate}T00:00:00`)); // Перемещаемся на день, куда добавили запись
-            await loadData(user.id, true); setJournalView('active');
+            await supabase.from('appointments').insert({ master_id: user.id, service_id: manualService || null, employee_id: manualEmployee || null, client_name: manualName, client_phone: manualPhone, start_time: startDateTime, status: 'active' });
+            setShowManualModal(false); setManualName(""); setManualPhone(""); setManualService(""); setViewDate(new Date(`${manualDate}T00:00:00`)); await loadData(user.id, true); setJournalView('active');
         } catch (err: any) { alert("Ошибка: " + err.message); } finally { setAddingManual(false); }
     };
 
     const handleSaveClientNote = async () => {
         if (!selectedClient) return; setSavingNote(true);
-        try {
-            await supabase.from('clients').update({ notes: clientNote }).eq('id', selectedClient.id);
-            setClients(prev => prev.map(c => c.id === selectedClient.id ? { ...c, notes: clientNote } : c));
-            setSelectedClient({ ...selectedClient, notes: clientNote });
-        } catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
+        try { await supabase.from('clients').update({ notes: clientNote }).eq('id', selectedClient.id); setClients(prev => prev.map(c => c.id === selectedClient.id ? { ...c, notes: clientNote } : c)); setSelectedClient({ ...selectedClient, notes: clientNote }); } 
+        catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
     };
 
-    const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
-    
-    // ФИЛЬТРАЦИЯ ДЛЯ КАРТОЧЕК
-    const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
-    
-    // Активные берем ТОЛЬКО на выбранный день (viewDate)
-    const activeDailyApps = useMemo(() => {
-        return serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active');
-    }, [serviceFilteredAppointments, viewDate]);
-
-    // Архив берем весь, но переворачиваем
-    const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
-
+    const activeDailyApps = useMemo(() => appointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [appointments, viewDate]);
+    const archivedApps = appointments.filter(a => a.status === 'completed').reverse();
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
     
-    // ================= ФИНАНСОВЫЙ РАСЧЕТ =================
+    // ================= ФИНАНСОВЫЙ РАСЧЕТ С УЧЕТОМ МАТЕРИАЛОВ =================
     let totalRevenue = 0;
     let totalPayroll = 0;
+    let totalMaterialsCost = 0;
     const employeeStats: Record<string, {name: string, visits: number, earned: number}> = {};
 
     archivedApps.forEach(app => {
         const price = Number(app.service?.price || 0);
+        const matCost = Number(app.materials_cost || 0);
         totalRevenue += price;
+        totalMaterialsCost += matCost;
 
         if (app.employee_id) {
             const emp = employees.find(e => e.id === app.employee_id);
@@ -359,23 +373,19 @@ export default function Dashboard() {
             const empCut = (price * rate) / 100;
             totalPayroll += empCut;
 
-            if (!employeeStats[app.employee_id]) {
-                employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
-            }
+            if (!employeeStats[app.employee_id]) employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
             employeeStats[app.employee_id].visits += 1;
             employeeStats[app.employee_id].earned += empCut;
         }
     });
     
-    const netIncome = totalRevenue - totalPayroll;
-    // =====================================================
+    const netIncome = totalRevenue - totalPayroll - totalMaterialsCost;
+    const inventoryValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0);
+    // =======================================================================
 
     const getWhatsAppLink = (app: any) => {
         if (!app.client_phone) return "#";
-        const dateStr = format(new Date(app.start_time), "d MMMM", { locale: ru });
-        const timeStr = format(new Date(app.start_time), "HH:mm");
-        const serviceName = app.service?.name ? `"${app.service.name}"` : "задачу/визит";
-        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи на ${serviceName}.\n\n🗓 Дата: ${dateStr}\n⏰ Время: ${timeStr}\n\nЖдем вас!`;
+        const text = `Здравствуйте, ${app.client_name}! 🌸\n\nНапоминаю о вашей записи на ${app.service?.name ? `"${app.service.name}"` : "задачу/визит"}.\n\n🗓 Дата: ${format(new Date(app.start_time), "d MMMM", { locale: ru })}\n⏰ Время: ${format(new Date(app.start_time), "HH:mm")}\n\nЖдем вас!`;
         return `https://wa.me/${getCleanPhone(app.client_phone)}?text=${encodeURIComponent(text)}`;
     };
 
@@ -384,7 +394,7 @@ export default function Dashboard() {
     if (loading) return ( <div className="h-screen w-full bg-[#FAF9F6] flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-rose-400" /></div> );
 
     return (
-        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-100 antialiased overflow-hidden">
+        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden">
             
             {/* SIDEBAR */}
             <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
@@ -394,7 +404,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col">
                         <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">EasyBooking</h2>
-                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">Professional</span>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">ERP System</span>
                     </div>
                 </div>
                 
@@ -411,7 +421,7 @@ export default function Dashboard() {
                         <div className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
                             {isSyncing ? <RefreshCw className="w-3 h-3 text-stone-400 animate-spin" /> : <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"></span>}
                         </div>
-                        <span className="text-xs font-bold text-stone-600 truncate">{businessName || "Настройте профиль"}</span>
+                        <span className="text-xs font-bold text-stone-600 truncate">{businessName || "Профиль"}</span>
                     </div>
                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 transition-all shadow-sm"><LogOut className="w-4 h-4" /> Выйти</button>
                 </div>
@@ -420,20 +430,13 @@ export default function Dashboard() {
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* MOBILE HEADER */}
+                {/* HEADER */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-orange-300 flex items-center justify-center shrink-0 shadow-sm">
-                            <span className="font-bold text-white text-xs tracking-tight">EB</span>
-                        </div>
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-orange-300 flex items-center justify-center shrink-0 shadow-sm"><span className="font-bold text-white text-xs tracking-tight">EB</span></div>
                         <div className="flex flex-col justify-center">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
-                                <div className="relative flex h-2 w-2 items-center justify-center">
-                                    {isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}
-                                </div>
-                            </div>
-                            <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none">{businessName || "Настройте профиль"}</span>
+                            <div className="flex items-center gap-2 mb-0.5"><h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1><div className="relative flex h-2 w-2 items-center justify-center">{isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}</div></div>
+                            <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none">{businessName || "Профиль"}</span>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="text-stone-400 hover:text-rose-500 p-2 bg-stone-50 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4" /></button>
@@ -441,26 +444,21 @@ export default function Dashboard() {
 
                 <header className="hidden md:flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-stone-200 px-8 py-5 z-10 shrink-0">
                     <h1 className="text-2xl font-black tracking-tight text-stone-900">{NAV_ITEMS.find(t => t.id === activeTab)?.label}</h1>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span>
-                    </div>
+                    <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8">
                     <div className="max-w-6xl mx-auto space-y-6">
                         
-                        {/* 🟢 ЖУРНАЛ (КАРТОЧКИ АКТИВНЫЕ И АРХИВ) */}
+                        {/* 🟢 ЖУРНАЛ */}
                         {activeTab === 'appointments' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                                    
                                     <div className="flex flex-wrap items-center gap-4">
                                         <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
-                                            <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>График</button>
+                                            <button onClick={() => setJournalView('active')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${journalView === 'active' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>На день</button>
                                             <button onClick={() => setJournalView('archive')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${journalView === 'archive' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><Archive className="w-4 h-4"/> Архив</button>
                                         </div>
-
-                                        {/* НАВИГАЦИЯ ПО ДАТАМ (Только для активного графика) */}
                                         {journalView === 'active' && (
                                             <div className="flex items-center bg-white border border-stone-200 rounded-xl p-1 shadow-sm gap-1">
                                                 <button onClick={() => setViewDate(addDays(viewDate, -1))} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-all"><ChevronLeft className="w-4 h-4"/></button>
@@ -469,45 +467,28 @@ export default function Dashboard() {
                                             </div>
                                         )}
                                     </div>
-
-                                    <button onClick={() => setShowManualModal(true)} className="bg-gradient-to-r from-rose-400 to-orange-400 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:opacity-90">
+                                    <button onClick={() => setShowManualModal(true)} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black">
                                         <Plus className="w-4 h-4"/> Добавить задачу
                                     </button>
                                 </div>
 
-                                {/* Шторка фильтров (только для архива, чтобы активный день не пустел) */}
-                                {services.length > 0 && appointments.length > 0 && journalView === 'archive' && (
-                                    <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 mb-2">
-                                        <button onClick={() => setActiveServiceFilter(null)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === null ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>Все</button>
-                                        {services.map(s => <button key={s.id} onClick={() => setActiveServiceFilter(s.id)} className={`whitespace-nowrap px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-[0.97] border ${activeServiceFilter === s.id ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>{s.name}</button>)}
-                                    </div>
-                                )}
-
-                                {/* АРХИВ (СПИСОК) */}
+                                {/* АРХИВ */}
                                 {journalView === 'archive' && (
                                     <>
                                         {archivedApps.length === 0 ? (
-                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm">
-                                                <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><Archive className="w-7 h-7 text-stone-300" /></div>
-                                                <p className="text-stone-400 text-sm font-bold">Архив пуст</p>
-                                            </div>
+                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm"><div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><Archive className="w-7 h-7 text-stone-300" /></div><p className="text-stone-400 text-sm font-bold">Архив пуст</p></div>
                                         ) : (
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {archivedApps.map(app => (
-                                                    <div key={app.id} onClick={() => setSelectedApp(app)} className="rounded-[28px] p-5 relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all bg-white border border-l-4 border-l-emerald-300 border-y-stone-100 border-r-stone-100 opacity-80 shadow-sm hover:border-emerald-400">
-                                                        <div className="flex justify-between items-start mb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <div className="font-black text-2xl tracking-tight text-stone-400">{format(new Date(app.start_time), "HH:mm")}</div>
-                                                                    <div className="px-2 py-1 bg-stone-100 rounded-lg text-[10px] text-stone-500 font-black uppercase tracking-widest">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
-                                                                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] rounded-lg font-black uppercase tracking-widest">Завершено</div>
-                                                                </div>
-                                                                <h3 className="text-stone-800 text-base font-black tracking-tight">{app.client_name}</h3>
-                                                            </div>
+                                                    <div key={app.id} onClick={() => setSelectedApp(app)} className="rounded-[24px] p-5 relative overflow-hidden group cursor-pointer active:scale-[0.98] transition-all bg-white border border-l-4 border-l-emerald-300 border-y-stone-100 border-r-stone-100 opacity-80 shadow-sm hover:border-emerald-400">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="font-black text-2xl tracking-tight text-stone-400">{format(new Date(app.start_time), "HH:mm")}</div>
+                                                            <div className="px-2 py-1 bg-stone-100 rounded-lg text-[10px] text-stone-500 font-black uppercase tracking-widest">{format(new Date(app.start_time), "d MMM", { locale: ru })}</div>
                                                         </div>
-                                                        <div className="flex justify-between items-center text-sm text-stone-500 pt-4 mt-2 border-t border-stone-50">
-                                                            <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-2 py-1 rounded-md font-bold text-xs"><Briefcase className="w-3.5 h-3.5" /><span className="truncate">{app.service?.name || "Услуга удалена"}</span></div>
-                                                            {app.employee?.name && <span className="text-stone-400 font-bold text-[11px] truncate max-w-[100px]">{app.employee.name}</span>}
+                                                        <h3 className="text-stone-800 text-base font-black tracking-tight">{app.client_name}</h3>
+                                                        <div className="flex justify-between items-center text-sm text-stone-500 pt-3 mt-2 border-t border-stone-50">
+                                                            <span className="truncate text-xs font-bold">{app.service?.name || "Без услуги"}</span>
+                                                            <span className="text-emerald-600 font-black text-xs">{app.materials_cost ? `Мат: ${app.materials_cost}₽` : ''}</span>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -516,52 +497,28 @@ export default function Dashboard() {
                                     </>
                                 )}
 
-                                {/* АКТИВНЫЙ ГРАФИК (СЕТКА КАРТОЧЕК С ЦВЕТАМИ) */}
+                                {/* АКТИВНЫЕ */}
                                 {journalView === 'active' && (
                                     <>
                                         {activeDailyApps.length === 0 ? (
-                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm">
-                                                <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                    <CalendarIcon className="w-7 h-7 text-stone-300" />
-                                                </div>
-                                                <p className="text-stone-400 text-base font-black mb-2">На этот день записей нет</p>
-                                                <p className="text-stone-400 text-sm font-medium">Отдохните или добавьте новую задачу вручную.</p>
-                                            </div>
+                                            <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm"><div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><CalendarIcon className="w-7 h-7 text-stone-300" /></div><p className="text-stone-400 text-base font-black mb-2">На этот день записей нет</p><p className="text-stone-400 text-sm font-medium">Отдохните или добавьте новую задачу вручную.</p></div>
                                         ) : (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {activeDailyApps.map(app => {
-                                                    // Получаем уникальный цвет для услуги или мастера
                                                     const colorTheme = getServiceColor(app.service_id || app.employee_id || app.id);
-                                                    const duration = app.service?.duration || 60;
-                                                    const endTime = new Date(new Date(app.start_time).getTime() + duration * 60000);
-
+                                                    const endTime = new Date(new Date(app.start_time).getTime() + (app.service?.duration || 60) * 60000);
                                                     return (
-                                                        <div 
-                                                            key={app.id} 
-                                                            onClick={() => setSelectedApp(app)} 
-                                                            className={`bg-white rounded-[24px] p-5 border-y border-r border-stone-200 border-l-8 ${colorTheme.border} shadow-sm hover:shadow-md cursor-pointer transition-all active:scale-[0.98] flex flex-col justify-between min-h-[160px]`}
-                                                        >
+                                                        <div key={app.id} onClick={() => setSelectedApp(app)} className={`bg-white rounded-[24px] p-5 border-y border-r border-stone-200 border-l-8 ${colorTheme.border} shadow-sm hover:shadow-md cursor-pointer transition-all active:scale-[0.98] flex flex-col justify-between min-h-[160px]`}>
                                                             <div>
-                                                                <div className="flex justify-between items-start mb-3">
-                                                                    <div>
-                                                                        <p className="text-2xl font-black text-stone-800 leading-none">
-                                                                            {format(new Date(app.start_time), "HH:mm")} 
-                                                                            <span className="text-sm text-stone-400 font-bold ml-1">- {format(endTime, "HH:mm")}</span>
-                                                                        </p>
-                                                                    </div>
-                                                                    {app.employee?.name && (
-                                                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md truncate max-w-[100px] ${colorTheme.badge}`}>
-                                                                            {app.employee.name}
-                                                                        </span>
-                                                                    )}
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <p className="text-2xl font-black text-stone-800 leading-none">{format(new Date(app.start_time), "HH:mm")} <span className="text-xs text-stone-400 font-bold ml-1">- {format(endTime, "HH:mm")}</span></p>
+                                                                    {app.employee?.name && <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md truncate max-w-[100px] ${colorTheme.badge}`}>{app.employee.name}</span>}
                                                                 </div>
                                                                 <h3 className="font-black text-stone-900 text-lg mb-1 leading-tight">{app.client_name}</h3>
-                                                                {app.client_phone && <p className="text-xs font-bold text-stone-500 mb-4">{app.client_phone}</p>}
+                                                                {app.client_phone && <p className="text-xs font-bold text-stone-500">{app.client_phone}</p>}
                                                             </div>
-                                                            
-                                                            <div className="flex items-center gap-2 pt-4 border-t border-stone-100">
-                                                                <Briefcase className="w-4 h-4 text-stone-400" />
-                                                                <span className="text-xs font-bold text-stone-600 truncate">{app.service?.name || "Свое время / Задача"}</span>
+                                                            <div className="flex items-center gap-2 pt-3 mt-2 border-t border-stone-100">
+                                                                <Briefcase className="w-4 h-4 text-stone-400" /><span className="text-xs font-bold text-stone-600 truncate">{app.service?.name || "Задача"}</span>
                                                             </div>
                                                         </div>
                                                     )
@@ -573,106 +530,135 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🔵 УСЛУГИ И КОМАНДА */}
+                        {/* 🔵 ПРАЙС-ЛИСТ (НОВЫЙ КОМПАКТНЫЙ С ПАПКАМИ) */}
                         {activeTab === 'services' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <div className="lg:col-span-1 space-y-6">
-                                        {role === 'owner' && (
-                                            <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
-                                                <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Команда</h2>
-                                                <div className="flex flex-col gap-3 mb-6">
-                                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="Имя специалиста" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                    <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} placeholder="Специализация (Должность)" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                    <div className="flex gap-2 items-center">
-                                                        <div className="relative flex-1">
-                                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase tracking-widest">% ЗП</span>
-                                                            <input value={newEmpCommission} onChange={e => setNewEmpCommission(e.target.value)} type="number" placeholder="50" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-14 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                        </div>
-                                                        <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="bg-stone-800 text-white w-12 rounded-xl active:scale-[0.92] transition-all disabled:opacity-50 flex items-center justify-center shrink-0 shadow-md hover:bg-black p-3.5">
-                                                            {addingEmp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-5 h-5" />}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {employees.map(emp => (
-                                                        <div key={emp.id} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                                            <div>
-                                                                <p className="text-sm font-bold text-stone-800">{emp.name} <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] ml-1">{emp.commission_rate}%</span></p>
-                                                                {emp.specialty && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest mt-0.5">{emp.specialty}</p>}
-                                                            </div>
-                                                            <button onClick={() => handleDeleteEmployee(emp.id)} className="text-rose-500 bg-white p-2 rounded-lg shadow-sm hover:bg-rose-50 transition-all"><Trash2 className="w-4 h-4" /></button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
                                         <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
-                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Создать услугу / Задачу</h2>
+                                            <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Добавить услугу</h2>
                                             <div className="flex flex-col gap-3">
+                                                <input value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="Папка (Например: Диагностика)" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
+                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название услуги" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
                                                 {role === 'owner' && (
-                                                    <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 appearance-none">
-                                                        <option value="">Без привязки к специалисту</option>
-                                                        {employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}
-                                                    </select>
+                                                    <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none appearance-none"><option value="">Выполняют все</option>{employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}</select>
                                                 )}
-                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                
                                                 <div className="grid grid-cols-2 gap-3">
-                                                    <div className="relative">
-                                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase tracking-widest">Мин</span>
-                                                        <input value={newDuration} onChange={e => setNewDuration(e.target.value)} type="number" placeholder="60" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-12 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                    </div>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-bold">₽</span>
-                                                        <input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-8 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-stone-800 placeholder-stone-400" />
-                                                    </div>
+                                                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase">Мин</span><input value={newDuration} onChange={e => setNewDuration(e.target.value)} type="number" placeholder="60" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-10 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
+                                                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-bold">₽</span><input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-8 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
                                                 </div>
-                                                <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="w-full mt-2 bg-gradient-to-r from-rose-400 to-orange-300 text-white p-3.5 rounded-xl font-bold active:scale-[0.98] transition-all disabled:opacity-50 shadow-md shadow-rose-500/20 flex justify-center items-center">
-                                                    {addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}
-                                                </button>
+                                                <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="w-full mt-2 bg-stone-900 text-white p-3.5 rounded-xl font-bold active:scale-[0.98] transition-all disabled:opacity-50 shadow-md flex justify-center items-center hover:bg-black">{addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}</button>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="lg:col-span-2 space-y-4">
-                                        <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-widest pl-2 mb-2 hidden lg:block">Прайс-лист</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {services.length === 0 ? <p className="text-center text-stone-400 text-sm py-4 col-span-full font-bold">Услуг пока нет</p> : services.map(s => (
-                                                <div key={s.id} className="bg-white p-5 rounded-[28px] border border-stone-200 shadow-sm flex flex-col justify-between group hover:border-rose-200 transition-colors">
-                                                    <div>
-                                                        <div className="flex justify-between items-start gap-3 mb-3">
-                                                            <span className="text-base font-black tracking-tight text-stone-800 leading-tight group-hover:text-rose-500 transition-colors">{s.name}</span>
-                                                            <span className="text-emerald-600 font-black text-lg bg-emerald-50 px-2.5 py-1 rounded-xl shrink-0">{s.price} ₽</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mb-4">
-                                                            <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-1 rounded-md font-black uppercase tracking-widest flex items-center gap-1"><Clock className="w-3 h-3"/> {s.duration || 60} мин</span>
-                                                            {s.employee?.name && <span className="text-[10px] bg-rose-50 text-rose-500 px-2 py-1 rounded-md font-black uppercase tracking-widest truncate">Специалист: {s.employee.name}</span>}
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {s.image_urls && s.image_urls.length > 0 && (
-                                                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x mb-2">
-                                                            {s.image_urls.map((url: string, idx: number) => (
-                                                                <div key={idx} className="relative shrink-0 snap-center">
-                                                                    <img src={url} alt="Фото услуги" className="w-16 h-16 object-cover rounded-xl shadow-sm border border-stone-100" />
-                                                                    <button onClick={() => handleRemoveImage(s.id, url, s.image_urls)} className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white rounded-full p-1 shadow-md active:scale-95"><X className="w-3 h-3" /></button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex items-center gap-2 pt-4 border-t border-stone-50">
-                                                        <label className="text-rose-500 bg-rose-50 hover:bg-rose-100 p-2.5 rounded-xl transition-all active:scale-[0.92] cursor-pointer font-bold text-xs uppercase tracking-widest flex items-center gap-2 flex-1 justify-center">
-                                                            {uploadingImageId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ImagePlus className="w-4 h-4" /> Иллюстрация</>}
-                                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, s.id, s.image_urls || [])} />
-                                                        </label>
-                                                        <button onClick={() => handleDeleteService(s.id)} className="text-stone-400 hover:text-rose-500 bg-stone-50 hover:bg-rose-50 p-2.5 rounded-xl active:scale-[0.92] transition-all shrink-0"><Trash2 className="w-4 h-4" /></button>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                        <div className="relative mb-4">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                                            <input value={serviceSearchQuery} onChange={e => setServiceSearchQuery(e.target.value)} placeholder="Поиск по прайсу..." className="w-full bg-white border border-stone-200 shadow-sm rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-rose-400/30 transition-all placeholder-stone-400" />
                                         </div>
+                                        
+                                        <div className="bg-white rounded-[32px] border border-stone-200 shadow-sm p-2">
+                                            {Object.keys(groupedServices).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Ничего не найдено</p> : 
+                                                Object.entries(groupedServices).map(([category, items]) => (
+                                                    <div key={category} className="mb-2 last:mb-0">
+                                                        <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors">
+                                                            <div className="flex items-center gap-3">
+                                                                {expandedCategories[category] ? <FolderOpen className="w-5 h-5 text-rose-400"/> : <Folder className="w-5 h-5 text-stone-400"/>}
+                                                                <span className="font-black text-stone-900 text-base">{category}</span>
+                                                                <span className="bg-white text-stone-500 px-2 py-0.5 rounded-md text-[10px] font-black border border-stone-200">{items.length}</span>
+                                                            </div>
+                                                        </button>
+                                                        {expandedCategories[category] && (
+                                                            <div className="pl-4 pr-2 py-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                                {items.map(s => (
+                                                                    <div key={s.id} onClick={() => setSelectedService(s)} className="flex items-center justify-between p-3 rounded-xl hover:bg-rose-50 cursor-pointer transition-colors group">
+                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                            {s.image_urls && s.image_urls[0] ? (
+                                                                                <img src={s.image_urls[0]} className="w-10 h-10 rounded-lg object-cover border border-stone-200 shrink-0" alt="img" />
+                                                                            ) : (
+                                                                                <div className="w-10 h-10 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center shrink-0"><Briefcase className="w-4 h-4 text-stone-300"/></div>
+                                                                            )}
+                                                                            <div className="min-w-0">
+                                                                                <p className="font-black text-stone-900 text-sm truncate group-hover:text-rose-600 transition-colors">{s.name}</p>
+                                                                                <p className="text-[10px] text-stone-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3"/> {s.duration} мин {s.employee?.name && `• ${s.employee.name}`}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className="font-black text-stone-900 bg-white border border-stone-200 px-2.5 py-1.5 rounded-lg text-sm shrink-0 shadow-sm group-hover:border-rose-200">{s.price} ₽</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 📦 СКЛАД (INVENTORY) */}
+                        {activeTab === 'inventory' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="col-span-2 bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
+                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Позиций на складе</p>
+                                        <p className="text-3xl font-black tracking-tight text-stone-900">{inventory.length}</p>
+                                    </div>
+                                    <div className="col-span-2 bg-stone-900 p-6 rounded-[32px] shadow-lg text-white flex flex-col justify-center relative overflow-hidden">
+                                        <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                                        <p className="text-xs text-stone-400 font-black uppercase tracking-widest mb-1 relative z-10">Стоимость активов</p>
+                                        <p className="text-3xl font-black tracking-tight relative z-10">{inventoryValue} <span className="text-xl opacity-60">₽</span></p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
+                                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                                        <h3 className="text-xl font-black text-stone-800 flex items-center gap-2"><Package className="w-5 h-5 text-rose-500"/> Остатки</h3>
+                                        <button onClick={() => setShowInvModal(true)} className="bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2"><Plus className="w-4 h-4"/> Новый товар</button>
+                                    </div>
+
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-stone-100 text-[10px] uppercase tracking-widest text-stone-400">
+                                                    <th className="pb-3 pl-2 font-black">Наименование</th>
+                                                    <th className="pb-3 font-black">Остаток</th>
+                                                    <th className="pb-3 font-black hidden sm:table-cell">Закуп. цена</th>
+                                                    <th className="pb-3 font-black text-right pr-2">Действия</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {inventory.length === 0 ? <tr><td colSpan={4} className="text-center py-8 text-stone-400 text-sm font-bold">Склад пуст. Добавьте первый товар.</td></tr> : 
+                                                    inventory.map(item => {
+                                                        const isLow = item.quantity <= item.critical_level;
+                                                        return (
+                                                            <tr key={item.id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors group">
+                                                                <td className="py-4 pl-2">
+                                                                    <p className="font-black text-sm text-stone-900">{item.name}</p>
+                                                                    {item.sku && <p className="text-[10px] text-stone-400 font-bold font-mono mt-0.5">Арт: {item.sku}</p>}
+                                                                </td>
+                                                                <td className="py-4">
+                                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black ${isLow ? 'bg-orange-100 text-orange-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                                        {isLow && <AlertTriangle className="w-3 h-3"/>}
+                                                                        {item.quantity} {item.unit}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="py-4 hidden sm:table-cell font-black text-stone-600 text-sm">{item.cost_price} ₽</td>
+                                                                <td className="py-4 pr-2 text-right">
+                                                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button onClick={() => handleAdjustInventory(item, 'deduct')} className="p-1.5 bg-white border border-stone-200 rounded-md text-stone-600 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors" title="Списать">-</button>
+                                                                        <button onClick={() => handleAdjustInventory(item, 'add')} className="p-1.5 bg-white border border-stone-200 rounded-md text-stone-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-colors" title="Добавить">+</button>
+                                                                        <button onClick={() => handleDeleteInventory(item.id)} className="p-1.5 ml-2 bg-white border border-stone-200 rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                }
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
@@ -722,12 +708,13 @@ export default function Dashboard() {
                                 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                     <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Общая выручка</p>
+                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Грязная выручка</p>
                                         <p className="text-3xl font-black tracking-tight text-stone-900">{totalRevenue} <span className="text-xl text-stone-400">₽</span></p>
                                     </div>
                                     <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                        <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5"/> Фонд ЗП (Сотрудники)</p>
-                                        <p className="text-3xl font-black tracking-tight text-stone-900">{totalPayroll} <span className="text-xl text-stone-400">₽</span></p>
+                                        <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5"/> Фонд ЗП и Затраты</p>
+                                        <p className="text-3xl font-black tracking-tight text-rose-500">{totalPayroll + totalMaterialsCost} <span className="text-xl text-rose-300">₽</span></p>
+                                        <p className="text-[10px] font-bold text-stone-400 mt-1">ЗП: {totalPayroll}₽ | Мат: {totalMaterialsCost}₽</p>
                                     </div>
                                     <div className="bg-gradient-to-br from-emerald-400 to-emerald-500 p-6 rounded-[32px] shadow-lg shadow-emerald-500/20 text-white flex flex-col justify-center relative overflow-hidden">
                                         <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -910,33 +897,80 @@ export default function Dashboard() {
                         )}
                     </div>
                 </main>
-
-                <nav className="md:hidden fixed bottom-0 left-0 w-full z-40 bg-white/90 backdrop-blur-xl border-t border-stone-200 pb-safe pt-2 px-2">
-                    <div className="flex justify-between items-center max-w-sm mx-auto pb-4 pt-1">
-                        {NAV_ITEMS.map((tab) => (
-                            <button key={tab.id} onClick={() => setActiveTab(tab.id as Tab)} className={`flex flex-col items-center gap-1 transition-all w-16 active:scale-95 ${activeTab === tab.id ? 'text-rose-500' : 'text-stone-400 hover:text-stone-600'}`}>
-                                <div className="p-1.5"><tab.icon className={`w-6 h-6 ${activeTab === tab.id ? 'fill-rose-500/10 stroke-2' : 'stroke-[1.5]'}`} /></div>
-                                <span className="text-[10px] font-bold tracking-wide">{tab.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </nav>
             </div>
 
-            {/* МОДАЛКА КЛИЕНТА... */}
+            {/* ================= МОДАЛКИ ================= */}
+
+            {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
+            {showInvModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200">
+                        <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
+                        <h2 className="text-2xl font-black mb-6 text-stone-900">Новый товар</h2>
+                        <form onSubmit={handleAddInventory} className="space-y-4">
+                            <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Наименование *</label><input required value={invName} onChange={e => setInvName(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Артикул</label><input value={invSku} onChange={e => setInvSku(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Ед. изм.</label>
+                                    <select value={invUnit} onChange={e => setInvUnit(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 appearance-none">
+                                        <option value="шт">Штуки (шт)</option><option value="мл">Миллилитры (мл)</option><option value="л">Литры (л)</option><option value="гр">Граммы (гр)</option>
+                                    </select>
+                                </div>
+                                <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Остаток сейчас</label><input type="number" required value={invQty} onChange={e => setInvQty(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                                <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Мин. остаток</label><input type="number" required value={invCritical} onChange={e => setInvCritical(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                            </div>
+                            <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Закупочная цена (за 1 ед.)</label><input type="number" required value={invCost} onChange={e => setInvCost(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                            <button type="submit" disabled={addingInv} className="w-full mt-2 bg-stone-900 text-white font-black py-4 rounded-xl active:scale-95 transition-all disabled:opacity-50">{addingInv ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : "Сохранить товар"}</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 2. РЕДАКТИРОВАНИЕ УСЛУГИ */}
+            {selectedService && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedService(null)}>
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setSelectedService(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
+                        <h2 className="text-xl font-black mb-6 text-stone-900 leading-tight pr-10">{selectedService.name}</h2>
+                        
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-stone-50 border border-stone-100 p-3 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-0.5">Категория</p><p className="text-sm font-black text-stone-800">{selectedService.category}</p></div>
+                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Цена</p><p className="text-sm font-black text-emerald-700">{selectedService.price} ₽</p></div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1 mb-2 block">Иллюстрации услуги</label>
+                                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                                    {selectedService.image_urls && selectedService.image_urls.map((url: string, idx: number) => (
+                                        <div key={idx} className="relative shrink-0 snap-center">
+                                            <img src={url} alt="Услуга" className="w-24 h-24 object-cover rounded-xl shadow-sm border border-stone-200" />
+                                            <button onClick={() => handleRemoveImage(selectedService.id, url, selectedService.image_urls)} className="absolute -top-2 -right-2 bg-white text-rose-500 rounded-full p-1.5 shadow-md border border-rose-100 hover:bg-rose-50"><X className="w-3 h-3" /></button>
+                                        </div>
+                                    ))}
+                                    <label className="shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-rose-200 bg-rose-50/50 hover:bg-rose-50 flex flex-col items-center justify-center cursor-pointer transition-all">
+                                        {uploadingImageId === selectedService.id ? <Loader2 className="w-5 h-5 animate-spin text-rose-400" /> : <Plus className="w-6 h-6 text-rose-400" />}
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, selectedService.id, selectedService.image_urls || [])} />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button onClick={() => handleDeleteService(selectedService.id)} className="w-full bg-white text-rose-500 border border-rose-200 font-bold py-3.5 rounded-xl hover:bg-rose-50 transition-colors flex items-center justify-center gap-2"><Trash2 className="w-4 h-4"/> Удалить услугу</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 3. КАРТОЧКА КЛИЕНТА (CRM) */}
             {selectedClient && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedClient(null)}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedClient(null)}>
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => setSelectedClient(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
+                        <button onClick={() => setSelectedClient(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                         
                         <div className="flex items-center gap-4 mb-6">
-                            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center border border-rose-100">
-                                <UserCircle className="w-8 h-8 text-rose-400" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-black tracking-tight text-stone-800 leading-tight">{selectedClient.name}</h2>
-                                <p className="text-sm font-bold text-stone-500 mt-0.5">{selectedClient.phone}</p>
-                            </div>
+                            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center border border-rose-100"><UserCircle className="w-8 h-8 text-rose-400" /></div>
+                            <div><h2 className="text-xl font-black text-stone-800 leading-tight">{selectedClient.name}</h2><p className="text-sm font-bold text-stone-500 mt-0.5">{selectedClient.phone}</p></div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -946,15 +980,8 @@ export default function Dashboard() {
 
                         <div className="space-y-3 mb-6">
                             <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Заметки (Детали заказов)</label>
-                            <textarea 
-                                value={clientNote} 
-                                onChange={e => setClientNote(e.target.value)} 
-                                placeholder="Например: Стучит подвеска, дело о наследстве, подготовка к ЕГЭ..."
-                                className="w-full bg-orange-50/50 border border-orange-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-400/30 transition-all text-stone-800 placeholder-orange-700/40 min-h-[120px] resize-none"
-                            />
-                            <button onClick={handleSaveClientNote} disabled={savingNote} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md hover:bg-black disabled:opacity-50">
-                                {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : "Сохранить заметку"}
-                            </button>
+                            <textarea value={clientNote} onChange={e => setClientNote(e.target.value)} placeholder="Стучит подвеска, дело о наследстве..." className="w-full bg-orange-50/50 border border-orange-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-400/30 text-stone-800 min-h-[120px] resize-none" />
+                            <button onClick={handleSaveClientNote} disabled={savingNote} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:bg-black disabled:opacity-50">{savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : "Сохранить заметку"}</button>
                         </div>
 
                         <div className="space-y-3">
@@ -962,13 +989,8 @@ export default function Dashboard() {
                             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                                 {appointments.filter(a => a.client_phone === selectedClient.phone).reverse().map(app => (
                                     <div key={app.id} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                        <div>
-                                            <p className="text-xs font-bold text-stone-800">{format(new Date(app.start_time), "d MMMM yyyy", { locale: ru })}</p>
-                                            <p className="text-[10px] text-stone-500 font-bold mt-0.5">{app.service?.name}</p>
-                                        </div>
-                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${app.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
-                                            {app.status === 'completed' ? 'Был' : 'Записан'}
-                                        </span>
+                                        <div><p className="text-xs font-bold text-stone-800">{format(new Date(app.start_time), "d MMMM yyyy", { locale: ru })}</p><p className="text-[10px] text-stone-500 font-bold mt-0.5">{app.service?.name}</p></div>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${app.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>{app.status === 'completed' ? 'Был' : 'Записан'}</span>
                                     </div>
                                 ))}
                             </div>
@@ -977,62 +999,80 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* РУЧНАЯ ЗАПИСЬ */}
+            {/* 4. РУЧНАЯ ЗАПИСЬ */}
             {showManualModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
-                        <button onClick={() => setShowManualModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
-                        <h2 className="text-2xl font-black tracking-tight mb-8 text-stone-800 flex items-center gap-3"><UserPlus className="w-7 h-7 text-rose-500 bg-rose-50 p-1.5 rounded-xl"/> Новая запись</h2>
-                        <form onSubmit={handleAddManualBooking} className="space-y-5">
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                        <button onClick={() => setShowManualModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
+                        <h2 className="text-2xl font-black mb-8 text-stone-800 flex items-center gap-3"><UserPlus className="w-7 h-7 text-rose-500 bg-rose-50 p-1.5 rounded-xl"/> Новая запись</h2>
+                        <form onSubmit={handleAddManualBooking} className="space-y-4">
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Клиент / Задача *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
+                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
                             <div>
-                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга / Задача *</label>
-                                <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Свое время / Без услуги</option>{services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} мин)</option>)}</select>
+                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга *</label>
+                                <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 appearance-none"><option value="">Свое время / Без услуги</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                             </div>
                             {role === 'owner' && (
-                                <div>
-                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label>
-                                    <select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none"><option value="">Без привязки</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
-                                </div>
+                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label><select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 appearance-none"><option value="">Выполняю я</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
                             )}
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Дата *</label><input required type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
-                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Время *</label><input required type="time" value={manualTime} onChange={e => setManualTime(e.target.value)} className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800" /></div>
+                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Дата *</label><input required type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
+                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Время *</label><input required type="time" value={manualTime} onChange={e => setManualTime(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
                             </div>
-                            <button type="submit" disabled={addingManual} className="w-full mt-4 bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all shadow-lg shadow-rose-500/20 disabled:opacity-50 hover:opacity-90 flex justify-center">
-                                {addingManual ? <Loader2 className="w-6 h-6 animate-spin" /> : "Заблокировать время"}
-                            </button>
+                            <button type="submit" disabled={addingManual} className="w-full mt-4 bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex justify-center">{addingManual ? <Loader2 className="w-6 h-6 animate-spin" /> : "Сохранить"}</button>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* ДЕТАЛИ ВИЗИТА */}
+            {/* 5. ДЕТАЛИ ЗАПИСИ (С РАСХОДНИКАМИ) */}
             {selectedApp && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedApp(null)}>
-                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => setSelectedApp(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full active:scale-90 transition-all border border-stone-100"><X className="w-5 h-5" /></button>
-                        <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Детали записи</h2>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setSelectedApp(null); setUsedMaterials([]); }}>
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => { setSelectedApp(null); setUsedMaterials([]); }} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
+                        <h2 className="text-xl font-black mb-6 text-stone-800">Детали записи</h2>
+                        
                         <div className="space-y-6">
                             <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
-                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент</p>
+                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент / Задача</p>
                                 <p className="text-2xl font-black tracking-tight text-stone-800">{selectedApp.client_name}</p>
                                 <p className="text-sm font-bold text-rose-500 mt-1">{selectedApp.client_phone || "Без номера"}</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-6">
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-base font-bold text-stone-800">{format(new Date(selectedApp.start_time), "d MMMM", { locale: ru })}</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md mt-1">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-base font-bold text-stone-800 leading-tight">{selectedApp.service?.name || "Свое время / Задача"}</p></div>
+                            <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-5">
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-sm font-bold text-stone-800">{selectedApp.service?.name || "Без услуги"}</p></div>
                             </div>
+
+                            {/* БЛОК СПИСАНИЯ РАСХОДНИКОВ ПРИ ЗАВЕРШЕНИИ */}
+                            {selectedApp.status === 'active' && inventory.length > 0 && (
+                                <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
+                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/> Использованные материалы</h4>
+                                    
+                                    {usedMaterials.map((um, idx) => (
+                                        <div key={idx} className="flex gap-2 mb-2">
+                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 appearance-none">
+                                                <option value="" disabled>Выбрать...</option>
+                                                {inventory.map(i => <option key={i.id} value={i.id}>{i.name} ({i.quantity} {i.unit})</option>)}
+                                            </select>
+                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50"><X className="w-4 h-4"/></button>
+                                        </div>
+                                    ))}
+                                    
+                                    <button onClick={() => setUsedMaterials([...usedMaterials, {id: '', qty: 1}])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
+                                </div>
+                            )}
+
                             <div className="flex flex-col gap-3 pt-2">
-                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-400/30"><CheckCircle2 className="w-6 h-6" /> Завершить (в Архив)</button>}
+                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"><CheckCircle2 className="w-5 h-5"/> Завершить визит</button>}
+                                
                                 {selectedApp.client_phone && (
                                     <div className="grid grid-cols-2 gap-3 mt-1">
-                                        <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 hover:bg-black text-white font-bold py-4 rounded-2xl text-center active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-md"><Phone className="w-5 h-5" /> Звонок</a>
-                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-4 rounded-2xl text-center active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#25D366]/30"><MessageCircle className="w-5 h-5" /> Написать</a>
+                                        <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><Phone className="w-4 h-4" /> Звонок</a>
+                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</a>
                                     </div>
                                 )}
-                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-4 rounded-2xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 mt-2 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-5 h-5" /> {selectedApp.status === 'completed' ? 'Удалить из архива' : 'Отменить запись'}</button>
+                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
                             </div>
                         </div>
                     </div>
