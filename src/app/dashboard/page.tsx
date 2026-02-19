@@ -125,6 +125,7 @@ export default function Dashboard() {
     const [invQty, setInvQty] = useState("0");
     const [invCritical, setInvCritical] = useState("5");
     const [invCost, setInvCost] = useState("0");
+    const [invRetail, setInvRetail] = useState("0"); // РОЗНИЧНАЯ ЦЕНА
     const [addingInv, setAddingInv] = useState(false);
     const [expandedInvCategories, setExpandedInvCategories] = useState<Record<string, boolean>>({});
 
@@ -205,7 +206,7 @@ export default function Dashboard() {
             
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, service:services(name, category, price, duration), employee:employees(name)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, materials_retail, service:services(name, category, price, duration), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
 
@@ -300,9 +301,9 @@ export default function Dashboard() {
         try {
             await supabase.from("inventory").insert({
                 user_id: user.id, name: invName, category: finalCategory || 'Расходники', sku: invSku, unit: invUnit, 
-                quantity: Number(invQty), critical_level: Number(invCritical), cost_price: Number(invCost)
+                quantity: Number(invQty), critical_level: Number(invCritical), cost_price: Number(invCost), retail_price: Number(invRetail)
             });
-            setShowInvModal(false); setInvName(""); setInvSku(""); setInvQty("0"); setInvCost("0"); setInvCategoryInput("");
+            setShowInvModal(false); setInvName(""); setInvSku(""); setInvQty("0"); setInvCost("0"); setInvRetail("0"); setInvCategoryInput("");
             await loadData(user.id, true);
         } catch(err) { alert("Ошибка сохранения"); } finally { setAddingInv(false); }
     };
@@ -342,17 +343,21 @@ export default function Dashboard() {
     }, {});
 
 
-    // ЗАВЕРШЕНИЕ ВИЗИТА С РАСХОДНИКАМИ
+    // ЗАВЕРШЕНИЕ ВИЗИТА С РАСХОДНИКАМИ И РОЗНИЦЕЙ
     const handleCompleteRecord = async (app: any) => {
         if (!confirm("Завершить визит и списать материалы?")) return;
         
         let totalCost = 0;
+        let totalRetail = 0;
         
         for (const used of usedMaterials) {
             if (used.qty > 0 && used.id) {
                 const item = inventory.find(i => i.id === used.id);
                 if (item) {
                     totalCost += (item.cost_price * used.qty);
+                    // Если розничная цена не задана, берем себестоимость (наценки нет)
+                    totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
+                    
                     const newQty = item.quantity - used.qty;
                     await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
                     await supabase.from('inventory_transactions').insert({
@@ -362,19 +367,22 @@ export default function Dashboard() {
             }
         }
 
-        await supabase.from("appointments").update({ status: 'completed', materials_cost: totalCost }).eq("id", app.id);
+        await supabase.from("appointments").update({ status: 'completed', materials_cost: totalCost, materials_retail: totalRetail }).eq("id", app.id);
         
         let targetClientId = app.client_id;
         if (!targetClientId && app.client_phone) {
             const { data: existingClient } = await supabase.from("clients").select("id, visits_count, total_revenue").eq("master_id", user.id).eq("phone", app.client_phone).maybeSingle();
             if (existingClient) targetClientId = existingClient.id;
         }
-        const price = Number(app.service?.price || 0);
+        
+        const baseServicePrice = Number(app.service?.price || 0);
+        const finalClientPrice = baseServicePrice + totalRetail; // Клиент платит за Услугу + Розничные материалы
+        
         if (targetClientId) {
             const client = clients.find(c => c.id === targetClientId);
-            if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + price }).eq("id", targetClientId);
+            if (client) await supabase.from("clients").update({ visits_count: client.visits_count + 1, total_revenue: Number(client.total_revenue) + finalClientPrice }).eq("id", targetClientId);
         } else if (app.client_phone) {
-            await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: price, is_blacklisted: false, notes: "" });
+            await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: finalClientPrice, is_blacklisted: false, notes: "" });
         }
         
         setUsedMaterials([]);
@@ -443,15 +451,17 @@ export default function Dashboard() {
     const employeeStats: Record<string, {name: string, visits: number, earned: number}> = {};
 
     archivedApps.forEach(app => {
-        const price = Number(app.service?.price || 0);
-        const matCost = Number(app.materials_cost || 0);
-        totalRevenue += price;
+        const servicePrice = Number(app.service?.price || 0); // Чистая стоимость работы
+        const matRetail = Number(app.materials_retail || 0); // За сколько продали детали клиенту
+        const matCost = Number(app.materials_cost || 0); // За сколько купили детали сами
+        
+        totalRevenue += (servicePrice + matRetail); // Все деньги, которые дал клиент
         totalMaterialsCost += matCost;
 
         if (app.employee_id) {
             const emp = employees.find(e => e.id === app.employee_id);
             const rate = emp?.commission_rate || 50;
-            const empCut = (price * rate) / 100;
+            const empCut = (servicePrice * rate) / 100; // ЗАРПЛАТА СЧИТАЕТСЯ ТОЛЬКО ОТ РАБОТЫ (Услуги)
             totalPayroll += empCut;
 
             if (!employeeStats[app.employee_id]) {
@@ -758,7 +768,8 @@ export default function Dashboard() {
                                                                             <tr className="border-b border-stone-100 text-[10px] uppercase tracking-widest text-stone-400">
                                                                                 <th className="pb-3 pl-3 font-black">Наименование</th>
                                                                                 <th className="pb-3 font-black">Остаток</th>
-                                                                                <th className="pb-3 font-black hidden sm:table-cell">Цена</th>
+                                                                                <th className="pb-3 font-black hidden sm:table-cell">Закупка</th>
+                                                                                <th className="pb-3 font-black hidden sm:table-cell">Розница</th>
                                                                                 <th className="pb-3 font-black text-right pr-3">Действия</th>
                                                                             </tr>
                                                                         </thead>
@@ -777,7 +788,8 @@ export default function Dashboard() {
                                                                                                 {item.quantity} {item.unit}
                                                                                             </div>
                                                                                         </td>
-                                                                                        <td className="py-4 hidden sm:table-cell font-black text-stone-600 text-sm">{item.cost_price} ₽</td>
+                                                                                        <td className="py-4 hidden sm:table-cell font-black text-stone-400 text-sm">{item.cost_price} ₽</td>
+                                                                                        <td className="py-4 hidden sm:table-cell font-black text-stone-600 text-sm">{item.retail_price} ₽</td>
                                                                                         <td className="py-4 pr-3 text-right">
                                                                                             <div className="flex justify-end gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                                                                                 <button onClick={() => handleAdjustInventory(item, 'deduct')} className="p-2 bg-white border border-stone-200 rounded-lg text-stone-600 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors" title="Списать">-</button>
@@ -814,7 +826,7 @@ export default function Dashboard() {
                                                                 <p className="text-[10px] font-bold text-stone-500 mt-1 uppercase tracking-widest flex items-center gap-1.5">
                                                                     {tx.type === 'manual_add' ? <span className="text-emerald-600">Ручной приход</span> : 
                                                                      tx.type === 'manual_deduct' ? <span className="text-orange-500">Ручное списание</span> : 
-                                                                     <span className="text-violet-500">Расход на визит</span>}
+                                                                     <span className="text-violet-500">Расход на заказ</span>}
                                                                     <span className="text-stone-300">•</span> {format(new Date(tx.created_at), "d MMM HH:mm", { locale: ru })}
                                                                 </p>
                                                             </div>
@@ -860,7 +872,7 @@ export default function Dashboard() {
                                             )}
 
                                             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-stone-100">
-                                                <div className="bg-stone-50 border border-stone-100 p-3 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-0.5">Визиты</p><p className="text-lg font-black tracking-tight text-stone-800">{client.visits_count}</p></div>
+                                                <div className="bg-stone-50 border border-stone-100 p-3 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-0.5">Заказы</p><p className="text-lg font-black tracking-tight text-stone-800">{client.visits_count}</p></div>
                                                 <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Выручка</p><p className="text-lg font-black tracking-tight text-emerald-600">{client.total_revenue} ₽</p></div>
                                             </div>
                                         </div>
@@ -875,13 +887,13 @@ export default function Dashboard() {
                                 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                     <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Грязная выручка</p>
+                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Общая выручка</p>
                                         <p className="text-3xl font-black tracking-tight text-stone-900">{totalRevenue} <span className="text-xl text-stone-400">₽</span></p>
                                     </div>
                                     <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
                                         <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5"/> Фонд ЗП и Затраты</p>
                                         <p className="text-3xl font-black tracking-tight text-rose-500">{totalPayroll + totalMaterialsCost} <span className="text-xl text-rose-300">₽</span></p>
-                                        <p className="text-[10px] font-bold text-stone-400 mt-1">ЗП: {totalPayroll}₽ | Мат: {totalMaterialsCost}₽</p>
+                                        <p className="text-[10px] font-bold text-stone-400 mt-1">ЗП: {totalPayroll}₽ | Мат. (Закупка): {totalMaterialsCost}₽</p>
                                     </div>
                                     <div className="bg-gradient-to-br from-emerald-400 to-emerald-500 p-6 rounded-[32px] shadow-lg shadow-emerald-500/20 text-white flex flex-col justify-center relative overflow-hidden">
                                         <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -917,7 +929,7 @@ export default function Dashboard() {
                                                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shadow-sm ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-400 text-white' : i === 1 ? 'bg-gradient-to-br from-stone-300 to-stone-400 text-white' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-orange-400 text-white' : 'bg-white text-stone-400 border border-stone-200'}`}>{i + 1}</div>
                                                         <div>
                                                             <span className="text-sm font-bold text-stone-800 block">{c.name}</span>
-                                                            <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Визитов: {c.visits_count}</span>
+                                                            <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">Заказов: {c.visits_count}</span>
                                                         </div>
                                                     </div>
                                                     <span className="text-sm font-black tracking-tight text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded-lg border border-emerald-100">{c.total_revenue} ₽</span>
@@ -1071,7 +1083,7 @@ export default function Dashboard() {
             {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
             {showInvModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
                         <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black mb-6 text-stone-900">Новый товар</h2>
                         <form onSubmit={handleAddInventory} className="space-y-4">
@@ -1099,8 +1111,11 @@ export default function Dashboard() {
                                 <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Остаток сейчас</label><input type="number" required value={invQty} onChange={e => setInvQty(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
                                 <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Мин. остаток</label><input type="number" required value={invCritical} onChange={e => setInvCritical(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
                             </div>
-                            <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Закупочная цена (за 1 ед.)</label><input type="number" required value={invCost} onChange={e => setInvCost(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
-                            <button type="submit" disabled={addingInv || (invCategorySelect === 'NEW' && !invCategoryInput)} className="w-full mt-2 bg-stone-900 text-white font-black py-4 rounded-xl active:scale-95 transition-all disabled:opacity-50">{addingInv ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : "Сохранить товар"}</button>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Закупка (Себест-ть)</label><input type="number" required value={invCost} onChange={e => setInvCost(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
+                                <div><label className="text-[10px] font-bold uppercase tracking-widest text-rose-500 ml-1">Розница (Для клиента)</label><input type="number" required value={invRetail} onChange={e => setInvRetail(e.target.value)} className="w-full mt-1 bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-sm font-black text-rose-700 outline-none focus:border-rose-400" /></div>
+                            </div>
+                            <button type="submit" disabled={addingInv || (invCategorySelect === 'NEW' && !invCategoryInput)} className="w-full mt-4 bg-stone-900 text-white font-black py-4 rounded-xl active:scale-95 transition-all disabled:opacity-50">{addingInv ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : "Сохранить товар"}</button>
                         </form>
                     </div>
                 </div>
@@ -1116,7 +1131,7 @@ export default function Dashboard() {
                         <div className="space-y-6">
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-stone-50 border border-stone-100 p-3 rounded-2xl"><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-0.5">Категория</p><p className="text-sm font-black text-stone-800">{selectedService.category}</p></div>
-                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Цена</p><p className="text-sm font-black text-emerald-700">{selectedService.price} ₽</p></div>
+                                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl"><p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Цена работы</p><p className="text-sm font-black text-emerald-700">{selectedService.price} ₽</p></div>
                             </div>
                             
                             <div>
@@ -1257,7 +1272,7 @@ export default function Dashboard() {
                                         <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> Написать</a>
                                     </div>
                                 )}
-                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
+                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
                             </div>
                         </div>
                     </div>
