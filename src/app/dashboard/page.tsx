@@ -7,7 +7,7 @@ import {
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
     RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, 
-    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree
+    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree, History
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -67,14 +67,16 @@ export default function Dashboard() {
     const [clients, setClients] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]); 
     const [inventory, setInventory] = useState<any[]>([]); 
+    const [transactions, setTransactions] = useState<any[]>([]);
     
     const [saving, setSaving] = useState(false);
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     
-    // Форма Услуги (с Категорией)
-    const [newCategory, setNewCategory] = useState("Общие");
+    // Форма Услуги (с умными Категориями)
+    const [serviceCategorySelect, setServiceCategorySelect] = useState("Общие");
+    const [serviceCategoryInput, setServiceCategoryInput] = useState("");
     const [newName, setNewName] = useState("");
     const [newPrice, setNewPrice] = useState("");
     const [newDuration, setNewDuration] = useState("60");
@@ -113,7 +115,10 @@ export default function Dashboard() {
     const [savingNote, setSavingNote] = useState(false);
 
     // СКЛАД (INVENTORY)
+    const [invView, setInvView] = useState<'stock' | 'history'>('stock');
     const [showInvModal, setShowInvModal] = useState(false);
+    const [invCategorySelect, setInvCategorySelect] = useState("Расходники");
+    const [invCategoryInput, setInvCategoryInput] = useState("");
     const [invName, setInvName] = useState("");
     const [invSku, setInvSku] = useState("");
     const [invUnit, setInvUnit] = useState("шт");
@@ -121,6 +126,7 @@ export default function Dashboard() {
     const [invCritical, setInvCritical] = useState("5");
     const [invCost, setInvCost] = useState("0");
     const [addingInv, setAddingInv] = useState(false);
+    const [expandedInvCategories, setExpandedInvCategories] = useState<Record<string, boolean>>({});
 
     // Расходники при завершении визита
     const [usedMaterials, setUsedMaterials] = useState<{id: string, qty: number}[]>([]);
@@ -193,6 +199,9 @@ export default function Dashboard() {
 
             const { data: inv } = await supabase.from("inventory").select("*").eq("user_id", userId).order('name');
             setInventory(inv || []);
+
+            const { data: tx } = await supabase.from("inventory_transactions").select("*, inventory(name, unit)").eq("user_id", userId).order('created_at', { ascending: false }).limit(50);
+            setTransactions(tx || []);
             
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
@@ -254,10 +263,13 @@ export default function Dashboard() {
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
-        const insertData: any = { user_id: user.id, name: newName, category: newCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
+        const finalCategory = serviceCategorySelect === 'NEW' ? serviceCategoryInput : serviceCategorySelect;
+        
+        const insertData: any = { user_id: user.id, name: newName, category: finalCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
         if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
+        
         await supabase.from("services").insert(insertData);
-        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); await loadData(user.id); setAddingService(false);
+        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); await loadData(user.id); setAddingService(false);
     };
 
     const handleDeleteService = async (id: string) => { 
@@ -269,6 +281,10 @@ export default function Dashboard() {
     };
 
     const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
+    
+    // Получение уникальных категорий услуг для селекта
+    const existingServiceCategories = Array.from(new Set(services.map(s => s.category || 'Общие')));
+    if (!existingServiceCategories.includes("Общие")) existingServiceCategories.unshift("Общие");
 
     const filteredServicesList = services.filter(s => s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) || (s.category && s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase())));
     const groupedServices = filteredServicesList.reduce((acc: Record<string, any[]>, curr: any) => {
@@ -281,12 +297,13 @@ export default function Dashboard() {
     // ФУНКЦИИ СКЛАДА
     const handleAddInventory = async (e: React.FormEvent) => {
         e.preventDefault(); setAddingInv(true);
+        const finalCategory = invCategorySelect === 'NEW' ? invCategoryInput : invCategorySelect;
         try {
             await supabase.from("inventory").insert({
-                user_id: user.id, name: invName, sku: invSku, unit: invUnit, 
+                user_id: user.id, name: invName, category: finalCategory || 'Расходники', sku: invSku, unit: invUnit, 
                 quantity: Number(invQty), critical_level: Number(invCritical), cost_price: Number(invCost)
             });
-            setShowInvModal(false); setInvName(""); setInvSku(""); setInvQty("0"); setInvCost("0");
+            setShowInvModal(false); setInvName(""); setInvSku(""); setInvQty("0"); setInvCost("0"); setInvCategoryInput("");
             await loadData(user.id, true);
         } catch(err) { alert("Ошибка сохранения"); } finally { setAddingInv(false); }
     };
@@ -312,6 +329,19 @@ export default function Dashboard() {
             await loadData(user.id, true);
         }
     }
+
+    const toggleInvCategory = (cat: string) => setExpandedInvCategories(prev => ({...prev, [cat]: !prev[cat]}));
+
+    const existingInvCategories = Array.from(new Set(inventory.map(i => i.category || 'Расходники')));
+    if (!existingInvCategories.includes("Расходники")) existingInvCategories.unshift("Расходники");
+
+    const groupedInventory = inventory.reduce((acc: Record<string, any[]>, curr: any) => {
+        const cat = curr.category || 'Расходники';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(curr);
+        return acc;
+    }, {});
+
 
     // ЗАВЕРШЕНИЕ ВИЗИТА С РАСХОДНИКАМИ
     const handleCompleteRecord = async (app: any) => {
@@ -585,7 +615,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🔵 ПРАЙС-ЛИСТ (НОВЫЙ КОМПАКТНЫЙ С ПАПКАМИ) */}
+                        {/* 🔵 ПРАЙС-ЛИСТ (УМНЫЕ ПАПКИ) */}
                         {activeTab === 'services' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -593,16 +623,31 @@ export default function Dashboard() {
                                         <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
                                             <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Добавить услугу</h2>
                                             <div className="flex flex-col gap-3">
-                                                <input value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="Папка (Например: Диагностика)" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
-                                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Название услуги" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
+                                                
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Папка (Категория)</label>
+                                                    <select value={serviceCategorySelect} onChange={e => setServiceCategorySelect(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer">
+                                                        {existingServiceCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        <option value="NEW">+ Создать новую папку</option>
+                                                    </select>
+                                                </div>
+                                                {serviceCategorySelect === 'NEW' && (
+                                                    <input value={serviceCategoryInput} onChange={e => setServiceCategoryInput(e.target.value)} placeholder="Название новой папки..." className="w-full bg-white border border-rose-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 shadow-sm" />
+                                                )}
+
+                                                <div className="space-y-1 mt-2">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название услуги</label>
+                                                    <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Например: Замена масла" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
+                                                </div>
+
                                                 {role === 'owner' && (
                                                     <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none appearance-none"><option value="">Выполняют все</option>{employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}</select>
                                                 )}
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-2 gap-3 mt-1">
                                                     <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase">Мин</span><input value={newDuration} onChange={e => setNewDuration(e.target.value)} type="number" placeholder="60" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-10 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
                                                     <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-bold">₽</span><input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-8 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
                                                 </div>
-                                                <button onClick={handleAddService} disabled={addingService || !newName || !newPrice} className="w-full mt-2 bg-stone-900 text-white p-3.5 rounded-xl font-bold active:scale-[0.98] transition-all disabled:opacity-50 shadow-md flex justify-center items-center hover:bg-black">{addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}</button>
+                                                <button onClick={handleAddService} disabled={addingService || !newName || !newPrice || (serviceCategorySelect === 'NEW' && !serviceCategoryInput)} className="w-full mt-4 bg-stone-900 text-white p-4 rounded-xl font-bold active:scale-[0.98] transition-all disabled:opacity-50 shadow-md flex justify-center items-center hover:bg-black">{addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить в прайс"}</button>
                                             </div>
                                         </div>
                                     </div>
@@ -653,69 +698,125 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 📦 СКЛАД (INVENTORY) */}
+                        {/* 📦 СКЛАД (С ПАПКАМИ И ИСТОРИЕЙ) */}
                         {activeTab === 'inventory' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <div className="col-span-2 bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Позиций на складе</p>
-                                        <p className="text-3xl font-black tracking-tight text-stone-900">{inventory.length}</p>
+                                
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                                    <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
+                                        <button onClick={() => setInvView('stock')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${invView === 'stock' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Остатки</button>
+                                        <button onClick={() => setInvView('history')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${invView === 'history' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><History className="w-4 h-4"/> История</button>
                                     </div>
-                                    <div className="col-span-2 bg-stone-900 p-6 rounded-[32px] shadow-lg text-white flex flex-col justify-center relative overflow-hidden">
-                                        <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-                                        <p className="text-xs text-stone-400 font-black uppercase tracking-widest mb-1 relative z-10">Стоимость активов</p>
-                                        <p className="text-3xl font-black tracking-tight relative z-10">{inventoryValue} <span className="text-xl opacity-60">₽</span></p>
-                                    </div>
+                                    {invView === 'stock' && (
+                                        <button onClick={() => setShowInvModal(true)} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black">
+                                            <Plus className="w-4 h-4"/> Новый товар
+                                        </button>
+                                    )}
                                 </div>
 
-                                <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
-                                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-                                        <h3 className="text-xl font-black text-stone-800 flex items-center gap-2"><Package className="w-5 h-5 text-rose-500"/> Остатки</h3>
-                                        <button onClick={() => setShowInvModal(true)} className="bg-stone-100 hover:bg-stone-200 text-stone-800 px-4 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2"><Plus className="w-4 h-4"/> Новый товар</button>
-                                    </div>
+                                {invView === 'stock' && (
+                                    <>
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <div className="col-span-2 bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
+                                                <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Позиций на складе</p>
+                                                <p className="text-3xl font-black tracking-tight text-stone-900">{inventory.length}</p>
+                                            </div>
+                                            <div className="col-span-2 bg-stone-900 p-6 rounded-[32px] shadow-lg text-white flex flex-col justify-center relative overflow-hidden">
+                                                <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                                                <p className="text-xs text-stone-400 font-black uppercase tracking-widest mb-1 relative z-10">Стоимость активов</p>
+                                                <p className="text-3xl font-black tracking-tight relative z-10">{inventoryValue} <span className="text-xl opacity-60">₽</span></p>
+                                            </div>
+                                        </div>
 
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="border-b border-stone-100 text-[10px] uppercase tracking-widest text-stone-400">
-                                                    <th className="pb-3 pl-2 font-black">Наименование</th>
-                                                    <th className="pb-3 font-black">Остаток</th>
-                                                    <th className="pb-3 font-black hidden sm:table-cell">Закуп. цена</th>
-                                                    <th className="pb-3 font-black text-right pr-2">Действия</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {inventory.length === 0 ? <tr><td colSpan={4} className="text-center py-8 text-stone-400 text-sm font-bold">Склад пуст. Добавьте первый товар.</td></tr> : 
-                                                    inventory.map(item => {
-                                                        const isLow = item.quantity <= item.critical_level;
-                                                        return (
-                                                            <tr key={item.id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors group">
-                                                                <td className="py-4 pl-2">
-                                                                    <p className="font-black text-sm text-stone-900">{item.name}</p>
-                                                                    {item.sku && <p className="text-[10px] text-stone-400 font-bold font-mono mt-0.5">Арт: {item.sku}</p>}
-                                                                </td>
-                                                                <td className="py-4">
-                                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black ${isLow ? 'bg-orange-100 text-orange-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                                                                        {isLow && <AlertTriangle className="w-3 h-3"/>}
-                                                                        {item.quantity} {item.unit}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="py-4 hidden sm:table-cell font-black text-stone-600 text-sm">{item.cost_price} ₽</td>
-                                                                <td className="py-4 pr-2 text-right">
-                                                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <button onClick={() => handleAdjustInventory(item, 'deduct')} className="p-1.5 bg-white border border-stone-200 rounded-md text-stone-600 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors" title="Списать">-</button>
-                                                                        <button onClick={() => handleAdjustInventory(item, 'add')} className="p-1.5 bg-white border border-stone-200 rounded-md text-stone-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-colors" title="Добавить">+</button>
-                                                                        <button onClick={() => handleDeleteInventory(item.id)} className="p-1.5 ml-2 bg-white border border-stone-200 rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 transition-colors"><Trash2 className="w-4 h-4"/></button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })
-                                                }
-                                            </tbody>
-                                        </table>
+                                        <div className="bg-white p-2 rounded-[32px] border border-stone-200 shadow-sm">
+                                            {Object.keys(groupedInventory).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Склад пуст</p> : 
+                                                (Object.entries(groupedInventory) as [string, any[]][]).map(([category, items]) => (
+                                                    <div key={category} className="mb-2 last:mb-0">
+                                                        <button onClick={() => toggleInvCategory(category)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors">
+                                                            <div className="flex items-center gap-3">
+                                                                {expandedInvCategories[category] ? <FolderOpen className="w-5 h-5 text-rose-400"/> : <Folder className="w-5 h-5 text-stone-400"/>}
+                                                                <span className="font-black text-stone-900 text-base">{category}</span>
+                                                                <span className="bg-white text-stone-500 px-2 py-0.5 rounded-md text-[10px] font-black border border-stone-200">{items.length} поз.</span>
+                                                            </div>
+                                                        </button>
+                                                        {expandedInvCategories[category] && (
+                                                            <div className="px-2 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                                <div className="overflow-x-auto">
+                                                                    <table className="w-full text-left border-collapse">
+                                                                        <thead>
+                                                                            <tr className="border-b border-stone-100 text-[10px] uppercase tracking-widest text-stone-400">
+                                                                                <th className="pb-3 pl-3 font-black">Наименование</th>
+                                                                                <th className="pb-3 font-black">Остаток</th>
+                                                                                <th className="pb-3 font-black hidden sm:table-cell">Цена</th>
+                                                                                <th className="pb-3 font-black text-right pr-3">Действия</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {items.map(item => {
+                                                                                const isLow = item.quantity <= item.critical_level;
+                                                                                return (
+                                                                                    <tr key={item.id} className="border-b border-stone-50 last:border-0 hover:bg-stone-50/50 transition-colors group">
+                                                                                        <td className="py-4 pl-3">
+                                                                                            <p className="font-black text-sm text-stone-900">{item.name}</p>
+                                                                                            {item.sku && <p className="text-[10px] text-stone-400 font-bold font-mono mt-0.5">Арт: {item.sku}</p>}
+                                                                                        </td>
+                                                                                        <td className="py-4">
+                                                                                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black ${isLow ? 'bg-orange-100 text-orange-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                                                                {isLow && <AlertTriangle className="w-3 h-3"/>}
+                                                                                                {item.quantity} {item.unit}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                        <td className="py-4 hidden sm:table-cell font-black text-stone-600 text-sm">{item.cost_price} ₽</td>
+                                                                                        <td className="py-4 pr-3 text-right">
+                                                                                            <div className="flex justify-end gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                                <button onClick={() => handleAdjustInventory(item, 'deduct')} className="p-2 bg-white border border-stone-200 rounded-lg text-stone-600 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors" title="Списать">-</button>
+                                                                                                <button onClick={() => handleAdjustInventory(item, 'add')} className="p-2 bg-white border border-stone-200 rounded-lg text-stone-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-colors" title="Добавить">+</button>
+                                                                                                <button onClick={() => handleDeleteInventory(item.id)} className="p-2 ml-2 bg-white border border-stone-200 rounded-lg text-stone-400 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+                                    </>
+                                )}
+
+                                {invView === 'history' && (
+                                    <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+                                        <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center gap-2"><History className="w-5 h-5 text-rose-500"/> Журнал операций</h3>
+                                        <div className="space-y-3">
+                                            {transactions.length === 0 ? <p className="text-sm text-stone-400 font-bold text-center py-10">История пуста</p> : 
+                                                transactions.map(tx => {
+                                                    const isAdd = tx.change_amount > 0;
+                                                    return (
+                                                        <div key={tx.id} className="flex justify-between items-center p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:border-stone-200 transition-colors">
+                                                            <div>
+                                                                <p className="font-black text-sm text-stone-900">{tx.inventory?.name || "Товар удален"}</p>
+                                                                <p className="text-[10px] font-bold text-stone-500 mt-1 uppercase tracking-widest flex items-center gap-1.5">
+                                                                    {tx.type === 'manual_add' ? <span className="text-emerald-600">Ручной приход</span> : 
+                                                                     tx.type === 'manual_deduct' ? <span className="text-orange-500">Ручное списание</span> : 
+                                                                     <span className="text-violet-500">Расход на визит</span>}
+                                                                    <span className="text-stone-300">•</span> {format(new Date(tx.created_at), "d MMM HH:mm", { locale: ru })}
+                                                                </p>
+                                                            </div>
+                                                            <span className={`font-black text-sm px-3 py-1.5 rounded-xl border shrink-0 ${isAdd ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                                                {isAdd ? '+' : ''}{tx.change_amount} {tx.inventory?.unit || 'шт'}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })
+                                            }
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         )}
 
@@ -963,6 +1064,18 @@ export default function Dashboard() {
                         <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black mb-6 text-stone-900">Новый товар</h2>
                         <form onSubmit={handleAddInventory} className="space-y-4">
+                            
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Папка (Категория)</label>
+                                <select value={invCategorySelect} onChange={e => setInvCategorySelect(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer">
+                                    {existingInvCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                    <option value="NEW">+ Создать новую папку</option>
+                                </select>
+                            </div>
+                            {invCategorySelect === 'NEW' && (
+                                <input value={invCategoryInput} onChange={e => setInvCategoryInput(e.target.value)} placeholder="Название новой папки..." className="w-full bg-white border border-rose-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 shadow-sm" />
+                            )}
+
                             <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Наименование *</label><input required value={invName} onChange={e => setInvName(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Артикул</label><input value={invSku} onChange={e => setInvSku(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
@@ -976,7 +1089,7 @@ export default function Dashboard() {
                                 <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Мин. остаток</label><input type="number" required value={invCritical} onChange={e => setInvCritical(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
                             </div>
                             <div><label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Закупочная цена (за 1 ед.)</label><input type="number" required value={invCost} onChange={e => setInvCost(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400" /></div>
-                            <button type="submit" disabled={addingInv} className="w-full mt-2 bg-stone-900 text-white font-black py-4 rounded-xl active:scale-95 transition-all disabled:opacity-50">{addingInv ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : "Сохранить товар"}</button>
+                            <button type="submit" disabled={addingInv || (invCategorySelect === 'NEW' && !invCategoryInput)} className="w-full mt-2 bg-stone-900 text-white font-black py-4 rounded-xl active:scale-95 transition-all disabled:opacity-50">{addingInv ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : "Сохранить товар"}</button>
                         </form>
                     </div>
                 </div>
@@ -1124,7 +1237,7 @@ export default function Dashboard() {
                                 {selectedApp.client_phone && (
                                     <div className="grid grid-cols-2 gap-3 mt-1">
                                         <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><Phone className="w-4 h-4" /> Звонок</a>
-                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</a>
+                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> Написать</a>
                                     </div>
                                 )}
                                 <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
