@@ -71,6 +71,7 @@ export default function Dashboard() {
     const [saving, setSaving] = useState(false);
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
+    const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     
     // Форма Услуги (с Категорией)
     const [newCategory, setNewCategory] = useState("Общие");
@@ -147,6 +148,25 @@ export default function Dashboard() {
         init();
         return () => subscription.unsubscribe();
     }, [router]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        const channel = supabase.channel('public:appointments')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => { loadData(user.id, true); }).subscribe();
+        const handleVisibilityChange = () => { if (document.visibilityState === 'visible') loadData(user.id, true); };
+        const handleFocus = () => loadData(user.id, true);
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleFocus);
+        const silentInterval = setInterval(() => { loadData(user.id, true); }, 15000);
+
+        return () => {
+            supabase.removeChannel(channel);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleFocus);
+            clearInterval(silentInterval);
+        };
+    }, [user?.id]);
 
     const loadData = async (userId: string, isSilent = false) => {
         if (!isSilent) setIsSyncing(true);
