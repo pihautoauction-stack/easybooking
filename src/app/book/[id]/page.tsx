@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing, Clock } from "lucide-react";
+import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing, Clock, Folder, FolderOpen } from "lucide-react";
 import { format, startOfToday } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
@@ -31,6 +31,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [showWaitlist, setShowWaitlist] = useState(false);
     const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "submitting" | "success">("idle");
 
+    // Состояние для открытия/закрытия папок услуг
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
     useEffect(() => {
         const fetchData = async () => {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -42,12 +45,10 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 .single();
 
             if (profileData) {
-                // Парсим портфолио, если оно пришло строкой
                 if (typeof profileData.portfolio_urls === 'string') {
                     profileData.portfolio_urls = JSON.parse(profileData.portfolio_urls);
                 }
                 
-                // Парсим новые настройки расписания по дням
                 if (typeof profileData.weekly_settings === 'string') {
                     profileData.weekly_settings = JSON.parse(profileData.weekly_settings);
                 }
@@ -62,8 +63,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 }
             }
             
-            setClientName(localStorage.getItem('eb_name') || "");
-            setClientPhone(localStorage.getItem('eb_phone') || "");
+            setClientName(localStorage.getItem('nx_name') || "");
+            setClientPhone(localStorage.getItem('nx_phone') || "");
             setLoading(false);
         };
         fetchData();
@@ -78,7 +79,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             const now = new Date();
             const startDay = new Date(selectedDate); startDay.setHours(0,0,0,0);
             const endDay = new Date(selectedDate); endDay.setHours(23,59,59,999);
-            const dayOfWeek = startDay.getDay(); // 0 - Вс, 1 - Пн и т.д.
+            const dayOfWeek = startDay.getDay(); 
             
             let query = supabase.from("appointments").select("start_time, service:services(duration)").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString()).eq("status", "active");
             if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
@@ -99,14 +100,12 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 return { start: sH * 60 + sM, end: eH * 60 + eM };
             });
 
-            // ЧИТАЕМ ГРАФИК ИМЕННО ДЛЯ ВЫБРАННОГО ДНЯ НЕДЕЛИ
             let wStartH, wStartM, wEndH, wEndM;
             
             if (profile.weekly_settings && profile.weekly_settings[dayOfWeek] && profile.weekly_settings[dayOfWeek].active) {
                 [wStartH, wStartM] = profile.weekly_settings[dayOfWeek].start.split(':').map(Number);
                 [wEndH, wEndM] = profile.weekly_settings[dayOfWeek].end.split(':').map(Number);
             } else {
-                // Страховочный вариант на случай отсутствия настроек
                 [wStartH, wStartM] = (profile.work_start_time || "09:00").split(':').map(Number);
                 [wEndH, wEndM] = (profile.work_end_time || "20:00").split(':').map(Number);
             }
@@ -158,8 +157,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         if (!selectedTime || !profile) return;
         setBookingStatus("submitting");
 
-        localStorage.setItem('eb_name', clientName);
-        localStorage.setItem('eb_phone', clientPhone);
+        localStorage.setItem('nx_name', clientName);
+        localStorage.setItem('nx_phone', clientPhone);
 
         const [h, m] = selectedTime.split(":").map(Number);
         const startDateTime = new Date(selectedDate!);
@@ -190,8 +189,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         if (!profile || !selectedDate) return;
         setWaitlistStatus("submitting");
 
-        localStorage.setItem('eb_name', clientName);
-        localStorage.setItem('eb_phone', clientPhone);
+        localStorage.setItem('nx_name', clientName);
+        localStorage.setItem('nx_phone', clientPhone);
 
         const { error } = await supabase.from('waitlist').insert({
             master_id: profile.id, date: selectedDate.toISOString(), client_name: clientName, client_phone: clientPhone
@@ -212,6 +211,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else if (selectedService) setSelectedService(null);
         else if (selectedEmployee) setSelectedEmployee(null);
     };
+
+    const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
 
     if (loading) return <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-rose-400" /></div>;
     if (!profile) return <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-stone-500 font-bold">Профиль не найден. Возможно, ссылка устарела.</div>;
@@ -251,6 +252,13 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         if (selectedEmployee) return !service.employee_id || service.employee_id === selectedEmployee.id;
         return true;
     });
+
+    const groupedServices = filteredServices.reduce((acc: Record<string, any[]>, curr: any) => {
+        const cat = curr.category || 'Общие';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(curr);
+        return acc;
+    }, {});
 
     return (
         <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-5 font-sans pb-24 selection:bg-rose-100 antialiased">
@@ -294,22 +302,41 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <div className="space-y-4">
                         {selectedEmployee && <div className="bg-rose-50 p-4 rounded-2xl text-sm text-rose-600 font-bold flex items-center gap-2 border border-rose-100 shadow-sm"><User className="w-5 h-5"/> Выбран мастер: {selectedEmployee.name}</div>}
                         <p className="text-[11px] text-stone-400 uppercase tracking-widest mb-3 ml-2 font-black">Выберите услугу</p>
-                        {filteredServices.map((service) => (
-                            <div key={service.id} onClick={() => setSelectedService(service)} className="bg-white rounded-[32px] p-6 border border-stone-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer flex flex-col group hover:border-rose-200">
-                                <div className="flex justify-between items-start gap-4">
-                                    <h3 className="font-black text-lg text-stone-900 leading-tight group-hover:text-rose-500 transition-colors">{service.name}</h3>
-                                    <span className="text-stone-900 font-black bg-stone-50 px-3.5 py-1.5 rounded-xl text-base shrink-0 border border-stone-200">{service.price} ₽</span>
+                        
+                        {Object.keys(groupedServices).length === 0 ? <p className="text-stone-400 text-sm font-bold pl-2">Услуг пока нет</p> : 
+                            (Object.entries(groupedServices) as [string, any[]][]).map(([category, items]) => (
+                                <div key={category} className="mb-3 bg-white rounded-[28px] border border-stone-100 shadow-sm overflow-hidden">
+                                    <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-5 hover:bg-stone-50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            {expandedCategories[category] ? <FolderOpen className="w-5 h-5 text-rose-400"/> : <Folder className="w-5 h-5 text-stone-400"/>}
+                                            <span className="font-black text-stone-900 text-lg">{category}</span>
+                                        </div>
+                                        <span className="bg-stone-100 text-stone-500 px-2.5 py-1 rounded-lg text-xs font-black">{items.length}</span>
+                                    </button>
+
+                                    {expandedCategories[category] && (
+                                        <div className="px-3 pb-3 pt-1 space-y-2 animate-in fade-in slide-in-from-top-2">
+                                            {items.map(service => (
+                                                <div key={service.id} onClick={() => setSelectedService(service)} className="bg-stone-50 rounded-[24px] p-4 border border-stone-100 active:scale-[0.98] transition-all cursor-pointer flex flex-col group hover:border-rose-200 hover:bg-white shadow-sm">
+                                                    <div className="flex justify-between items-start gap-4">
+                                                        <h3 className="font-black text-base text-stone-900 leading-tight group-hover:text-rose-500 transition-colors">{service.name}</h3>
+                                                        <span className="text-stone-900 font-black bg-white px-3 py-1.5 rounded-xl text-sm shrink-0 border border-stone-200 shadow-sm">{service.price} ₽</span>
+                                                    </div>
+                                                    <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-500 font-bold">
+                                                        <Clock className="w-3.5 h-3.5" /> {service.duration || 60} мин.
+                                                    </div>
+                                                    {service.image_urls && service.image_urls.length > 0 && (
+                                                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x mt-3">
+                                                            {service.image_urls.map((url: string, idx: number) => (<img key={idx} src={url} alt="Услуга" className="w-16 h-16 object-cover rounded-xl shrink-0 snap-center shadow-sm border border-stone-100" />))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="mt-3 flex items-center gap-1.5 text-xs text-stone-400 font-bold">
-                                    <Clock className="w-4 h-4" /> {service.duration || 60} мин.
-                                </div>
-                                {service.image_urls && service.image_urls.length > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x mt-5">
-                                        {service.image_urls.map((url: string, idx: number) => (<img key={idx} src={url} alt="Услуга" className="w-24 h-24 object-cover rounded-2xl shrink-0 snap-center shadow-sm border border-stone-100" />))}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                            ))
+                        }
                     </div>
                 ) : (
                     <div className="space-y-6">
@@ -333,13 +360,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                         locale={ru} 
                                         disabled={[
                                             { before: startOfToday() }, 
-                                            // УМНАЯ БЛОКИРОВКА ВЫХОДНЫХ ДНЕЙ НА ОСНОВЕ НОВОГО РАСПИСАНИЯ
                                             (date) => {
                                                 if (profile?.weekly_settings) {
                                                     const daySetting = profile.weekly_settings[date.getDay()];
-                                                    if (daySetting) return !daySetting.active; // Блокируем, если день не активен
+                                                    if (daySetting) return !daySetting.active; 
                                                 }
-                                                // Страховка на случай старых настроек
                                                 return profile?.disabled_days ? profile.disabled_days.split(',').map(Number).includes(date.getDay()) : false;
                                             }
                                         ]} 

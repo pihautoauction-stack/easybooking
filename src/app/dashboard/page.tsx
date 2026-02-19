@@ -125,7 +125,7 @@ export default function Dashboard() {
     const [invQty, setInvQty] = useState("0");
     const [invCritical, setInvCritical] = useState("5");
     const [invCost, setInvCost] = useState("0");
-    const [invRetail, setInvRetail] = useState("0"); // РОЗНИЧНАЯ ЦЕНА
+    const [invRetail, setInvRetail] = useState("0");
     const [addingInv, setAddingInv] = useState(false);
     const [expandedInvCategories, setExpandedInvCategories] = useState<Record<string, boolean>>({});
 
@@ -355,7 +355,6 @@ export default function Dashboard() {
                 const item = inventory.find(i => i.id === used.id);
                 if (item) {
                     totalCost += (item.cost_price * used.qty);
-                    // Если розничная цена не задана, берем себестоимость (наценки нет)
                     totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
                     
                     const newQty = item.quantity - used.qty;
@@ -376,7 +375,7 @@ export default function Dashboard() {
         }
         
         const baseServicePrice = Number(app.service?.price || 0);
-        const finalClientPrice = baseServicePrice + totalRetail; // Клиент платит за Услугу + Розничные материалы
+        const finalClientPrice = baseServicePrice + totalRetail; 
         
         if (targetClientId) {
             const client = clients.find(c => c.id === targetClientId);
@@ -451,17 +450,17 @@ export default function Dashboard() {
     const employeeStats: Record<string, {name: string, visits: number, earned: number}> = {};
 
     archivedApps.forEach(app => {
-        const servicePrice = Number(app.service?.price || 0); // Чистая стоимость работы
-        const matRetail = Number(app.materials_retail || 0); // За сколько продали детали клиенту
-        const matCost = Number(app.materials_cost || 0); // За сколько купили детали сами
+        const servicePrice = Number(app.service?.price || 0); 
+        const matRetail = Number(app.materials_retail || 0); 
+        const matCost = Number(app.materials_cost || 0); 
         
-        totalRevenue += (servicePrice + matRetail); // Все деньги, которые дал клиент
+        totalRevenue += (servicePrice + matRetail); 
         totalMaterialsCost += matCost;
 
         if (app.employee_id) {
             const emp = employees.find(e => e.id === app.employee_id);
             const rate = emp?.commission_rate || 50;
-            const empCut = (servicePrice * rate) / 100; // ЗАРПЛАТА СЧИТАЕТСЯ ТОЛЬКО ОТ РАБОТЫ (Услуги)
+            const empCut = (servicePrice * rate) / 100; 
             totalPayroll += empCut;
 
             if (!employeeStats[app.employee_id]) {
@@ -477,7 +476,6 @@ export default function Dashboard() {
     const totalInventoryUnits = inventory.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
     // =====================================================
 
-    // Умная сортировка категорий склада для выпадающего списка
     let sortedInvCats: string[] = [];
     if (selectedApp) {
         const targetCat = selectedApp.service?.category || 'Общие';
@@ -504,11 +502,11 @@ export default function Dashboard() {
             {/* SIDEBAR */}
             <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
                 <div className="p-6 flex items-center gap-3 border-b border-stone-100">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-orange-300 flex items-center justify-center shrink-0 shadow-md shadow-rose-500/20">
-                        <span className="font-bold text-white tracking-tight text-sm">EB</span>
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shrink-0 shadow-md">
+                        <span className="font-bold text-white tracking-tight text-sm">NX</span>
                     </div>
                     <div className="flex flex-col">
-                        <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">EasyBooking</h2>
+                        <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">Nexio</h2>
                         <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">ERP System</span>
                     </div>
                 </div>
@@ -538,7 +536,7 @@ export default function Dashboard() {
                 {/* MOBILE HEADER */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-orange-300 flex items-center justify-center shrink-0 shadow-sm"><span className="font-bold text-white text-xs tracking-tight">EB</span></div>
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shrink-0 shadow-sm"><span className="font-bold text-white text-xs tracking-tight">NX</span></div>
                         <div className="flex flex-col justify-center">
                             <div className="flex items-center gap-2 mb-0.5"><h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1><div className="relative flex h-2 w-2 items-center justify-center">{isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}</div></div>
                             <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none">{businessName || "Профиль"}</span>
@@ -1083,7 +1081,7 @@ export default function Dashboard() {
             {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
             {showInvModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200">
                         <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black mb-6 text-stone-900">Новый товар</h2>
                         <form onSubmit={handleAddInventory} className="space-y-4">
