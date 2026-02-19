@@ -228,6 +228,28 @@ export default function Dashboard() {
         } finally { setSaving(false); }
     };
 
+    // ФУНКЦИИ ПОРТФОЛИО
+    const handleUploadPortfolioImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]; if (!file) return; 
+        setUploadingPortfolio(true);
+        try {
+            const fileName = `portfolio_${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
+            const filePath = `${user.id}/${fileName}`;
+            await supabase.storage.from('gallery').upload(filePath, file);
+            const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
+            const newUrls = [...portfolioUrls, data.publicUrl];
+            setPortfolioUrls(newUrls);
+            await supabase.from('profiles').update({ portfolio_urls: newUrls }).eq('id', user.id);
+        } catch (err: any) { alert("Ошибка загрузки: " + err.message); } finally { setUploadingPortfolio(false); }
+    };
+
+    const handleRemovePortfolioImage = async (urlToRemove: string) => {
+        if (!confirm("Удалить фото из портфолио?")) return;
+        const newUrls = portfolioUrls.filter(url => url !== urlToRemove);
+        setPortfolioUrls(newUrls);
+        await supabase.from('profiles').update({ portfolio_urls: newUrls }).eq('id', user.id);
+    };
+
     // ФУНКЦИИ УСЛУГ И КАТЕГОРИЙ
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
