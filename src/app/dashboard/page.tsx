@@ -74,7 +74,7 @@ export default function Dashboard() {
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     
-    // Форма Услуги (с умными Категориями)
+    // Форма Услуги (с Категорией)
     const [serviceCategorySelect, setServiceCategorySelect] = useState("Общие");
     const [serviceCategoryInput, setServiceCategoryInput] = useState("");
     const [newName, setNewName] = useState("");
@@ -205,7 +205,7 @@ export default function Dashboard() {
             
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, service:services(name, price, duration), employee:employees(name)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, service:services(name, category, price, duration), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
 
@@ -282,7 +282,6 @@ export default function Dashboard() {
 
     const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
     
-    // Получение уникальных категорий услуг для селекта
     const existingServiceCategories = Array.from(new Set(services.map(s => s.category || 'Общие')));
     if (!existingServiceCategories.includes("Общие")) existingServiceCategories.unshift("Общие");
 
@@ -349,9 +348,8 @@ export default function Dashboard() {
         
         let totalCost = 0;
         
-        // Списание
         for (const used of usedMaterials) {
-            if (used.qty > 0) {
+            if (used.qty > 0 && used.id) {
                 const item = inventory.find(i => i.id === used.id);
                 if (item) {
                     totalCost += (item.cost_price * used.qty);
@@ -438,7 +436,7 @@ export default function Dashboard() {
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
     
-    // ================= ФИНАНСОВЫЙ РАСЧЕТ =================
+    // ================= ФИНАНСОВЫЙ И СКЛАДСКОЙ РАСЧЕТ =================
     let totalRevenue = 0;
     let totalPayroll = 0;
     let totalMaterialsCost = 0;
@@ -465,8 +463,20 @@ export default function Dashboard() {
     });
     
     const netIncome = totalRevenue - totalPayroll - totalMaterialsCost;
-    const inventoryValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0);
+    const inventoryValue = inventory.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.cost_price)), 0);
+    const totalInventoryUnits = inventory.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
     // =====================================================
+
+    // Умная сортировка категорий склада для выпадающего списка
+    let sortedInvCats: string[] = [];
+    if (selectedApp) {
+        const targetCat = selectedApp.service?.category || 'Общие';
+        sortedInvCats = Object.keys(groupedInventory).sort((a, b) => {
+            if (a === targetCat) return -1;
+            if (b === targetCat) return 1;
+            return a.localeCompare(b);
+        });
+    }
 
     const getWhatsAppLink = (app: any) => {
         if (!app.client_phone) return "#";
@@ -718,8 +728,9 @@ export default function Dashboard() {
                                     <>
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                             <div className="col-span-2 bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
-                                                <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Позиций на складе</p>
-                                                <p className="text-3xl font-black tracking-tight text-stone-900">{inventory.length}</p>
+                                                <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Номенклатура (видов)</p>
+                                                <p className="text-3xl font-black tracking-tight text-stone-900">{inventory.length} <span className="text-sm font-bold text-stone-400 ml-1">категорий</span></p>
+                                                <p className="text-[10px] font-bold text-emerald-500 mt-1 uppercase tracking-widest">Всего физ. единиц: {totalInventoryUnits}</p>
                                             </div>
                                             <div className="col-span-2 bg-stone-900 p-6 rounded-[32px] shadow-lg text-white flex flex-col justify-center relative overflow-hidden">
                                                 <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
@@ -1193,7 +1204,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* 5. ДЕТАЛИ ЗАПИСИ (С РАСХОДНИКАМИ) */}
+            {/* 5. ДЕТАЛИ ЗАПИСИ (С РАСХОДНИКАМИ И УМНЫМ ВЫБОРОМ) */}
             {selectedApp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setSelectedApp(null); setUsedMaterials([]); }}>
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -1218,9 +1229,15 @@ export default function Dashboard() {
                                     
                                     {usedMaterials.map((um, idx) => (
                                         <div key={idx} className="flex gap-2 mb-2">
-                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 appearance-none">
-                                                <option value="" disabled>Выбрать...</option>
-                                                {inventory.map(i => <option key={i.id} value={i.id}>{i.name} ({i.quantity} {i.unit})</option>)}
+                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer">
+                                                <option value="" disabled>Выбрать из папок...</option>
+                                                {sortedInvCats.map(cat => (
+                                                    <optgroup key={cat} label={`📂 ${cat}`}>
+                                                        {groupedInventory[cat].map((i: any) => (
+                                                            <option key={i.id} value={i.id}>{i.name} (Остаток: {i.quantity} {i.unit})</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
                                             </select>
                                             <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
                                             <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50"><X className="w-4 h-4"/></button>
