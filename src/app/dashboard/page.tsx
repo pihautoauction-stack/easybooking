@@ -57,6 +57,9 @@ export default function Dashboard() {
     const [breaks, setBreaks] = useState<{start: string, end: string}[]>([]);
     const [newBreakStart, setNewBreakStart] = useState("13:00");
     const [newBreakEnd, setNewBreakEnd] = useState("14:00");
+    const [disabledDays, setDisabledDays] = useState<number[]>([]); 
+    const [workStartTime, setWorkStartTime] = useState("09:00");
+    const [workEndTime, setWorkEndTime] = useState("20:00");
     
     // Данные
     const [services, setServices] = useState<any[]>([]);
@@ -154,6 +157,9 @@ export default function Dashboard() {
                 setBusinessName(p.business_name || "");
                 setUsername(p.username || "");
                 setScheduleStep(p.schedule_step || 30);
+                if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
+                if (p.work_start_time) setWorkStartTime(p.work_start_time);
+                if (p.work_end_time) setWorkEndTime(p.work_end_time);
                 if (p.breaks) setBreaks(typeof p.breaks === 'string' ? JSON.parse(p.breaks) : p.breaks || []);
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
                 if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
@@ -191,6 +197,7 @@ export default function Dashboard() {
                 id: user.id, business_name: businessName, username: cleanUsername || null, 
                 schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls, 
                 weekly_settings: weeklySettings, updated_at: new Date(),
+                disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime
             });
             if (error) throw error;
             setUsername(cleanUsername);
@@ -221,13 +228,13 @@ export default function Dashboard() {
 
     const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
 
-    const filteredServicesList = services.filter(s => s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) || s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase()));
-    const groupedServices = filteredServicesList.reduce((acc, curr) => {
+    const filteredServicesList = services.filter(s => s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) || (s.category && s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase())));
+    const groupedServices = filteredServicesList.reduce((acc: Record<string, any[]>, curr: any) => {
         const cat = curr.category || 'Общие';
         if (!acc[cat]) acc[cat] = [];
         acc[cat].push(curr);
         return acc;
-    }, {} as Record<string, any[]>);
+    }, {});
 
     // ФУНКЦИИ СКЛАДА
     const handleAddInventory = async (e: React.FormEvent) => {
@@ -349,13 +356,17 @@ export default function Dashboard() {
         catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
     };
 
+    const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
-    const activeDailyApps = useMemo(() => appointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [appointments, viewDate]);
-    const archivedApps = appointments.filter(a => a.status === 'completed').reverse();
+    
+    // ФИЛЬТРАЦИЯ
+    const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
+    const activeDailyApps = useMemo(() => serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [serviceFilteredAppointments, viewDate]);
+    const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
     
-    // ================= ФИНАНСОВЫЙ РАСЧЕТ С УЧЕТОМ МАТЕРИАЛОВ =================
+    // ================= ФИНАНСОВЫЙ РАСЧЕТ =================
     let totalRevenue = 0;
     let totalPayroll = 0;
     let totalMaterialsCost = 0;
@@ -373,7 +384,9 @@ export default function Dashboard() {
             const empCut = (price * rate) / 100;
             totalPayroll += empCut;
 
-            if (!employeeStats[app.employee_id]) employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
+            if (!employeeStats[app.employee_id]) {
+                employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
+            }
             employeeStats[app.employee_id].visits += 1;
             employeeStats[app.employee_id].earned += empCut;
         }
@@ -381,7 +394,7 @@ export default function Dashboard() {
     
     const netIncome = totalRevenue - totalPayroll - totalMaterialsCost;
     const inventoryValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0);
-    // =======================================================================
+    // =====================================================
 
     const getWhatsAppLink = (app: any) => {
         if (!app.client_phone) return "#";
@@ -430,7 +443,7 @@ export default function Dashboard() {
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* HEADER */}
+                {/* MOBILE HEADER */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-orange-300 flex items-center justify-center shrink-0 shadow-sm"><span className="font-bold text-white text-xs tracking-tight">EB</span></div>
@@ -560,7 +573,7 @@ export default function Dashboard() {
                                         
                                         <div className="bg-white rounded-[32px] border border-stone-200 shadow-sm p-2">
                                             {Object.keys(groupedServices).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Ничего не найдено</p> : 
-                                                Object.entries(groupedServices).map(([category, items]) => (
+                                                (Object.entries(groupedServices) as [string, any[]][]).map(([category, items]) => (
                                                     <div key={category} className="mb-2 last:mb-0">
                                                         <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors">
                                                             <div className="flex items-center gap-3">
