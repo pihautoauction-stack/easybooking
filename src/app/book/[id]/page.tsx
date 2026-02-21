@@ -31,7 +31,6 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [showWaitlist, setShowWaitlist] = useState(false);
     const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "submitting" | "success">("idle");
 
-    // Состояние для открытия/закрытия папок услуг
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
@@ -261,7 +260,10 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     }, {});
 
     return (
-        <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-5 font-sans flex flex-col antialiased">
+        <div 
+            className="min-h-screen bg-[#FAF9F6] text-stone-800 px-4 sm:px-5 pb-4 font-sans flex flex-col antialiased"
+            style={{ paddingTop: 'calc(16px + env(safe-area-inset-top))' }}
+        >
             <div className="max-w-md mx-auto w-full space-y-6 flex-1">
                 
                 {/* HEADER КЛИЕНТА (Только название бизнеса) */}

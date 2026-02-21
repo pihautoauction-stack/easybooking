@@ -463,7 +463,7 @@ export default function Dashboard() {
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-stone-100 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <div className="p-4 border-t border-stone-100" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
                     <div className="flex items-center gap-3 px-4 py-3 mb-3 bg-stone-50 rounded-2xl border border-stone-100">
                         <div className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
                             {isSyncing ? <RefreshCw className="w-3 h-3 text-stone-400 animate-spin" /> : <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"></span>}
@@ -477,8 +477,11 @@ export default function Dashboard() {
             {/* ОСНОВНАЯ ОБЛАСТЬ */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* ШАПКА ДЛЯ МОБИЛОК (с учетом safe-area челки) */}
-                <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3.5 flex justify-between items-center transition-all">
+                {/* ШАПКА ДЛЯ МОБИЛОК (ЖЕСТКИЙ ОТСТУП SAFE-AREA) */}
+                <header 
+                    className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 pb-3.5 flex justify-between items-center transition-all"
+                    style={{ paddingTop: 'calc(12px + env(safe-area-inset-top))' }}
+                >
                     <div className="flex items-center gap-3">
                         <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
                         <div className="flex flex-col justify-center">
@@ -498,8 +501,11 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
                 </header>
 
-                {/* КОНТЕНТ (с отступом снизу для мобильного меню) */}
-                <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
+                {/* КОНТЕНТ (ЖЕСТКИЙ ОТСТУП СНИЗУ) */}
+                <main 
+                    className="flex-1 overflow-y-auto p-4 md:p-8 md:pb-8"
+                    style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
+                >
                     <div className="max-w-6xl mx-auto space-y-6">
                         
                         {/* 🟢 ЖУРНАЛ */}
@@ -882,13 +888,11 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ (КОМПАКТНЫЙ РЕДИЗАЙН С ВКЛАДКАМИ) */}
+                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ */}
                         {activeTab === 'profile' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-                                
                                 <div className="bg-white p-6 md:p-8 rounded-[40px] border border-stone-200 shadow-sm flex flex-col h-full min-h-[60vh]">
                                     
-                                    {/* Навигация внутри настроек */}
                                     <div className="flex overflow-x-auto gap-2 bg-stone-100 p-1.5 rounded-2xl mb-6 scrollbar-hide">
                                         <button onClick={() => setProfileTab('general')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${profileTab === 'general' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}>Основное</button>
                                         <button onClick={() => setProfileTab('schedule')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'schedule' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Clock className="w-4 h-4"/> Расписание</button>
@@ -896,7 +900,6 @@ export default function Dashboard() {
                                         {role === 'owner' && <button onClick={() => setProfileTab('team')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'team' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Users className="w-4 h-4"/> Команда</button>}
                                     </div>
 
-                                    {/* Вкладка: Основное */}
                                     {profileTab === 'general' && (
                                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
                                             <div className="bg-gradient-to-r from-rose-50 to-orange-50 p-5 rounded-[24px] border border-rose-100 shadow-sm">
@@ -912,7 +915,6 @@ export default function Dashboard() {
                                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название компании / Имя</label>
                                                     <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Моя компания / Мастер Анна" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                                                 </div>
-
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1">Короткая ссылка (Никнейм)</label>
                                                     <div className="relative">
@@ -924,7 +926,6 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* Вкладка: Расписание */}
                                     {profileTab === 'schedule' && (
                                         <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -988,7 +989,6 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* Вкладка: Галерея */}
                                     {profileTab === 'gallery' && (
                                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
                                             <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-4">Фотографии видны клиентам на странице записи</p>
@@ -1013,7 +1013,6 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* Вкладка: Команда */}
                                     {profileTab === 'team' && role === 'owner' && (
                                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
                                             <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-200 flex flex-col sm:flex-row gap-3 items-end">
@@ -1051,7 +1050,6 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* Плавающая кнопка сохранения */}
                                     <div className="mt-8 pt-6 border-t border-stone-100 flex justify-end shrink-0">
                                         <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-stone-900/20 active:scale-95 transition-all hover:bg-black w-full md:w-auto flex justify-center items-center">
                                             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить настройки"}
@@ -1063,8 +1061,11 @@ export default function Dashboard() {
                     </div>
                 </main>
 
-                {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК, с учетом safe-area снизу) */}
-                <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+                {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК) */}
+                <nav 
+                    className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)]"
+                    style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
+                >
                     {NAV_ITEMS.map((tab) => {
                         const isActive = activeTab === tab.id;
                         return (
@@ -1084,8 +1085,7 @@ export default function Dashboard() {
 
             </div>
 
-            {/* ================= МОДАЛКИ ================= */}
-
+            {/* МОДАЛКИ ОСТАЛИСЬ БЕЗ ИЗМЕНЕНИЙ... */}
             {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
             {showInvModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1221,6 +1221,65 @@ export default function Dashboard() {
                             </div>
                             <button type="submit" disabled={addingManual} className="w-full mt-4 bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex justify-center">{addingManual ? <Loader2 className="w-6 h-6 animate-spin" /> : "Сохранить"}</button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 5. ДЕТАЛИ ЗАПИСИ */}
+            {selectedApp && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setSelectedApp(null); setUsedMaterials([]); }}>
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => { setSelectedApp(null); setUsedMaterials([]); }} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
+                        <h2 className="text-xl font-black mb-6 text-stone-800">Детали записи</h2>
+                        
+                        <div className="space-y-6">
+                            <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
+                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент / Задача</p>
+                                <p className="text-2xl font-black tracking-tight text-stone-800">{selectedApp.client_name}</p>
+                                <p className="text-sm font-bold text-rose-500 mt-1">{selectedApp.client_phone || "Без номера"}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-5">
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
+                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-sm font-bold text-stone-800">{selectedApp.service?.name || "Без услуги"}</p></div>
+                            </div>
+
+                            {selectedApp.status === 'active' && inventory.length > 0 && (
+                                <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
+                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/> Использованные материалы</h4>
+                                    
+                                    {usedMaterials.map((um, idx) => (
+                                        <div key={idx} className="flex gap-2 mb-2">
+                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer">
+                                                <option value="" disabled>Выбрать из папок...</option>
+                                                {sortedInvCats.map(cat => (
+                                                    <optgroup key={cat} label={`📂 ${cat}`}>
+                                                        {groupedInventory[cat].map((i: any) => (
+                                                            <option key={i.id} value={i.id}>{i.name} (Остаток: {i.quantity} {i.unit})</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50"><X className="w-4 h-4"/></button>
+                                        </div>
+                                    ))}
+                                    
+                                    <button onClick={() => setUsedMaterials([...usedMaterials, {id: '', qty: 1}])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-3 pt-2">
+                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"><CheckCircle2 className="w-5 h-5"/> Завершить визит</button>}
+                                
+                                {selectedApp.client_phone && (
+                                    <div className="grid grid-cols-2 gap-3 mt-1">
+                                        <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><Phone className="w-4 h-4" /> Звонок</a>
+                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> Написать</a>
+                                    </div>
+                                )}
+                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

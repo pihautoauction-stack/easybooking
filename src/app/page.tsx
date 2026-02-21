@@ -25,17 +25,17 @@ export default function Home() {
         {/* КРУПНЫЙ ЛОГОТИП В ЦЕНТРЕ */}
         <img src="/logo.svg" alt="Nexio" className="w-32 h-32 mb-8 drop-shadow-2xl animate-in fade-in zoom-in duration-700" />
 
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-bottom-4">
-          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200 text-orange-500 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-bottom-4">
+          <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
           ERP-система нового поколения
         </div>
         
         <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-stone-900 max-w-4xl mb-6 leading-[1.1] animate-in fade-in slide-in-from-bottom-5">
-          Больше, чем просто <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-orange-400">онлайн-запись</span>
+          Комплексное управление <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-orange-400">вашим бизнесом</span>
         </h1>
         
         <p className="text-lg md:text-xl text-stone-500 max-w-2xl mb-10 font-medium animate-in fade-in slide-in-from-bottom-6">
-          Управляйте расписанием, ведите складской учет и анализируйте чистую прибыль в едином красивом интерфейсе. Идеально для СТО, клиник и салонов.
+          Управляйте расписанием, ведите складской учет и анализируйте чистую прибыль в едином рабочем пространстве. Идеально для СТО, клиник и салонов.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-7">
