@@ -13,6 +13,7 @@ import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
 
 type Tab = 'appointments' | 'services' | 'clients' | 'inventory' | 'analytics' | 'profile';
+type ProfileTab = 'general' | 'schedule' | 'gallery' | 'team';
 
 const NAV_ITEMS = [
     { id: 'appointments', icon: CalendarDays, label: 'Записи' },
@@ -45,6 +46,7 @@ export default function Dashboard() {
     const [user, setUser] = useState<any>(null);
 
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
+    const [profileTab, setProfileTab] = useState<ProfileTab>('general');
     const [journalView, setJournalView] = useState<'active' | 'archive'>('active');
     const [viewDate, setViewDate] = useState(startOfToday());
 
@@ -74,7 +76,7 @@ export default function Dashboard() {
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
     
-    // Форма Услуги (с Категорией)
+    // Форма Услуги
     const [serviceCategorySelect, setServiceCategorySelect] = useState("Общие");
     const [serviceCategoryInput, setServiceCategoryInput] = useState("");
     const [newName, setNewName] = useState("");
@@ -114,7 +116,7 @@ export default function Dashboard() {
     const [clientNote, setClientNote] = useState("");
     const [savingNote, setSavingNote] = useState(false);
 
-    // СКЛАД (INVENTORY)
+    // СКЛАД
     const [invView, setInvView] = useState<'stock' | 'history'>('stock');
     const [showInvModal, setShowInvModal] = useState(false);
     const [invCategorySelect, setInvCategorySelect] = useState("Расходники");
@@ -128,8 +130,6 @@ export default function Dashboard() {
     const [invRetail, setInvRetail] = useState("0");
     const [addingInv, setAddingInv] = useState(false);
     const [expandedInvCategories, setExpandedInvCategories] = useState<Record<string, boolean>>({});
-
-    // Расходники при завершении визита
     const [usedMaterials, setUsedMaterials] = useState<{id: string, qty: number}[]>([]);
 
     const DAYS = [
@@ -137,47 +137,23 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
-    // ИСПРАВЛЕННАЯ ЛОГИКА АВТОРИЗАЦИИ
     useEffect(() => {
         let isMounted = true;
-
         const checkAuth = async () => {
             try {
-                // Ждем сессию напрямую из хранилища
                 const { data: { session }, error } = await supabase.auth.getSession();
-                
-                if (error || !session) {
-                    if (isMounted) router.replace("/login");
-                    return;
-                }
-
-                if (isMounted) {
-                    setUser(session.user);
-                    await loadData(session.user.id);
-                }
-            } catch (err) {
-                console.error(err);
-                if (isMounted) router.replace("/login");
-            } finally {
-                if (isMounted) setLoading(false);
-            }
+                if (error || !session) { if (isMounted) router.replace("/login"); return; }
+                if (isMounted) { setUser(session.user); await loadData(session.user.id); }
+            } catch (err) { console.error(err); if (isMounted) router.replace("/login");
+            } finally { if (isMounted) setLoading(false); }
         };
-
         checkAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_OUT' || !session) {
-                router.replace("/login");
-            } else if (session?.user && !user) {
-                setUser(session.user);
-                loadData(session.user.id);
-            }
+            if (event === 'SIGNED_OUT' || !session) router.replace("/login");
+            else if (session?.user && !user) { setUser(session.user); loadData(session.user.id); }
         });
-
-        return () => {
-            isMounted = false;
-            subscription.unsubscribe();
-        };
+        return () => { isMounted = false; subscription.unsubscribe(); };
     }, [router]);
 
     useEffect(() => {
@@ -204,9 +180,7 @@ export default function Dashboard() {
         try {
             const { data: p } = await supabase.from("profiles").select("*").eq("id", userId).single();
             if (p) {
-                setRole(p.role || "solo");
-                setBusinessName(p.business_name || "");
-                setUsername(p.username || "");
+                setRole(p.role || "solo"); setBusinessName(p.business_name || ""); setUsername(p.username || "");
                 setScheduleStep(p.schedule_step || 30);
                 if (p.disabled_days) setDisabledDays(p.disabled_days.split(',').map(Number));
                 if (p.work_start_time) setWorkStartTime(p.work_start_time);
@@ -218,13 +192,10 @@ export default function Dashboard() {
             
             const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
             setServices(s || []);
-            
             const { data: e } = await supabase.from("employees").select("*").eq("salon_id", userId).order('created_at');
             setEmployees(e || []);
-
             const { data: inv } = await supabase.from("inventory").select("*").eq("user_id", userId).order('name');
             setInventory(inv || []);
-
             const { data: tx } = await supabase.from("inventory_transactions").select("*, inventory(name, unit)").eq("user_id", userId).order('created_at', { ascending: false }).limit(50);
             setTransactions(tx || []);
             
@@ -233,10 +204,8 @@ export default function Dashboard() {
                 .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, materials_retail, service:services(name, category, price, duration), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
-
             const { data: c } = await supabase.from("clients").select("*").eq("master_id", userId).order('created_at', { ascending: false });
             setClients(c || []);
-            
             if (selectedApp && a && !a.find((app: any) => app.id === selectedApp.id)) setSelectedApp(null);
         } catch (error) { console.error(error); } finally {
             if (!isSilent) setTimeout(() => setIsSyncing(false), 500);
@@ -263,8 +232,7 @@ export default function Dashboard() {
     };
 
     const handleUploadPortfolioImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (!file) return; 
-        setUploadingPortfolio(true);
+        const file = e.target.files?.[0]; if (!file) return; setUploadingPortfolio(true);
         try {
             const fileName = `portfolio_${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
             const filePath = `${user.id}/${fileName}`;
@@ -287,33 +255,24 @@ export default function Dashboard() {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
         const finalCategory = serviceCategorySelect === 'NEW' ? serviceCategoryInput : serviceCategorySelect;
-        
         const insertData: any = { user_id: user.id, name: newName, category: finalCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
         if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
-        
         await supabase.from("services").insert(insertData);
         setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); await loadData(user.id); setAddingService(false);
     };
 
     const handleDeleteService = async (id: string) => { 
-        if (confirm("Удалить эту услугу?")) { 
-            await supabase.from("services").delete().eq("id", id); 
-            setSelectedService(null);
-            await loadData(user.id); 
-        } 
+        if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); setSelectedService(null); await loadData(user.id); } 
     };
 
     const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
     
     const existingServiceCategories = Array.from(new Set(services.map(s => s.category || 'Общие')));
     if (!existingServiceCategories.includes("Общие")) existingServiceCategories.unshift("Общие");
-
     const filteredServicesList = services.filter(s => s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) || (s.category && s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase())));
     const groupedServices = filteredServicesList.reduce((acc: Record<string, any[]>, curr: any) => {
         const cat = curr.category || 'Общие';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(curr);
-        return acc;
+        if (!acc[cat]) acc[cat] = []; acc[cat].push(curr); return acc;
     }, {});
 
     const handleAddInventory = async (e: React.FormEvent) => {
@@ -334,57 +293,39 @@ export default function Dashboard() {
         if (!amountStr) return;
         const amount = Number(amountStr);
         if (isNaN(amount) || amount <= 0) return alert("Неверное количество");
-        
         const newQty = type === 'add' ? item.quantity + amount : item.quantity - amount;
-        
         await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
-        await supabase.from('inventory_transactions').insert({
-            inventory_id: item.id, user_id: user.id, change_amount: type === 'add' ? amount : -amount, type: type === 'add' ? 'manual_add' : 'manual_deduct'
-        });
+        await supabase.from('inventory_transactions').insert({ inventory_id: item.id, user_id: user.id, change_amount: type === 'add' ? amount : -amount, type: type === 'add' ? 'manual_add' : 'manual_deduct' });
         await loadData(user.id, true);
     };
 
     const handleDeleteInventory = async (id: string) => {
-        if(confirm("Удалить позицию со склада?")) {
-            await supabase.from("inventory").delete().eq("id", id);
-            await loadData(user.id, true);
-        }
+        if(confirm("Удалить позицию со склада?")) { await supabase.from("inventory").delete().eq("id", id); await loadData(user.id, true); }
     }
 
     const toggleInvCategory = (cat: string) => setExpandedInvCategories(prev => ({...prev, [cat]: !prev[cat]}));
-
     const existingInvCategories = Array.from(new Set(inventory.map(i => i.category || 'Расходники')));
     if (!existingInvCategories.includes("Расходники")) existingInvCategories.unshift("Расходники");
 
     const groupedInventory = inventory.reduce((acc: Record<string, any[]>, curr: any) => {
         const cat = curr.category || 'Расходники';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(curr);
-        return acc;
+        if (!acc[cat]) acc[cat] = []; acc[cat].push(curr); return acc;
     }, {});
 
     const handleCompleteRecord = async (app: any) => {
         if (!confirm("Завершить визит и списать материалы?")) return;
-        
-        let totalCost = 0;
-        let totalRetail = 0;
-        
+        let totalCost = 0; let totalRetail = 0;
         for (const used of usedMaterials) {
             if (used.qty > 0 && used.id) {
                 const item = inventory.find(i => i.id === used.id);
                 if (item) {
-                    totalCost += (item.cost_price * used.qty);
-                    totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
-                    
+                    totalCost += (item.cost_price * used.qty); totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
                     const newQty = item.quantity - used.qty;
                     await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
-                    await supabase.from('inventory_transactions').insert({
-                        inventory_id: item.id, user_id: user.id, appointment_id: app.id, change_amount: -used.qty, type: 'appointment_usage'
-                    });
+                    await supabase.from('inventory_transactions').insert({ inventory_id: item.id, user_id: user.id, appointment_id: app.id, change_amount: -used.qty, type: 'appointment_usage' });
                 }
             }
         }
-
         await supabase.from("appointments").update({ status: 'completed', materials_cost: totalCost, materials_retail: totalRetail }).eq("id", app.id);
         
         let targetClientId = app.client_id;
@@ -402,11 +343,7 @@ export default function Dashboard() {
         } else if (app.client_phone) {
             await supabase.from("clients").insert({ master_id: user.id, name: app.client_name, phone: app.client_phone, visits_count: 1, total_revenue: finalClientPrice, is_blacklisted: false, notes: "" });
         }
-        
-        setUsedMaterials([]);
-        setSelectedApp(null);
-        setJournalView('archive');
-        await loadData(user.id, true); 
+        setUsedMaterials([]); setSelectedApp(null); setJournalView('archive'); await loadData(user.id, true); 
     };
 
     const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
@@ -414,19 +351,11 @@ export default function Dashboard() {
     
     // ФУНКЦИИ ДЛЯ СОТРУДНИКОВ
     const handleAddEmployee = async () => { 
-        if (!newEmpName) return; 
-        setAddingEmp(true); 
+        if (!newEmpName) return; setAddingEmp(true); 
         await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); 
-        setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); 
-        await loadData(user.id); 
-        setAddingEmp(false); 
+        setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false); 
     };
-    const handleDeleteEmployee = async (id: string) => { 
-        if (confirm("Удалить сотрудника?")) { 
-            await supabase.from("employees").delete().eq("id", id); 
-            await loadData(user.id); 
-        } 
-    };
+    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить сотрудника?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
     
     const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => { e.stopPropagation(); if (confirm(currentStatus ? "Разблокировать?" : "В ЧС?")) { await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); } };
@@ -469,38 +398,24 @@ export default function Dashboard() {
     const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
     
-    // ФИЛЬТРАЦИЯ
     const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
     const activeDailyApps = useMemo(() => serviceFilteredAppointments.filter(app => isSameDay(new Date(app.start_time), viewDate) && app.status === 'active'), [serviceFilteredAppointments, viewDate]);
     const archivedApps = serviceFilteredAppointments.filter(a => a.status === 'completed').reverse();
     const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) || c.phone.includes(clientSearchQuery));
     const getCleanPhone = (phone: string) => phone.replace(/\D/g, '');
     
-    // ================= ФИНАНСОВЫЙ И СКЛАДСКОЙ РАСЧЕТ =================
-    let totalRevenue = 0;
-    let totalPayroll = 0;
-    let totalMaterialsCost = 0;
+    let totalRevenue = 0; let totalPayroll = 0; let totalMaterialsCost = 0;
     const employeeStats: Record<string, {name: string, visits: number, earned: number}> = {};
 
     archivedApps.forEach(app => {
-        const servicePrice = Number(app.service?.price || 0); 
-        const matRetail = Number(app.materials_retail || 0); 
-        const matCost = Number(app.materials_cost || 0); 
-        
-        totalRevenue += (servicePrice + matRetail); 
-        totalMaterialsCost += matCost;
-
+        const servicePrice = Number(app.service?.price || 0); const matRetail = Number(app.materials_retail || 0); const matCost = Number(app.materials_cost || 0); 
+        totalRevenue += (servicePrice + matRetail); totalMaterialsCost += matCost;
         if (app.employee_id) {
             const emp = employees.find(e => e.id === app.employee_id);
-            const rate = emp?.commission_rate || 50;
-            const empCut = (servicePrice * rate) / 100; 
+            const rate = emp?.commission_rate || 50; const empCut = (servicePrice * rate) / 100; 
             totalPayroll += empCut;
-
-            if (!employeeStats[app.employee_id]) {
-                employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
-            }
-            employeeStats[app.employee_id].visits += 1;
-            employeeStats[app.employee_id].earned += empCut;
+            if (!employeeStats[app.employee_id]) employeeStats[app.employee_id] = { name: app.employee?.name || 'Специалист', visits: 0, earned: 0 };
+            employeeStats[app.employee_id].visits += 1; employeeStats[app.employee_id].earned += empCut;
         }
     });
     
@@ -513,8 +428,7 @@ export default function Dashboard() {
         const targetCat = selectedApp.service?.category || 'Общие';
         sortedInvCats = Object.keys(groupedInventory).sort((a, b) => {
             if (a === targetCat) return -1;
-            if (b === targetCat) return 1;
-            return a.localeCompare(b);
+            if (b === targetCat) return 1; return a.localeCompare(b);
         });
     }
 
@@ -549,7 +463,7 @@ export default function Dashboard() {
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-stone-100">
+                <div className="p-4 border-t border-stone-100 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <div className="flex items-center gap-3 px-4 py-3 mb-3 bg-stone-50 rounded-2xl border border-stone-100">
                         <div className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
                             {isSyncing ? <RefreshCw className="w-3 h-3 text-stone-400 animate-spin" /> : <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"></span>}
@@ -563,8 +477,8 @@ export default function Dashboard() {
             {/* ОСНОВНАЯ ОБЛАСТЬ */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* ШАПКА ДЛЯ МОБИЛОК */}
-                <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
+                {/* ШАПКА ДЛЯ МОБИЛОК (с учетом safe-area челки) */}
+                <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
                         <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
                         <div className="flex flex-col justify-center">
@@ -584,7 +498,8 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8">
+                {/* КОНТЕНТ (с отступом снизу для мобильного меню) */}
+                <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
                     <div className="max-w-6xl mx-auto space-y-6">
                         
                         {/* 🟢 ЖУРНАЛ */}
@@ -667,7 +582,7 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🔵 ПРАЙС-ЛИСТ (УМНЫЕ ПАПКИ) */}
+                        {/* 🔵 ПРАЙС-ЛИСТ */}
                         {activeTab === 'services' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -675,7 +590,6 @@ export default function Dashboard() {
                                         <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm">
                                             <h2 className="text-lg font-black tracking-tight mb-5 text-stone-800">Добавить услугу</h2>
                                             <div className="flex flex-col gap-3">
-                                                
                                                 <div className="space-y-1">
                                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Папка (Категория)</label>
                                                     <select value={serviceCategorySelect} onChange={e => setServiceCategorySelect(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer">
@@ -686,12 +600,10 @@ export default function Dashboard() {
                                                 {serviceCategorySelect === 'NEW' && (
                                                     <input value={serviceCategoryInput} onChange={e => setServiceCategoryInput(e.target.value)} placeholder="Название новой папки..." className="w-full bg-white border border-rose-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 shadow-sm" />
                                                 )}
-
                                                 <div className="space-y-1 mt-2">
                                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название услуги</label>
                                                     <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Например: Замена масла" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
                                                 </div>
-
                                                 {role === 'owner' && (
                                                     <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none appearance-none"><option value="">Выполняют все</option>{employees.map(emp => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}</select>
                                                 )}
@@ -750,10 +662,9 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 📦 СКЛАД (С ПАПКАМИ И ИСТОРИЕЙ) */}
+                        {/* 📦 СКЛАД */}
                         {activeTab === 'inventory' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-                                
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                                     <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
                                         <button onClick={() => setInvView('stock')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${invView === 'stock' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Остатки</button>
@@ -765,7 +676,6 @@ export default function Dashboard() {
                                         </button>
                                     )}
                                 </div>
-
                                 {invView === 'stock' && (
                                     <>
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -843,7 +753,6 @@ export default function Dashboard() {
                                         </div>
                                     </>
                                 )}
-
                                 {invView === 'history' && (
                                     <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
                                         <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center gap-2"><History className="w-5 h-5 text-rose-500"/> Журнал операций</h3>
@@ -916,7 +825,6 @@ export default function Dashboard() {
                         {/* 🟢 АНАЛИТИКА И ФИНАНСЫ */}
                         {activeTab === 'analytics' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-                                
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                     <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
                                         <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Общая выручка</p>
@@ -974,169 +882,178 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ */}
+                        {/* 🟣 ПРОФИЛЬ И НАСТРОЙКИ (КОМПАКТНЫЙ РЕДИЗАЙН С ВКЛАДКАМИ) */}
                         {activeTab === 'profile' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
                                 
-                                <div className="bg-gradient-to-br from-rose-400 to-orange-300 p-8 rounded-[32px] shadow-xl shadow-rose-500/20 relative overflow-hidden text-white">
-                                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 blur-3xl rounded-full pointer-events-none"></div>
-                                    <h2 className="text-xs font-black uppercase text-rose-100 mb-4 tracking-widest relative z-10">Ваша ссылка для записи</h2>
-                                    <div className="flex flex-col sm:flex-row gap-3 relative z-10">
-                                        <input readOnly value={clientLink} className="flex-1 bg-black/10 border border-white/20 rounded-2xl p-4 text-sm font-bold text-white outline-none truncate font-mono shadow-inner placeholder-white/50" />
-                                        <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Ссылка скопирована!"); }} className="bg-white text-rose-500 px-8 py-4 rounded-2xl active:scale-[0.96] transition-all shadow-md font-black flex justify-center items-center gap-2 hover:bg-stone-50"><Copy className="w-5 h-5" /> Скопировать</button>
-                                    </div>
-                                    <p className="text-[11px] text-rose-100 mt-4 relative z-10 font-bold uppercase tracking-widest">Разместите эту ссылку в Instagram, WhatsApp, VK или Telegram.</p>
-                                </div>
-
-                                <div className="bg-white p-6 md:p-8 rounded-[40px] border border-stone-200 shadow-sm">
-                                    <h2 className="text-xl font-black tracking-tight mb-8 text-stone-800">Настройки кабинета</h2>
+                                <div className="bg-white p-6 md:p-8 rounded-[40px] border border-stone-200 shadow-sm flex flex-col h-full min-h-[60vh]">
                                     
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 mb-8">
-                                        <div className="space-y-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название (для шапки сайта)</label>
-                                                <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Правовой центр / Автосервис V8" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1">Короткая ссылка (Никнейм)</label>
-                                                <div className="relative">
-                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold">.../book/</span>
-                                                    <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="v8-auto" className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pr-4 pl-20 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-6 lg:border-l lg:border-stone-100 lg:pl-12">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Сетка времени на сайте</label>
-                                                <div className="relative">
-                                                    <select value={scheduleStep} onChange={e => setScheduleStep(Number(e.target.value))} className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none transition-all cursor-pointer hover:bg-stone-100">
-                                                        <option value={15}>Каждые 15 минут</option>
-                                                        <option value={30}>Каждые 30 минут</option>
-                                                        <option value={60}>Каждый час</option>
-                                                    </select>
-                                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400 font-bold">▼</div>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-3 pt-4 border-t border-stone-100">
-                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Coffee className="w-3 h-3"/> Перерывы (Ежедневные)</label>
-                                                {breaks.map((br, idx) => (
-                                                    <div key={idx} className="flex items-center gap-3 bg-stone-50 border border-stone-200 p-3 rounded-2xl shadow-sm">
-                                                        <span className="flex-1 font-black text-stone-800 text-center tracking-wider">{br.start} — {br.end}</span>
-                                                        <button onClick={() => handleRemoveBreak(idx)} className="p-2.5 bg-white border border-stone-200 text-rose-500 rounded-xl hover:bg-rose-50 transition-all shadow-sm"><X className="w-4 h-4"/></button>
-                                                    </div>
-                                                ))}
-
-                                                <div className="flex gap-2 items-center bg-stone-50 p-2 rounded-2xl border border-stone-200">
-                                                    <input type="time" value={newBreakStart} onChange={e => setNewBreakStart(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
-                                                    <span className="text-stone-400 font-black">-</span>
-                                                    <input type="time" value={newBreakEnd} onChange={e => setNewBreakEnd(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
-                                                    <button onClick={handleAddBreak} className="bg-stone-800 text-white p-3 rounded-xl font-bold active:scale-95 transition-all shadow-sm hover:bg-black"><Plus className="w-5 h-5"/></button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    {/* Навигация внутри настроек */}
+                                    <div className="flex overflow-x-auto gap-2 bg-stone-100 p-1.5 rounded-2xl mb-6 scrollbar-hide">
+                                        <button onClick={() => setProfileTab('general')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${profileTab === 'general' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}>Основное</button>
+                                        <button onClick={() => setProfileTab('schedule')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'schedule' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Clock className="w-4 h-4"/> Расписание</button>
+                                        <button onClick={() => setProfileTab('gallery')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'gallery' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Camera className="w-4 h-4"/> Галерея</button>
+                                        {role === 'owner' && <button onClick={() => setProfileTab('team')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'team' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Users className="w-4 h-4"/> Команда</button>}
                                     </div>
 
-                                    {/* УМНОЕ РАСПИСАНИЕ ПО ДНЯМ */}
-                                    <div className="pt-8 border-t border-stone-100">
-                                        <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-6"><Clock className="w-4 h-4 text-rose-400"/> Рабочие часы по дням недели</h3>
-                                        <div className="space-y-4">
-                                            {DAYS.map(day => {
-                                                const config = weeklySettings[day.id] || { start: "09:00", end: "18:00", active: false };
-                                                return (
-                                                    <div key={day.id} className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-[24px] border transition-all ${config.active ? 'bg-rose-50/30 border-rose-100 shadow-sm' : 'bg-stone-50 border-stone-100 opacity-60'}`}>
-                                                        <div className="flex items-center gap-4 mb-4 md:mb-0">
-                                                            <button 
-                                                                onClick={() => setWeeklySettings({...weeklySettings, [day.id]: {...config, active: !config.active}})}
-                                                                className={`w-12 h-6 rounded-full transition-all relative ${config.active ? 'bg-rose-400' : 'bg-stone-300'}`}
-                                                            >
-                                                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${config.active ? 'left-7' : 'left-1'}`}></div>
-                                                            </button>
-                                                            <div>
-                                                                <p className="font-black text-stone-900 uppercase tracking-widest text-xs">{day.label}</p>
-                                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{config.active ? 'Рабочий день' : 'Выходной'}</p>
-                                                            </div>
-                                                        </div>
-
-                                                        {config.active && (
-                                                            <div className="flex items-center gap-3">
-                                                                <input type="time" value={config.start} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, start: e.target.value}})} className="bg-white border border-stone-200 rounded-xl p-2.5 text-sm font-black text-stone-900 shadow-sm outline-none focus:border-rose-400" />
-                                                                <div className="w-2 h-0.5 bg-stone-300"></div>
-                                                                <input type="time" value={config.end} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, end: e.target.value}})} className="bg-white border border-stone-200 rounded-xl p-2.5 text-sm font-black text-stone-900 shadow-sm outline-none focus:border-rose-400" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* БЛОК ПОРТФОЛИО */}
-                                    <div className="mt-8 pt-8 border-t border-stone-100">
-                                        <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-4"><Camera className="w-4 h-4 text-rose-400"/> Галерея работ / Примеров</h3>
-                                        <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-4">Эти фотографии будут видны всем клиентам на странице записи</p>
-                                        
-                                        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x">
-                                            {portfolioUrls.map((url, idx) => (
-                                                <div key={idx} className="relative shrink-0 snap-center">
-                                                    <img src={url} alt="Пример работы" className="w-32 h-32 md:w-40 md:h-40 object-cover rounded-[24px] shadow-sm border border-stone-200" />
-                                                    <button onClick={() => handleRemovePortfolioImage(url)} className="absolute -top-2 -right-2 bg-white text-rose-500 rounded-full p-2 shadow-md border border-rose-100 hover:bg-rose-50 active:scale-95 transition-all"><X className="w-4 h-4" /></button>
+                                    {/* Вкладка: Основное */}
+                                    {profileTab === 'general' && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
+                                            <div className="bg-gradient-to-r from-rose-50 to-orange-50 p-5 rounded-[24px] border border-rose-100 shadow-sm">
+                                                <h2 className="text-[10px] font-black uppercase text-rose-500 mb-3 tracking-widest">Ваша ссылка для клиентов</h2>
+                                                <div className="flex flex-col sm:flex-row gap-3">
+                                                    <input readOnly value={clientLink} className="flex-1 bg-white border border-rose-200 rounded-xl p-3.5 text-sm font-bold text-stone-800 outline-none truncate font-mono shadow-sm" />
+                                                    <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Ссылка скопирована!"); }} className="bg-rose-500 text-white px-6 py-3.5 rounded-xl active:scale-[0.96] transition-all shadow-md font-black flex justify-center items-center gap-2 hover:bg-rose-600"><Copy className="w-4 h-4" /> Копировать</button>
                                                 </div>
-                                            ))}
-                                            
-                                            <label className="shrink-0 w-32 h-32 md:w-40 md:h-40 rounded-[24px] border-2 border-dashed border-rose-200 bg-rose-50/50 hover:bg-rose-50 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95">
-                                                {uploadingPortfolio ? <Loader2 className="w-6 h-6 animate-spin text-rose-400" /> : (
-                                                    <>
-                                                        <Plus className="w-8 h-8 text-rose-400 mb-2" />
-                                                        <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest">Добавить</span>
-                                                    </>
-                                                )}
-                                                <input type="file" accept="image/*" className="hidden" onChange={handleUploadPortfolioImage} />
-                                            </label>
-                                        </div>
-                                    </div>
+                                            </div>
 
-                                    {/* БЛОК ДОБАВЛЕНИЯ СОТРУДНИКОВ (ЕСЛИ РОЛЬ - ВЛАДЕЛЕЦ) */}
-                                    {role === 'owner' && (
-                                        <div className="mt-8 pt-8 border-t border-stone-100">
-                                            <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-6"><Users className="w-4 h-4 text-rose-400"/> Управление сотрудниками</h3>
-                                            
-                                            <div className="space-y-4">
-                                                {employees.map(emp => (
-                                                    <div key={emp.id} className="flex justify-between items-center p-4 bg-stone-50 border border-stone-100 rounded-2xl">
-                                                        <div>
-                                                            <p className="font-black text-stone-900">{emp.name}</p>
-                                                            <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{emp.specialty || 'Специалист'} • Процент мастера: {emp.commission_rate}%</p>
-                                                        </div>
-                                                        <button onClick={() => handleDeleteEmployee(emp.id)} className="p-2 text-stone-400 hover:text-rose-500 bg-white border border-stone-200 rounded-xl transition-colors shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название компании / Имя</label>
+                                                    <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Моя компания / Мастер Анна" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1">Короткая ссылка (Никнейм)</label>
+                                                    <div className="relative">
+                                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold">.../book/</span>
+                                                        <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))} placeholder="my-company" className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pr-4 pl-20 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                                                     </div>
-                                                ))}
-                                                
-                                                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row gap-3 items-end">
-                                                    <div className="w-full">
-                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя</label>
-                                                        <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Иван Иванов" />
-                                                    </div>
-                                                    <div className="w-full">
-                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специальность</label>
-                                                        <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Парикмахер" />
-                                                    </div>
-                                                    <div className="w-32 shrink-0">
-                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Ставка (%)</label>
-                                                        <input type="number" value={newEmpCommission} onChange={e => setNewEmpCommission(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" />
-                                                    </div>
-                                                    <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="w-full sm:w-auto shrink-0 bg-stone-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-all disabled:opacity-50">
-                                                        {addingEmp ? <Loader2 className="w-5 h-5 animate-spin" /> : "Добавить"}
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="mt-10 pt-8 border-t border-stone-100 flex justify-end">
-                                        <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-black">
+                                    {/* Вкладка: Расписание */}
+                                    {profileTab === 'schedule' && (
+                                        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Шаг времени (Сетка)</label>
+                                                    <div className="relative">
+                                                        <select value={scheduleStep} onChange={e => setScheduleStep(Number(e.target.value))} className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 appearance-none transition-all cursor-pointer hover:bg-stone-100">
+                                                            <option value={15}>Каждые 15 минут</option>
+                                                            <option value={30}>Каждые 30 минут</option>
+                                                            <option value={60}>Каждый час</option>
+                                                        </select>
+                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400 font-bold">▼</div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Coffee className="w-3 h-3"/> Ежедневные перерывы</label>
+                                                    {breaks.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mb-2">
+                                                            {breaks.map((br, idx) => (
+                                                                <div key={idx} className="flex items-center gap-2 bg-stone-100 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-black border border-stone-200">
+                                                                    <span>{br.start} - {br.end}</span>
+                                                                    <button onClick={() => handleRemoveBreak(idx)} className="text-rose-500 hover:bg-rose-100 p-0.5 rounded-md"><X className="w-3 h-3"/></button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex gap-2 items-center bg-stone-50 p-2 rounded-2xl border border-stone-200">
+                                                        <input type="time" value={newBreakStart} onChange={e => setNewBreakStart(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
+                                                        <span className="text-stone-400 font-black">-</span>
+                                                        <input type="time" value={newBreakEnd} onChange={e => setNewBreakEnd(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
+                                                        <button onClick={handleAddBreak} className="bg-stone-800 text-white p-3 rounded-xl font-bold active:scale-95 transition-all shadow-sm hover:bg-black"><Plus className="w-5 h-5"/></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 border-t border-stone-100 pt-6">
+                                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">График работы по дням</label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    {DAYS.map(day => {
+                                                        const config = weeklySettings[day.id] || { start: "09:00", end: "18:00", active: false };
+                                                        return (
+                                                            <div key={day.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${config.active ? 'bg-rose-50/30 border-rose-100 shadow-sm' : 'bg-stone-50 border-stone-100 opacity-60'}`}>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-black text-stone-900 text-sm">{day.label}</span>
+                                                                    <button onClick={() => setWeeklySettings({...weeklySettings, [day.id]: {...config, active: !config.active}})} className={`text-[10px] font-bold uppercase tracking-widest mt-1 text-left ${config.active ? 'text-rose-500' : 'text-stone-400'}`}>
+                                                                        {config.active ? 'Рабочий' : 'Выходной'}
+                                                                    </button>
+                                                                </div>
+                                                                {config.active && (
+                                                                    <div className="flex flex-col gap-1">
+                                                                        <input type="time" value={config.start} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, start: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center" />
+                                                                        <input type="time" value={config.end} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, end: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Вкладка: Галерея */}
+                                    {profileTab === 'gallery' && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
+                                            <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-4">Фотографии видны клиентам на странице записи</p>
+                                            <div className="flex flex-wrap gap-4">
+                                                <label className="w-32 h-32 md:w-40 md:h-40 rounded-[24px] border-2 border-dashed border-stone-200 bg-stone-50 hover:bg-stone-100 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95">
+                                                    {uploadingPortfolio ? <Loader2 className="w-6 h-6 animate-spin text-stone-400" /> : (
+                                                        <>
+                                                            <Plus className="w-8 h-8 text-stone-400 mb-2" />
+                                                            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Добавить</span>
+                                                        </>
+                                                    )}
+                                                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadPortfolioImage} />
+                                                </label>
+
+                                                {portfolioUrls.map((url, idx) => (
+                                                    <div key={idx} className="relative group">
+                                                        <img src={url} alt="Пример работы" className="w-32 h-32 md:w-40 md:h-40 object-cover rounded-[24px] shadow-sm border border-stone-200" />
+                                                        <button onClick={() => handleRemovePortfolioImage(url)} className="absolute top-2 right-2 bg-white/90 backdrop-blur text-rose-500 rounded-full p-2 shadow-sm border border-rose-100 hover:bg-rose-50 active:scale-95 transition-all opacity-0 group-hover:opacity-100"><X className="w-4 h-4" /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Вкладка: Команда */}
+                                    {profileTab === 'team' && role === 'owner' && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
+                                            <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-200 flex flex-col sm:flex-row gap-3 items-end">
+                                                <div className="w-full">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя сотрудника</label>
+                                                    <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Например: Александр" />
+                                                </div>
+                                                <div className="w-full">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Должность / Специализация</label>
+                                                    <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Специалист" />
+                                                </div>
+                                                <div className="w-32 shrink-0">
+                                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Ставка (%)</label>
+                                                    <input type="number" value={newEmpCommission} onChange={e => setNewEmpCommission(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1 text-center" />
+                                                </div>
+                                                <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="w-full sm:w-auto shrink-0 bg-stone-900 text-white px-6 py-3.5 rounded-xl font-bold hover:bg-black transition-all disabled:opacity-50">
+                                                    {addingEmp ? <Loader2 className="w-5 h-5 animate-spin" /> : "Добавить"}
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {employees.map(emp => (
+                                                    <div key={emp.id} className="flex justify-between items-center p-4 bg-white border border-stone-200 rounded-2xl shadow-sm hover:border-rose-200 transition-colors">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center font-black">{emp.name.charAt(0)}</div>
+                                                            <div>
+                                                                <p className="font-black text-stone-900 text-sm">{emp.name}</p>
+                                                                <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{emp.specialty || 'Специалист'} • {emp.commission_rate}%</p>
+                                                            </div>
+                                                        </div>
+                                                        <button onClick={() => handleDeleteEmployee(emp.id)} className="p-2.5 text-stone-400 hover:text-rose-500 bg-stone-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Плавающая кнопка сохранения */}
+                                    <div className="mt-8 pt-6 border-t border-stone-100 flex justify-end shrink-0">
+                                        <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-stone-900/20 active:scale-95 transition-all hover:bg-black w-full md:w-auto flex justify-center items-center">
                                             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить настройки"}
                                         </button>
                                     </div>
@@ -1146,8 +1063,8 @@ export default function Dashboard() {
                     </div>
                 </main>
 
-                {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК) */}
-                <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 py-2 flex justify-around items-center pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+                {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК, с учетом safe-area снизу) */}
+                <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
                     {NAV_ITEMS.map((tab) => {
                         const isActive = activeTab === tab.id;
                         return (
@@ -1263,7 +1180,7 @@ export default function Dashboard() {
 
                         <div className="space-y-3 mb-6">
                             <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Заметки (Детали заказов)</label>
-                            <textarea value={clientNote} onChange={e => setClientNote(e.target.value)} placeholder="Стучит подвеска, дело о наследстве..." className="w-full bg-orange-50/50 border border-orange-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-400/30 text-stone-800 min-h-[120px] resize-none" />
+                            <textarea value={clientNote} onChange={e => setClientNote(e.target.value)} placeholder="Детали работы, пожелания клиента..." className="w-full bg-orange-50/50 border border-orange-200/60 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-400/30 text-stone-800 min-h-[120px] resize-none" />
                             <button onClick={handleSaveClientNote} disabled={savingNote} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:bg-black disabled:opacity-50">{savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : "Сохранить заметку"}</button>
                         </div>
 
@@ -1304,66 +1221,6 @@ export default function Dashboard() {
                             </div>
                             <button type="submit" disabled={addingManual} className="w-full mt-4 bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex justify-center">{addingManual ? <Loader2 className="w-6 h-6 animate-spin" /> : "Сохранить"}</button>
                         </form>
-                    </div>
-                </div>
-            )}
-
-            {/* 5. ДЕТАЛИ ЗАПИСИ (С РАСХОДНИКАМИ И УМНЫМ ВЫБОРОМ) */}
-            {selectedApp && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setSelectedApp(null); setUsedMaterials([]); }}>
-                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => { setSelectedApp(null); setUsedMaterials([]); }} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
-                        <h2 className="text-xl font-black mb-6 text-stone-800">Детали записи</h2>
-                        
-                        <div className="space-y-6">
-                            <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-100 shadow-inner">
-                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Клиент / Задача</p>
-                                <p className="text-2xl font-black tracking-tight text-stone-800">{selectedApp.client_name}</p>
-                                <p className="text-sm font-bold text-rose-500 mt-1">{selectedApp.client_phone || "Без номера"}</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 border-y border-stone-100 py-5">
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Время</p><p className="text-sm font-black text-rose-500 bg-rose-50 inline-block px-2 py-1 rounded-md">{format(new Date(selectedApp.start_time), "HH:mm")}</p></div>
-                                <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-sm font-bold text-stone-800">{selectedApp.service?.name || "Без услуги"}</p></div>
-                            </div>
-
-                            {/* БЛОК СПИСАНИЯ РАСХОДНИКОВ ПРИ ЗАВЕРШЕНИИ */}
-                            {selectedApp.status === 'active' && inventory.length > 0 && (
-                                <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
-                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/> Использованные материалы</h4>
-                                    
-                                    {usedMaterials.map((um, idx) => (
-                                        <div key={idx} className="flex gap-2 mb-2">
-                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer">
-                                                <option value="" disabled>Выбрать из папок...</option>
-                                                {sortedInvCats.map(cat => (
-                                                    <optgroup key={cat} label={`📂 ${cat}`}>
-                                                        {groupedInventory[cat].map((i: any) => (
-                                                            <option key={i.id} value={i.id}>{i.name} (Остаток: {i.quantity} {i.unit})</option>
-                                                        ))}
-                                                    </optgroup>
-                                                ))}
-                                            </select>
-                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
-                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50"><X className="w-4 h-4"/></button>
-                                        </div>
-                                    ))}
-                                    
-                                    <button onClick={() => setUsedMaterials([...usedMaterials, {id: '', qty: 1}])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
-                                </div>
-                            )}
-
-                            <div className="flex flex-col gap-3 pt-2">
-                                {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"><CheckCircle2 className="w-5 h-5"/> Завершить визит</button>}
-                                
-                                {selectedApp.client_phone && (
-                                    <div className="grid grid-cols-2 gap-3 mt-1">
-                                        <a href={`tel:+${getCleanPhone(selectedApp.client_phone)}`} className="w-full bg-stone-900 text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><Phone className="w-4 h-4" /> Звонок</a>
-                                        <a href={getWhatsAppLink(selectedApp)} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-xl text-center active:scale-95 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> Написать</a>
-                                    </div>
-                                )}
-                                <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             )}

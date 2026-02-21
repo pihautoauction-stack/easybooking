@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -7,23 +7,25 @@ const manrope = Manrope({
   subsets: ["latin", "cyrillic"],
 });
 
+// Настройки окна (viewport) для правильного Full Screen (PWA) на iOS и Android
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Отключаем зум двойным тапом
+  viewportFit: "cover", // Заставляет сайт залезть под "челку" (Dynamic Island)
+  themeColor: "#FAF9F6", // Цвет подложки системного бара
+};
+
 export const metadata: Metadata = {
   title: "Nexio | Умная система онлайн-записи и учета",
   description: "Единое пространство для управления расписанием, сотрудниками и складом. Создано для профессионалов.",
   applicationName: "Nexio",
   manifest: "/manifest.json",
   appleWebApp: {
-    capable: true,
+    capable: true, // Включает режим "без браузерной строки" на iOS
     title: "Nexio",
-    statusBarStyle: "default", // или "black-translucent" если хочешь прозрачную статусную строку
-  },
-  themeColor: "#FAF9F6", // Цвет шапки в браузере мобилки
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false, // Отключаем зум, чтобы было как в нативном приложении
-    viewportFit: "cover",
+    statusBarStyle: "black-translucent", // Статус бар накладывается поверх приложения
   }
 };
 
@@ -35,8 +37,6 @@ export default function RootLayout({
   return (
     <html lang="ru" className={`${manrope.variable} antialiased`}>
       <head>
-        {/* Принудительный хак для старых и текущих версий iOS (добавляет эффект приложения) */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body>
