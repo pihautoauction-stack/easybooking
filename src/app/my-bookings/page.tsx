@@ -1,171 +1,134 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, CalendarX2, Briefcase, Trash2, ChevronLeft, Phone, LogOut } from "lucide-react";
+import { Loader2, Phone, CalendarDays, Clock, ChevronLeft, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRouter } from "next/navigation";
 
 export default function MyBookings() {
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
     const [phone, setPhone] = useState("");
-    const [isPhoneSet, setIsPhoneSet] = useState(false);
-    const [appointments, setAppointments] = useState<any[]>([]);
-    const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [bookings, setBookings] = useState<any[]>([]);
+    const [searched, setSearched] = useState(false);
 
     useEffect(() => {
-        const savedPhone = localStorage.getItem('eb_phone');
+        // Подтягиваем телефон из localStorage, если клиент только что записался
+        const savedPhone = localStorage.getItem('nx_phone');
         if (savedPhone) {
             setPhone(savedPhone);
-            setIsPhoneSet(true);
-            loadBookings(savedPhone);
-        } else {
-            setLoading(false);
+            handleSearch(null, savedPhone);
         }
     }, []);
 
-    const loadBookings = async (targetPhone: string) => {
-        setLoading(true);
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const handleSearch = async (e?: React.FormEvent | null, phoneOverride?: string) => {
+        if (e) e.preventDefault();
+        const searchPhone = phoneOverride || phone;
+        if (!searchPhone) return;
 
-        const { data } = await supabase.from("appointments")
-            .select("id, start_time, client_name, service:services(name, price), master:profiles(business_name)")
-            .eq("client_phone", targetPhone)
-            .eq("status", "active")
-            .gte("start_time", twoHoursAgo)
+        setLoading(true);
+        const { data, error } = await supabase
+            .from("appointments")
+            .select(`
+                id, start_time, status,
+                service:services(name, duration, price),
+                master:profiles(business_name, username)
+            `)
+            .eq("client_phone", searchPhone)
+            .gte("start_time", new Date().toISOString())
             .order("start_time", { ascending: true });
-            
-        setAppointments(data || []);
+
+        if (!error && data) {
+            setBookings(data);
+        }
+        setSearched(true);
         setLoading(false);
     };
 
-    const handleSetPhone = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (phone.length < 5) return;
-        localStorage.setItem('eb_phone', phone);
-        setIsPhoneSet(true);
-        loadBookings(phone);
-    };
-
-    const handleCancel = async (app: any) => {
-        if (!confirm("Вы уверены, что хотите отменить эту запись?")) return;
-        setCancellingId(app.id);
-        try {
-            const { error } = await supabase.from('appointments').delete().eq('id', app.id);
-            if (error) throw error;
-            setAppointments(prev => prev.filter(a => a.id !== app.id));
-        } catch (error: any) {
-            alert("Ошибка при отмене: " + error.message);
-        } finally {
-            setCancellingId(null);
-        }
-    };
-
-    const handleLogout = () => {
-        if (confirm("Выйти из профиля?")) {
-            localStorage.removeItem('eb_phone');
-            localStorage.removeItem('eb_name');
-            window.location.reload();
-        }
-    };
-
-    if (loading) return (
-        <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-rose-400" />
-        </div>
-    );
-
-    if (!isPhoneSet) {
-        return (
-            <div className="min-h-screen bg-[#FAF9F6] p-6 flex flex-col items-center justify-center text-stone-900 antialiased selection:bg-rose-100">
-                <div className="w-16 h-16 bg-white rounded-2xl mb-8 border border-stone-100 flex items-center justify-center shadow-sm">
-                    <span className="font-black text-transparent bg-clip-text bg-gradient-to-br from-rose-400 to-orange-400 text-2xl tracking-tight">EB</span>
-                </div>
-                
-                <form onSubmit={handleSetPhone} className="bg-white p-8 rounded-[32px] w-full max-w-sm border border-stone-100 shadow-sm">
-                    <h2 className="text-2xl font-black mb-2 tracking-tight text-center">Мои записи</h2>
-                    <p className="text-sm text-stone-500 mb-8 font-bold text-center leading-relaxed">Введите номер телефона, который вы указывали при бронировании</p>
-                    
-                    <div className="relative mb-6">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
-                        <input 
-                            required type="tel" placeholder="+7 (999) 000-00-00" value={phone} 
-                            onChange={e => setPhone(e.target.value)} 
-                            className="w-full bg-stone-50 border border-stone-200 pl-12 pr-4 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all text-sm font-bold text-stone-900 placeholder-stone-400 shadow-sm" 
-                        />
-                    </div>
-                    
-                    <button type="submit" className="w-full bg-gradient-to-r from-rose-400 to-orange-400 text-white py-4 rounded-2xl font-black active:scale-[0.97] transition-all shadow-lg shadow-rose-500/20 flex justify-center hover:opacity-90">
-                        Найти визиты
-                    </button>
-                </form>
-            </div>
-        );
-    }
-
     return (
-        <div className="min-h-screen bg-[#FAF9F6] text-stone-900 p-4 sm:p-5 font-sans pb-24 selection:bg-rose-100 antialiased">
+        <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-6 font-sans selection:bg-rose-100 antialiased">
             <div className="max-w-md mx-auto w-full space-y-6">
                 
-                <div className="flex items-center gap-3 pt-2">
-                    <button onClick={() => router.back()} className="p-3 bg-white rounded-full border border-stone-200 shadow-sm active:scale-95 shrink-0 transition-all text-stone-600 hover:text-stone-900">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                        <h1 className="text-xl font-black tracking-tight truncate">Ваши записи</h1>
-                        <p className="text-[10px] text-rose-500 font-black tracking-widest mt-0.5 uppercase bg-rose-50 inline-block px-2 py-0.5 rounded-md border border-rose-100">
-                            Номер: {phone}
-                        </p>
+                {/* NEXIO HEADER */}
+                <div className="flex items-center gap-3 mb-8 justify-center pt-6">
+                    <img src="/logo.svg" alt="Nexio Logo" className="w-12 h-12 drop-shadow-md" />
+                    <div className="flex flex-col text-left">
+                        <h1 className="text-xl font-black tracking-tight text-stone-900 leading-tight">Nexio</h1>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Мои записи</span>
                     </div>
-                    <button onClick={handleLogout} className="p-3 bg-white text-stone-400 rounded-full border border-stone-200 shadow-sm active:scale-95 shrink-0 transition-all hover:text-rose-500">
-                        <LogOut className="w-5 h-5" />
+                </div>
+
+                <div className="bg-white p-6 rounded-[32px] border border-stone-100 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-full blur-3xl pointer-events-none"></div>
+                    
+                    <button onClick={() => router.back()} className="text-sm font-bold text-stone-400 hover:text-stone-800 flex items-center gap-1 mb-6 transition-colors relative z-10">
+                        <ChevronLeft className="w-4 h-4" /> Назад
                     </button>
+                    
+                    <h2 className="text-lg font-black tracking-tight text-stone-900 mb-4 relative z-10">Найти свои визиты</h2>
+                    
+                    <form onSubmit={handleSearch} className="space-y-4 relative z-10">
+                        <div className="relative">
+                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                            <input 
+                                required 
+                                type="tel" 
+                                value={phone} 
+                                onChange={e => setPhone(e.target.value)} 
+                                className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400" 
+                                placeholder="+7 (999) 000-00-00" 
+                            />
+                        </div>
+                        <button type="submit" disabled={loading || !phone} className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl active:scale-[0.97] transition-all disabled:opacity-50 flex items-center justify-center shadow-md">
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Найти"}
+                        </button>
+                    </form>
                 </div>
 
-                <div className="space-y-4">
-                    {appointments.length === 0 ? (
-                        <div className="text-center py-12 bg-white border border-stone-100 rounded-[32px] shadow-sm">
-                            <div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <CalendarX2 className="w-7 h-7 text-stone-300" />
-                            </div>
-                            <p className="text-stone-400 font-bold text-sm">У вас нет активных записей</p>
-                        </div>
-                    ) : appointments.map(app => (
-                        <div key={app.id} className="bg-white rounded-[32px] p-6 border border-stone-100 shadow-sm relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50/50 blur-2xl rounded-full pointer-events-none"></div>
-
-                            <div className="flex justify-between items-start mb-5 relative z-10">
-                                <div>
-                                    <div className="text-rose-500 font-black text-3xl tracking-tight leading-none mb-2">{format(new Date(app.start_time), "HH:mm")}</div>
-                                    <div className="text-stone-500 text-[11px] font-black uppercase tracking-widest">
-                                        {format(new Date(app.start_time), "d MMMM", { locale: ru })}
-                                    </div>
+                {searched && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                        {bookings.length === 0 ? (
+                            <div className="bg-white p-8 rounded-[32px] border border-stone-100 shadow-sm text-center">
+                                <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-stone-100">
+                                    <CalendarDays className="w-6 h-6 text-stone-400" />
                                 </div>
-                                <div className="text-right">
-                                    <div className="text-stone-600 font-bold text-[11px] truncate max-w-[140px] bg-stone-50 px-3 py-1.5 rounded-xl border border-stone-100">
-                                        {app.master?.business_name || "Специалист"}
-                                    </div>
-                                </div>
+                                <p className="text-stone-500 font-bold text-sm">Активных записей не найдено</p>
                             </div>
-
-                            <div className="flex justify-between items-center text-sm font-bold text-stone-900 bg-stone-50 p-4 rounded-2xl border border-stone-100 mb-5 relative z-10">
-                                <div className="flex items-center gap-3 truncate pr-2">
-                                    <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-stone-100">
-                                        <Briefcase className="w-4 h-4 text-rose-400" />
+                        ) : (
+                            bookings.map(booking => (
+                                <div key={booking.id} className="bg-white p-5 rounded-[28px] border border-stone-100 shadow-sm hover:border-rose-200 transition-colors">
+                                    <div className="flex justify-between items-start mb-4 border-b border-stone-50 pb-4">
+                                        <div>
+                                            <p className="font-black text-xl text-stone-900">{format(new Date(booking.start_time), "d MMMM", { locale: ru })}</p>
+                                            <p className="text-rose-500 font-bold flex items-center gap-1.5 mt-1 text-sm"><Clock className="w-4 h-4"/> {format(new Date(booking.start_time), "HH:mm")}</p>
+                                        </div>
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${booking.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-stone-100 text-stone-500'}`}>
+                                            {booking.status === 'active' ? 'Ожидается' : booking.status}
+                                        </span>
                                     </div>
-                                    <span className="truncate">{app.service?.name}</span>
-                                </div>
-                                <span className="text-emerald-500 font-black shrink-0 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">{app.service?.price} ₽</span>
-                            </div>
+                                    
+                                    <div>
+                                        <h3 className="font-black text-stone-800 leading-tight mb-1">{booking.service?.name || "Услуга"}</h3>
+                                        <div className="flex items-center gap-4 text-xs font-bold text-stone-500 mt-2">
+                                            <span>{booking.service?.price} ₽</span>
+                                            <span>•</span>
+                                            <span>~{booking.service?.duration} мин</span>
+                                        </div>
+                                    </div>
 
-                            <button onClick={() => handleCancel(app)} disabled={cancellingId === app.id} className="w-full bg-white text-rose-500 font-black py-4 rounded-2xl border border-stone-200 hover:border-rose-200 hover:bg-rose-50 active:scale-[0.97] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 relative z-10 shadow-sm">
-                                {cancellingId === app.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Отменить визит <Trash2 className="w-4 h-4" /></>}
-                            </button>
-                        </div>
-                    ))}
-                </div>
+                                    {booking.master?.business_name && (
+                                        <div className="mt-4 pt-4 border-t border-stone-50 flex items-center gap-2">
+                                            <MapPin className="w-4 h-4 text-stone-400" />
+                                            <span className="text-xs font-bold text-stone-600">{booking.master.business_name}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

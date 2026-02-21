@@ -38,37 +38,6 @@ const getServiceColor = (id: string | undefined) => {
     return colors[hash % colors.length];
 };
 
-// --- АНИМИРОВАННЫЙ ПРЕМИУМ-ЛОГОТИП NX ---
-const AnimatedLogo = ({ sizeClass = "w-10 h-10" }: { sizeClass?: string }) => (
-    <div className={`${sizeClass} rounded-[20%] bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shadow-md relative overflow-hidden shrink-0`}>
-        <svg viewBox="0 0 40 40" className="w-full h-full p-2 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <style>
-                {`
-                    @keyframes drawNX {
-                        0% { stroke-dashoffset: 100; opacity: 0; }
-                        20% { opacity: 1; }
-                        100% { stroke-dashoffset: 0; opacity: 1; }
-                    }
-                    .nx-path {
-                        stroke-dasharray: 100;
-                        stroke-dashoffset: 100;
-                        animation: drawNX 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-                    }
-                    .nx-path-delay { animation-delay: 0.4s; }
-                `}
-            </style>
-            <path className="nx-path" d="M12 28V12L20 28V12" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path className="nx-path nx-path-delay" d="M22 12L30 28M30 12L22 28" stroke="url(#nx-grad-logo)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <defs>
-                <linearGradient id="nx-grad-logo" x1="22" y1="12" x2="30" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#FB7185" />
-                    <stop offset="1" stopColor="#FB923C" />
-                </linearGradient>
-            </defs>
-        </svg>
-    </div>
-);
-
 export default function Dashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -418,8 +387,23 @@ export default function Dashboard() {
 
     const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
     const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
-    const handleAddEmployee = async () => { if (!newEmpName) return; setAddingEmp(true); await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false); };
-    const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить специалиста?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
+    
+    // ФУНКЦИИ ДЛЯ СОТРУДНИКОВ
+    const handleAddEmployee = async () => { 
+        if (!newEmpName) return; 
+        setAddingEmp(true); 
+        await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); 
+        setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); 
+        await loadData(user.id); 
+        setAddingEmp(false); 
+    };
+    const handleDeleteEmployee = async (id: string) => { 
+        if (confirm("Удалить сотрудника?")) { 
+            await supabase.from("employees").delete().eq("id", id); 
+            await loadData(user.id); 
+        } 
+    };
+    
     const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => { e.stopPropagation(); if (confirm(currentStatus ? "Разблокировать?" : "В ЧС?")) { await supabase.from("clients").update({ is_blacklisted: !currentStatus }).eq("id", clientId); await loadData(user.id, true); } };
     
@@ -526,7 +510,7 @@ export default function Dashboard() {
             {/* СБОКУ ДЛЯ ПК (SIDEBAR) */}
             <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)] relative">
                 <div className="p-6 flex items-center gap-3 border-b border-stone-100">
-                    <AnimatedLogo sizeClass="w-10 h-10" />
+                    <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
                     <div className="flex flex-col">
                         <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">Nexio</h2>
                         <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">ERP System</span>
@@ -558,7 +542,7 @@ export default function Dashboard() {
                 {/* ШАПКА ДЛЯ МОБИЛОК */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
-                        <AnimatedLogo sizeClass="w-9 h-9" />
+                        <img src="/logo.svg" alt="Nexio Logo" className="w-9 h-9 shrink-0 object-contain drop-shadow-sm" />
                         <div className="flex flex-col justify-center">
                             <div className="flex items-center gap-2 mb-0.5">
                                 <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
@@ -1089,6 +1073,43 @@ export default function Dashboard() {
                                             </label>
                                         </div>
                                     </div>
+
+                                    {/* БЛОК ДОБАВЛЕНИЯ СОТРУДНИКОВ (ЕСЛИ РОЛЬ - ВЛАДЕЛЕЦ) */}
+                                    {role === 'owner' && (
+                                        <div className="mt-8 pt-8 border-t border-stone-100">
+                                            <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-6"><Users className="w-4 h-4 text-rose-400"/> Управление сотрудниками</h3>
+                                            
+                                            <div className="space-y-4">
+                                                {employees.map(emp => (
+                                                    <div key={emp.id} className="flex justify-between items-center p-4 bg-stone-50 border border-stone-100 rounded-2xl">
+                                                        <div>
+                                                            <p className="font-black text-stone-900">{emp.name}</p>
+                                                            <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{emp.specialty || 'Специалист'} • Процент мастера: {emp.commission_rate}%</p>
+                                                        </div>
+                                                        <button onClick={() => handleDeleteEmployee(emp.id)} className="p-2 text-stone-400 hover:text-rose-500 bg-white border border-stone-200 rounded-xl transition-colors shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                                                    </div>
+                                                ))}
+                                                
+                                                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row gap-3 items-end">
+                                                    <div className="w-full">
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Имя</label>
+                                                        <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Иван Иванов" />
+                                                    </div>
+                                                    <div className="w-full">
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специальность</label>
+                                                        <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Парикмахер" />
+                                                    </div>
+                                                    <div className="w-32 shrink-0">
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Ставка (%)</label>
+                                                        <input type="number" value={newEmpCommission} onChange={e => setNewEmpCommission(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" />
+                                                    </div>
+                                                    <button onClick={handleAddEmployee} disabled={addingEmp || !newEmpName} className="w-full sm:w-auto shrink-0 bg-stone-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-all disabled:opacity-50">
+                                                        {addingEmp ? <Loader2 className="w-5 h-5 animate-spin" /> : "Добавить"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="mt-10 pt-8 border-t border-stone-100 flex justify-end">
                                         <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-black">

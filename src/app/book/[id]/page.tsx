@@ -261,8 +261,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     }, {});
 
     return (
-        <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-5 font-sans pb-24 selection:bg-rose-100 antialiased">
-            <div className="max-w-md mx-auto w-full space-y-6">
+        <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-5 font-sans flex flex-col antialiased">
+            <div className="max-w-md mx-auto w-full space-y-6 flex-1">
                 
                 {/* HEADER КЛИЕНТА */}
                 <div className="flex items-center gap-3 pt-2">
@@ -411,6 +411,12 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         )}
                     </div>
                 )}
+                
+                {/* NEXIO BRANDING FOOTER */}
+                <div className="pt-10 pb-8 flex flex-col items-center justify-center opacity-60 hover:opacity-100 transition-opacity">
+                    <img src="/logo.svg" alt="Nexio Logo" className="w-8 h-8 mb-2 grayscale" />
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Powered by Nexio</span>
+                </div>
             </div>
         </div>
     );

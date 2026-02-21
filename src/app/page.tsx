@@ -10,9 +10,7 @@ export default function Home() {
       <header className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-xl border-b border-stone-200 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shadow-md">
-              <span className="font-bold text-white tracking-tight text-sm">NX</span>
-            </div>
+            <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-md" />
             <span className="text-xl font-black tracking-tight text-stone-900">Nexio</span>
           </div>
           <Link href="/login" className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-md hover:bg-black transition-all active:scale-95">
