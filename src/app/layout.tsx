@@ -1,33 +1,30 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 
-// Подключаем премиальный округлый шрифт
-const manrope = Manrope({ 
-  subsets: ["cyrillic", "latin"],
-  weight: ['400', '500', '600', '700', '800'],
-  display: 'swap',
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin", "cyrillic"],
 });
 
 export const metadata: Metadata = {
-  title: "EasyBooking",
-  description: "Онлайн-запись для специалистов",
+  title: "Nexio | Умная система онлайн-записи и учета",
+  description: "Единое пространство для управления расписанием, сотрудниками и складом. Создано для профессионалов.",
+  applicationName: "Nexio",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "EasyBooking",
+    title: "Nexio",
+    statusBarStyle: "default", // или "black-translucent" если хочешь прозрачную статусную строку
   },
-  icons: {
-    apple: '/icon-192.png',
+  themeColor: "#FAF9F6", // Цвет шапки в браузере мобилки
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false, // Отключаем зум, чтобы было как в нативном приложении
+    viewportFit: "cover",
   }
-};
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: "#FAF9F6", // Теплый пастельный цвет
 };
 
 export default function RootLayout({
@@ -36,9 +33,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
-      {/* Применяем шрифт и теплый бежево-кремовый фон ко всему сайту */}
-      <body className={`${manrope.className} bg-[#FAF9F6] text-stone-800 antialiased`}>
+    <html lang="ru" className={`${manrope.variable} antialiased`}>
+      <head>
+        {/* Принудительный хак для старых и текущих версий iOS (добавляет эффект приложения) */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body>
         {children}
       </body>
     </html>

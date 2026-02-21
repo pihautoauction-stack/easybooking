@@ -137,23 +137,47 @@ export default function Dashboard() {
         { id: 4, label: "Чт" }, { id: 5, label: "Пт" }, { id: 6, label: "Сб" }, { id: 0, label: "Вс" },
     ];
 
+    // ИСПРАВЛЕННАЯ ЛОГИКА АВТОРИЗАЦИИ
     useEffect(() => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (session?.user) { setUser(session.user); loadData(session.user.id); } 
-            else { router.replace("/login"); }
-        });
+        let isMounted = true;
 
-        const init = async () => {
+        const checkAuth = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) { router.replace("/login"); return; }
-                setUser(session.user);
-                await loadData(session.user.id);
-            } catch (err) { console.error(err); } finally { setLoading(false); }
+                // Ждем сессию напрямую из хранилища
+                const { data: { session }, error } = await supabase.auth.getSession();
+                
+                if (error || !session) {
+                    if (isMounted) router.replace("/login");
+                    return;
+                }
+
+                if (isMounted) {
+                    setUser(session.user);
+                    await loadData(session.user.id);
+                }
+            } catch (err) {
+                console.error(err);
+                if (isMounted) router.replace("/login");
+            } finally {
+                if (isMounted) setLoading(false);
+            }
         };
 
-        init();
-        return () => subscription.unsubscribe();
+        checkAuth();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT' || !session) {
+                router.replace("/login");
+            } else if (session?.user && !user) {
+                setUser(session.user);
+                loadData(session.user.id);
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        };
     }, [router]);
 
     useEffect(() => {
@@ -510,9 +534,9 @@ export default function Dashboard() {
             {/* СБОКУ ДЛЯ ПК (SIDEBAR) */}
             <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)] relative">
                 <div className="p-6 flex items-center gap-3 border-b border-stone-100">
-                    <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
+                    <img src="/logo.svg" alt="Nexio Logo" className="w-12 h-12 shrink-0 object-contain drop-shadow-sm" />
                     <div className="flex flex-col">
-                        <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">Nexio</h2>
+                        <h2 className="font-black text-stone-900 tracking-tight text-base leading-tight">Nexio</h2>
                         <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">ERP System</span>
                     </div>
                 </div>
@@ -542,7 +566,7 @@ export default function Dashboard() {
                 {/* ШАПКА ДЛЯ МОБИЛОК */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
-                        <img src="/logo.svg" alt="Nexio Logo" className="w-9 h-9 shrink-0 object-contain drop-shadow-sm" />
+                        <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
                         <div className="flex flex-col justify-center">
                             <div className="flex items-center gap-2 mb-0.5">
                                 <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
