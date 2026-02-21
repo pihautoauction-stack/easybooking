@@ -38,6 +38,37 @@ const getServiceColor = (id: string | undefined) => {
     return colors[hash % colors.length];
 };
 
+// --- АНИМИРОВАННЫЙ ПРЕМИУМ-ЛОГОТИП NX ---
+const AnimatedLogo = ({ sizeClass = "w-10 h-10" }: { sizeClass?: string }) => (
+    <div className={`${sizeClass} rounded-[20%] bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shadow-md relative overflow-hidden shrink-0`}>
+        <svg viewBox="0 0 40 40" className="w-full h-full p-2 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                {`
+                    @keyframes drawNX {
+                        0% { stroke-dashoffset: 100; opacity: 0; }
+                        20% { opacity: 1; }
+                        100% { stroke-dashoffset: 0; opacity: 1; }
+                    }
+                    .nx-path {
+                        stroke-dasharray: 100;
+                        stroke-dashoffset: 100;
+                        animation: drawNX 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+                    }
+                    .nx-path-delay { animation-delay: 0.4s; }
+                `}
+            </style>
+            <path className="nx-path" d="M12 28V12L20 28V12" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path className="nx-path nx-path-delay" d="M22 12L30 28M30 12L22 28" stroke="url(#nx-grad-logo)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <defs>
+                <linearGradient id="nx-grad-logo" x1="22" y1="12" x2="30" y2="28" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#FB7185" />
+                    <stop offset="1" stopColor="#FB923C" />
+                </linearGradient>
+            </defs>
+        </svg>
+    </div>
+);
+
 export default function Dashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -238,7 +269,6 @@ export default function Dashboard() {
         } finally { setSaving(false); }
     };
 
-    // ФУНКЦИИ ПОРТФОЛИО
     const handleUploadPortfolioImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]; if (!file) return; 
         setUploadingPortfolio(true);
@@ -260,7 +290,6 @@ export default function Dashboard() {
         await supabase.from('profiles').update({ portfolio_urls: newUrls }).eq('id', user.id);
     };
 
-    // ФУНКЦИИ УСЛУГ И КАТЕГОРИЙ
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
@@ -294,7 +323,6 @@ export default function Dashboard() {
         return acc;
     }, {});
 
-    // ФУНКЦИИ СКЛАДА
     const handleAddInventory = async (e: React.FormEvent) => {
         e.preventDefault(); setAddingInv(true);
         const finalCategory = invCategorySelect === 'NEW' ? invCategoryInput : invCategorySelect;
@@ -342,8 +370,6 @@ export default function Dashboard() {
         return acc;
     }, {});
 
-
-    // ЗАВЕРШЕНИЕ ВИЗИТА С РАСХОДНИКАМИ И РОЗНИЦЕЙ
     const handleCompleteRecord = async (app: any) => {
         if (!confirm("Завершить визит и списать материалы?")) return;
         
@@ -390,7 +416,6 @@ export default function Dashboard() {
         await loadData(user.id, true); 
     };
 
-    // ОСТАЛЬНЫЕ ФУНКЦИИ
     const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
     const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
     const handleAddEmployee = async () => { if (!newEmpName) return; setAddingEmp(true); await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); setNewEmpName(""); setNewEmpSpec(""); setNewEmpCommission("50"); await loadData(user.id); setAddingEmp(false); };
@@ -474,7 +499,6 @@ export default function Dashboard() {
     const netIncome = totalRevenue - totalPayroll - totalMaterialsCost;
     const inventoryValue = inventory.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.cost_price)), 0);
     const totalInventoryUnits = inventory.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
-    // =====================================================
 
     let sortedInvCats: string[] = [];
     if (selectedApp) {
@@ -497,14 +521,12 @@ export default function Dashboard() {
     if (loading) return ( <div className="h-screen w-full bg-[#FAF9F6] flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-rose-400" /></div> );
 
     return (
-        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden">
+        <div className="flex h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden relative">
             
-            {/* SIDEBAR */}
-            <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+            {/* СБОКУ ДЛЯ ПК (SIDEBAR) */}
+            <aside className="hidden md:flex w-72 bg-white border-r border-stone-200 flex-col shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)] relative">
                 <div className="p-6 flex items-center gap-3 border-b border-stone-100">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shrink-0 shadow-md">
-                        <span className="font-bold text-white tracking-tight text-sm">NX</span>
-                    </div>
+                    <AnimatedLogo sizeClass="w-10 h-10" />
                     <div className="flex flex-col">
                         <h2 className="font-black text-stone-900 tracking-tight text-sm leading-tight">Nexio</h2>
                         <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-tight mt-0.5">ERP System</span>
@@ -530,21 +552,25 @@ export default function Dashboard() {
                 </div>
             </aside>
 
-            {/* MAIN CONTENT AREA */}
+            {/* ОСНОВНАЯ ОБЛАСТЬ */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* MOBILE HEADER */}
+                {/* ШАПКА ДЛЯ МОБИЛОК */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 py-3.5 flex justify-between items-center transition-all">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-stone-800 to-stone-900 flex items-center justify-center shrink-0 shadow-sm"><span className="font-bold text-white text-xs tracking-tight">NX</span></div>
+                        <AnimatedLogo sizeClass="w-9 h-9" />
                         <div className="flex flex-col justify-center">
-                            <div className="flex items-center gap-2 mb-0.5"><h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1><div className="relative flex h-2 w-2 items-center justify-center">{isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}</div></div>
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
+                                <div className="relative flex h-2 w-2 items-center justify-center">{isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}</div>
+                            </div>
                             <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none">{businessName || "Профиль"}</span>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="text-stone-400 hover:text-rose-500 p-2 bg-stone-50 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4" /></button>
                 </header>
 
+                {/* ШАПКА ДЛЯ ПК */}
                 <header className="hidden md:flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-stone-200 px-8 py-5 z-10 shrink-0">
                     <h1 className="text-2xl font-black tracking-tight text-stone-900">{NAV_ITEMS.find(t => t.id === activeTab)?.label}</h1>
                     <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
@@ -1074,6 +1100,26 @@ export default function Dashboard() {
                         )}
                     </div>
                 </main>
+
+                {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК) */}
+                <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 py-2 flex justify-around items-center pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+                    {NAV_ITEMS.map((tab) => {
+                        const isActive = activeTab === tab.id;
+                        return (
+                            <button 
+                                key={tab.id} 
+                                onClick={() => setActiveTab(tab.id as Tab)} 
+                                className="flex flex-col items-center justify-center p-2 min-w-[3.5rem] transition-all"
+                            >
+                                <div className={`relative flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-300 ${isActive ? 'bg-rose-50 scale-110' : 'bg-transparent hover:bg-stone-50'}`}>
+                                    <tab.icon className={`w-5 h-5 transition-colors ${isActive ? 'text-rose-500' : 'text-stone-400'}`} />
+                                </div>
+                                <span className={`text-[9px] font-black mt-1 transition-colors ${isActive ? 'text-rose-600' : 'text-stone-400'}`}>{tab.label}</span>
+                            </button>
+                        )
+                    })}
+                </nav>
+
             </div>
 
             {/* ================= МОДАЛКИ ================= */}
@@ -1081,7 +1127,7 @@ export default function Dashboard() {
             {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
             {showInvModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]">
                         <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                         <h2 className="text-2xl font-black mb-6 text-stone-900">Новый товар</h2>
                         <form onSubmit={handleAddInventory} className="space-y-4">
