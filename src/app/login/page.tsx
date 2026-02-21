@@ -68,12 +68,12 @@ export default function Login() {
       <div className="w-full max-w-[420px] bg-white/80 backdrop-blur-xl p-8 md:p-10 rounded-[40px] shadow-2xl shadow-stone-200/50 border border-stone-100 relative z-10">
         
         <div className="flex flex-col items-center mb-10">
-          <img src="/logo.svg" alt="Nexio Logo" className="w-20 h-20 mb-6 drop-shadow-xl" />
+          <img src="/logo.svg" alt="Nexio Logo" className="w-24 h-24 mb-6 drop-shadow-xl" />
           <h1 className="text-2xl font-black tracking-tight text-stone-900 text-center leading-tight">
-            Вход в Nexio
+            Вход в систему
           </h1>
           <p className="text-xs font-bold text-stone-400 mt-2 text-center uppercase tracking-widest">
-            ERP System
+            Nexio ERP
           </p>
         </div>
 

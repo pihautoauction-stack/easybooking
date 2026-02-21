@@ -10,7 +10,7 @@ export default function Home() {
       <header className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-xl border-b border-stone-200 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-md" />
+            <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-sm" />
             <span className="text-xl font-black tracking-tight text-stone-900">Nexio</span>
           </div>
           <Link href="/login" className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-md hover:bg-black transition-all active:scale-95">
@@ -21,6 +21,10 @@ export default function Home() {
 
       {/* Hero Section */}
       <main className="flex-1 flex flex-col items-center justify-center pt-32 pb-20 px-6 text-center">
+        
+        {/* КРУПНЫЙ ЛОГОТИП В ЦЕНТРЕ */}
+        <img src="/logo.svg" alt="Nexio" className="w-32 h-32 mb-8 drop-shadow-2xl animate-in fade-in zoom-in duration-700" />
+
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-bottom-4">
           <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
           ERP-система нового поколения

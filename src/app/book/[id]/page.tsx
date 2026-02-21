@@ -264,7 +264,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         <div className="min-h-screen bg-[#FAF9F6] text-stone-800 p-4 sm:p-5 font-sans flex flex-col antialiased">
             <div className="max-w-md mx-auto w-full space-y-6 flex-1">
                 
-                {/* HEADER КЛИЕНТА */}
+                {/* HEADER КЛИЕНТА (Только название бизнеса) */}
                 <div className="flex items-center gap-3 pt-2">
                     {(selectedEmployee || selectedService || showWaitlist) && (
                         <button onClick={handleBack} className="p-3 bg-white rounded-full border border-stone-200 shadow-sm active:scale-95 shrink-0 transition-all text-stone-600"><ChevronLeft className="w-5 h-5" /></button>
@@ -413,9 +413,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 )}
                 
                 {/* NEXIO BRANDING FOOTER */}
-                <div className="pt-10 pb-8 flex flex-col items-center justify-center opacity-60 hover:opacity-100 transition-opacity">
-                    <img src="/logo.svg" alt="Nexio Logo" className="w-8 h-8 mb-2 grayscale" />
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Powered by Nexio</span>
+                <div className="pt-10 pb-8 flex flex-col items-center justify-center opacity-50 hover:opacity-100 transition-opacity">
+                    <div className="flex flex-col items-center">
+                        <img src="/logo.svg" alt="Nexio Logo" className="w-8 h-8 mb-2 grayscale opacity-80" />
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Powered by Nexio</span>
+                    </div>
                 </div>
             </div>
         </div>
