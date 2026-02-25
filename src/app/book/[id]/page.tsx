@@ -52,6 +52,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     profileData.weekly_settings = JSON.parse(profileData.weekly_settings);
                 }
 
+                // Парсим социальные сети для вывода
+                if (typeof profileData.social_links === 'string') {
+                    try { profileData.social_links = JSON.parse(profileData.social_links); } catch(e) {}
+                }
+
                 setProfile(profileData);
                 const { data: servicesData } = await supabase.from("services").select("*").eq("user_id", profileData.id);
                 setServices(servicesData || []);
@@ -259,6 +264,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         return acc;
     }, {});
 
+    // Безопасный парсинг ссылок
+    const sLinks = profile?.social_links || {};
+
     return (
         <div 
             className="min-h-screen bg-[#FAF9F6] text-stone-800 px-4 sm:px-5 pb-4 font-sans flex flex-col antialiased"
@@ -266,7 +274,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         >
             <div className="max-w-md mx-auto w-full space-y-6 flex-1">
                 
-                {/* HEADER КЛИЕНТА (Только название бизнеса) */}
+                {/* HEADER КЛИЕНТА (Название бизнеса) */}
                 <div className="flex items-center gap-3 pt-2">
                     {(selectedEmployee || selectedService || showWaitlist) && (
                         <button onClick={handleBack} className="p-3 bg-white rounded-full border border-stone-200 shadow-sm active:scale-95 shrink-0 transition-all text-stone-600"><ChevronLeft className="w-5 h-5" /></button>
@@ -277,6 +285,32 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     </div>
                     <button onClick={() => router.push('/my-bookings')} className="p-3 bg-rose-50 rounded-full border border-rose-100 active:scale-95 transition-all shrink-0"><CalendarDays className="w-5 h-5 text-rose-500" /></button>
                 </div>
+
+                {/* БЛОК: СОЦИАЛЬНЫЕ СЕТИ (Появляется, если заполнена хотя бы одна) */}
+                {(!selectedEmployee && !selectedService && !showWaitlist) && (sLinks.whatsapp || sLinks.telegram || sLinks.instagram || sLinks.vk) && (
+                    <div className="flex flex-wrap gap-2 animate-in fade-in duration-500 -mt-2 mb-2">
+                        {sLinks.whatsapp && (
+                            <a href={sLinks.whatsapp.startsWith('http') ? sLinks.whatsapp : `https://${sLinks.whatsapp}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-[#25D366]/10 text-[#25D366] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#25D366]/20 transition-colors">
+                                WhatsApp
+                            </a>
+                        )}
+                        {sLinks.telegram && (
+                            <a href={sLinks.telegram.startsWith('http') ? sLinks.telegram : `https://${sLinks.telegram}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-[#229ED9]/10 text-[#229ED9] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#229ED9]/20 transition-colors">
+                                Telegram
+                            </a>
+                        )}
+                        {sLinks.instagram && (
+                            <a href={sLinks.instagram.startsWith('http') ? sLinks.instagram : `https://${sLinks.instagram}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-rose-50 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-colors">
+                                Instagram
+                            </a>
+                        )}
+                        {sLinks.vk && (
+                            <a href={sLinks.vk.startsWith('http') ? sLinks.vk : `https://${sLinks.vk}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-[#0077FF]/10 text-[#0077FF] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#0077FF]/20 transition-colors">
+                                ВКонтакте
+                            </a>
+                        )}
+                    </div>
+                )}
 
                 {/* БЛОК: ПОРТФОЛИО */}
                 {profile?.portfolio_urls && profile.portfolio_urls.length > 0 && !selectedService && !showWaitlist && (

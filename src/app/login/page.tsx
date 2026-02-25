@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Loader2, ArrowRight, ArrowLeft, MailCheck } from "lucide-react";
@@ -10,10 +10,26 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
-  const [loading, setLoading] = useState(false);
+  
+  // Изначально ставим loading в true, чтобы скрыть форму и показать анимацию логотипа, пока ищем сессию
+  const [loading, setLoading] = useState(true); 
   const [error, setError] = useState<string | null>(null);
 
-  // ШАГ 1: Отправка кода на почту (через твой SMTP)
+  // ПАМЯТЬ АВТОРИЗАЦИИ: Проверяем, вошел ли уже юзер в систему
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Если память нашла юзера - мгновенно кидаем в кабинет
+        router.replace("/dashboard");
+      } else {
+        // Если нет - отключаем загрузку и показываем форму входа
+        setLoading(false);
+      }
+    };
+    checkSession();
+  }, [router]);
+
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -23,11 +39,11 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithOtp({ 
         email,
         options: {
-          shouldCreateUser: true, // Автоматически создает аккаунт, если его нет
+          shouldCreateUser: true, 
         }
       });
       if (error) throw error;
-      setStep(2); // Переключаем на шаг ввода кода
+      setStep(2); 
     } catch (err: any) {
       setError(err.message || "Ошибка отправки кода. Попробуйте позже.");
     } finally {
@@ -35,7 +51,6 @@ export default function Login() {
     }
   };
 
-  // ШАГ 2: Проверка кода
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -49,19 +64,28 @@ export default function Login() {
       });
       if (error) throw error;
       
-      // Успешно! Перенаправляем в ERP
       router.push("/dashboard");
     } catch (err: any) {
       setError("Неверный код. Проверьте правильность или запросите новый.");
-    } finally {
       setLoading(false);
     }
   };
 
+  // ЭКРАН ЗАГРУЗКИ: Показываем анимированный логотип, пока проверяется память
+  if (loading && step === 1) {
+      return (
+          <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 selection:bg-rose-200 antialiased relative overflow-hidden">
+              <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-rose-100/50 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-orange-100/40 rounded-full blur-3xl pointer-events-none"></div>
+              <img src="/logo.svg" alt="Nexio Logo" className="w-32 h-32 mb-6 drop-shadow-2xl" />
+              <Loader2 className="w-8 h-8 animate-spin text-rose-400" />
+          </div>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center p-4 text-stone-800 font-sans selection:bg-rose-200 antialiased relative overflow-hidden">
       
-      {/* Фоновые элементы */}
       <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-rose-100/50 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-orange-100/40 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -120,7 +144,7 @@ export default function Login() {
                 type="text" 
                 required
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} // Только цифры
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 className="w-full bg-stone-50 border border-stone-200 rounded-2xl py-4 px-2 text-center text-3xl tracking-[0.3em] font-black outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-900 transition-all placeholder-stone-300"
                 placeholder="••••••••"
                 maxLength={8}

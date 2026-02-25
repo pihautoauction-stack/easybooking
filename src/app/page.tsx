@@ -1,9 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import { ArrowRight, CalendarDays, Package, BarChart3, Users } from "lucide-react";
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // ПАМЯТЬ АВТОРИЗАЦИИ: Проверяем, есть ли сохраненная сессия
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setIsLoggedIn(true);
+    });
+  }, []);
+
+  const targetUrl = isLoggedIn ? "/dashboard" : "/login";
+  const btnTextAuth = isLoggedIn ? "В кабинет" : "Войти";
+  const btnTextMain = isLoggedIn ? "Перейти в панель" : "Начать работу";
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden flex flex-col">
       {/* Navbar */}
@@ -13,8 +28,8 @@ export default function Home() {
             <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-sm" />
             <span className="text-xl font-black tracking-tight text-stone-900">Nexio</span>
           </div>
-          <Link href="/login" className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-md hover:bg-black transition-all active:scale-95">
-            Войти
+          <Link href={targetUrl} className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-md hover:bg-black transition-all active:scale-95">
+            {btnTextAuth}
           </Link>
         </div>
       </header>
@@ -39,8 +54,8 @@ export default function Home() {
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-7">
-          <Link href="/login" className="flex items-center justify-center gap-2 bg-gradient-to-r from-rose-400 to-orange-400 text-white px-8 py-4 rounded-2xl font-black text-lg shadow-lg shadow-rose-500/20 hover:opacity-90 transition-all active:scale-95">
-            Начать работу <ArrowRight className="w-5 h-5" />
+          <Link href={targetUrl} className="flex items-center justify-center gap-2 bg-gradient-to-r from-rose-400 to-orange-400 text-white px-8 py-4 rounded-2xl font-black text-lg shadow-lg shadow-rose-500/20 hover:opacity-90 transition-all active:scale-95">
+            {btnTextMain} <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
 

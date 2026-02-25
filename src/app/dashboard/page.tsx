@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { 
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus, 
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle, 
-    RefreshCw, Users, Search, Ban, BarChart3, ImagePlus, CheckCircle2, Clock, Coffee, 
-    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree, History
+    RefreshCw, Users, Search, Ban, BarChart3, CheckCircle2, Clock, Coffee, 
+    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree, History, Link as LinkIcon
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -59,6 +59,7 @@ export default function Dashboard() {
     const [breaks, setBreaks] = useState<{start: string, end: string}[]>([]);
     const [newBreakStart, setNewBreakStart] = useState("13:00");
     const [newBreakEnd, setNewBreakEnd] = useState("14:00");
+    const [socialLinks, setSocialLinks] = useState({ telegram: '', whatsapp: '', instagram: '', vk: '' }); // НОВОЕ: Соцсети
     const [disabledDays, setDisabledDays] = useState<number[]>([]); 
     const [workStartTime, setWorkStartTime] = useState("09:00");
     const [workEndTime, setWorkEndTime] = useState("20:00");
@@ -188,6 +189,7 @@ export default function Dashboard() {
                 if (p.breaks) setBreaks(typeof p.breaks === 'string' ? JSON.parse(p.breaks) : p.breaks || []);
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
                 if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
+                if (p.social_links) setSocialLinks(typeof p.social_links === 'string' ? JSON.parse(p.social_links) : p.social_links);
             }
             
             const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
@@ -219,7 +221,7 @@ export default function Dashboard() {
             const { error } = await supabase.from("profiles").upsert({
                 id: user.id, business_name: businessName, username: cleanUsername || null, 
                 schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls, 
-                weekly_settings: weeklySettings, updated_at: new Date(),
+                weekly_settings: weeklySettings, social_links: socialLinks, updated_at: new Date(),
                 disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime
             });
             if (error) throw error;
@@ -312,20 +314,25 @@ export default function Dashboard() {
         if (!acc[cat]) acc[cat] = []; acc[cat].push(curr); return acc;
     }, {});
 
+    // ИСПРАВЛЕННАЯ ФУНКЦИЯ СПИСАНИЯ
     const handleCompleteRecord = async (app: any) => {
         if (!confirm("Завершить визит и списать материалы?")) return;
         let totalCost = 0; let totalRetail = 0;
+        
         for (const used of usedMaterials) {
-            if (used.qty > 0 && used.id) {
+            // Проверяем, что ID выбран и количество больше 0
+            if (used.id && used.qty > 0) {
                 const item = inventory.find(i => i.id === used.id);
                 if (item) {
-                    totalCost += (item.cost_price * used.qty); totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
+                    totalCost += (item.cost_price * used.qty); 
+                    totalRetail += ((item.retail_price || item.cost_price) * used.qty); 
                     const newQty = item.quantity - used.qty;
                     await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
                     await supabase.from('inventory_transactions').insert({ inventory_id: item.id, user_id: user.id, appointment_id: app.id, change_amount: -used.qty, type: 'appointment_usage' });
                 }
             }
         }
+
         await supabase.from("appointments").update({ status: 'completed', materials_cost: totalCost, materials_retail: totalRetail }).eq("id", app.id);
         
         let targetClientId = app.client_id;
@@ -349,7 +356,6 @@ export default function Dashboard() {
     const handleAddBreak = () => { if (newBreakStart && newBreakEnd) { setBreaks([...breaks, { start: newBreakStart, end: newBreakEnd }]); setNewBreakStart("13:00"); setNewBreakEnd("14:00"); } };
     const handleRemoveBreak = (index: number) => setBreaks(breaks.filter((_, i) => i !== index));
     
-    // ФУНКЦИИ ДЛЯ СОТРУДНИКОВ
     const handleAddEmployee = async () => { 
         if (!newEmpName) return; setAddingEmp(true); 
         await supabase.from("employees").insert({ salon_id: user.id, name: newEmpName, specialty: newEmpSpec, commission_rate: Number(newEmpCommission) || 50 }); 
@@ -395,7 +401,6 @@ export default function Dashboard() {
         catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingNote(false); }
     };
 
-    const toggleDay = (dayId: number) => setDisabledDays(prev => prev.includes(dayId) ? prev.filter(d => d !== dayId) : [...prev, dayId]);
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
     
     const serviceFilteredAppointments = activeServiceFilter ? appointments.filter(a => a.service_id === activeServiceFilter) : appointments;
@@ -477,7 +482,7 @@ export default function Dashboard() {
             {/* ОСНОВНАЯ ОБЛАСТЬ */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* ШАПКА ДЛЯ МОБИЛОК (ЖЕСТКИЙ ОТСТУП SAFE-AREA) */}
+                {/* ШАПКА ДЛЯ МОБИЛОК */}
                 <header 
                     className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200 px-5 pb-3.5 flex justify-between items-center transition-all"
                     style={{ paddingTop: 'calc(12px + env(safe-area-inset-top))' }}
@@ -501,7 +506,6 @@ export default function Dashboard() {
                     <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
                 </header>
 
-                {/* КОНТЕНТ (ЖЕСТКИЙ ОТСТУП СНИЗУ) */}
                 <main 
                     className="flex-1 overflow-y-auto p-4 md:p-8 md:pb-8"
                     style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
@@ -530,7 +534,6 @@ export default function Dashboard() {
                                     </button>
                                 </div>
 
-                                {/* АРХИВ */}
                                 {journalView === 'archive' && (
                                     <>
                                         {archivedApps.length === 0 ? (
@@ -555,7 +558,6 @@ export default function Dashboard() {
                                     </>
                                 )}
 
-                                {/* АКТИВНЫЕ */}
                                 {journalView === 'active' && (
                                     <>
                                         {activeDailyApps.length === 0 ? (
@@ -923,6 +925,29 @@ export default function Dashboard() {
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* НОВЫЙ БЛОК: СОЦИАЛЬНЫЕ СЕТИ */}
+                                            <div className="pt-6 border-t border-stone-100">
+                                                <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-4"><LinkIcon className="w-4 h-4 text-rose-400"/> Социальные сети для связи</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">WhatsApp</label>
+                                                        <input value={socialLinks.whatsapp} onChange={e => setSocialLinks({...socialLinks, whatsapp: e.target.value})} placeholder="wa.me/79990000000" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 mt-1" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Telegram</label>
+                                                        <input value={socialLinks.telegram} onChange={e => setSocialLinks({...socialLinks, telegram: e.target.value})} placeholder="t.me/username" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 mt-1" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Instagram</label>
+                                                        <input value={socialLinks.instagram} onChange={e => setSocialLinks({...socialLinks, instagram: e.target.value})} placeholder="instagram.com/username" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 mt-1" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">ВКонтакте (VK)</label>
+                                                        <input value={socialLinks.vk} onChange={e => setSocialLinks({...socialLinks, vk: e.target.value})} placeholder="vk.com/club" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 mt-1" />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
 
@@ -962,6 +987,7 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
 
+                                            {/* ВОЗВРАЩЕННЫЕ ТУМБЛЕРЫ (СВИТЧЕРЫ) */}
                                             <div className="space-y-3 border-t border-stone-100 pt-6">
                                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">График работы по дням</label>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -969,16 +995,20 @@ export default function Dashboard() {
                                                         const config = weeklySettings[day.id] || { start: "09:00", end: "18:00", active: false };
                                                         return (
                                                             <div key={day.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${config.active ? 'bg-rose-50/30 border-rose-100 shadow-sm' : 'bg-stone-50 border-stone-100 opacity-60'}`}>
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-black text-stone-900 text-sm">{day.label}</span>
-                                                                    <button onClick={() => setWeeklySettings({...weeklySettings, [day.id]: {...config, active: !config.active}})} className={`text-[10px] font-bold uppercase tracking-widest mt-1 text-left ${config.active ? 'text-rose-500' : 'text-stone-400'}`}>
-                                                                        {config.active ? 'Рабочий' : 'Выходной'}
+                                                                <div className="flex items-center gap-3">
+                                                                    <button 
+                                                                        onClick={() => setWeeklySettings({...weeklySettings, [day.id]: {...config, active: !config.active}})}
+                                                                        className={`w-10 h-5 rounded-full transition-all relative shrink-0 ${config.active ? 'bg-rose-400' : 'bg-stone-300'}`}
+                                                                    >
+                                                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${config.active ? 'left-[22px]' : 'left-0.5'}`}></div>
                                                                     </button>
+                                                                    <span className="font-black text-stone-900 text-sm">{day.label}</span>
                                                                 </div>
                                                                 {config.active && (
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <input type="time" value={config.start} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, start: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center" />
-                                                                        <input type="time" value={config.end} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, end: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center" />
+                                                                    <div className="flex items-center gap-1">
+                                                                        <input type="time" value={config.start} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, start: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center w-[70px]" />
+                                                                        <span className="text-stone-300">-</span>
+                                                                        <input type="time" value={config.end} onChange={e => setWeeklySettings({...weeklySettings, [day.id]: {...config, end: e.target.value}})} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center w-[70px]" />
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1085,7 +1115,8 @@ export default function Dashboard() {
 
             </div>
 
-            {/* МОДАЛКИ ОСТАЛИСЬ БЕЗ ИЗМЕНЕНИЙ... */}
+            {/* ================= МОДАЛКИ ================= */}
+
             {/* 1. СОЗДАНИЕ ТОВАРА НА СКЛАДЕ */}
             {showInvModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1225,7 +1256,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* 5. ДЕТАЛИ ЗАПИСИ */}
+            {/* 5. ДЕТАЛИ ЗАПИСИ (ИСПРАВЛЕНО СПИСАНИЕ СКЛАДА) */}
             {selectedApp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setSelectedApp(null); setUsedMaterials([]); }}>
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
@@ -1248,8 +1279,8 @@ export default function Dashboard() {
                                     <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/> Использованные материалы</h4>
                                     
                                     {usedMaterials.map((um, idx) => (
-                                        <div key={idx} className="flex gap-2 mb-2">
-                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer">
+                                        <div key={idx} className="flex gap-2 mb-2 items-center">
+                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer w-0">
                                                 <option value="" disabled>Выбрать из папок...</option>
                                                 {sortedInvCats.map(cat => (
                                                     <optgroup key={cat} label={`📂 ${cat}`}>
@@ -1259,8 +1290,10 @@ export default function Dashboard() {
                                                     </optgroup>
                                                 ))}
                                             </select>
-                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
-                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50"><X className="w-4 h-4"/></button>
+                                            {/* ИСПРАВЛЕННЫЙ INPUT ДЛЯ КОЛИЧЕСТВА - ТЕПЕРЬ ОН НЕ ИСЧЕЗНЕТ */}
+                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 min-w-[80px] shrink-0 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                            
+                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50 shrink-0"><X className="w-4 h-4"/></button>
                                         </div>
                                     ))}
                                     
