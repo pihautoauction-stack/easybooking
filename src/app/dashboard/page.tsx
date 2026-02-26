@@ -96,6 +96,8 @@ export default function Dashboard() {
     const [clientFilterMode, setClientFilterMode] = useState<'all' | 'sleeping'>('all');
     const [employees, setEmployees] = useState<any[]>([]);
     const [inventory, setInventory] = useState<any[]>([]);
+    const [waitlist, setWaitlist] = useState<any[]>([]);
+    const [waitlistModal, setWaitlistModal] = useState<{ show: boolean, waitlistPeople: any[], cancelledApp: any | null }>({ show: false, waitlistPeople: [], cancelledApp: null });
     const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
     const [uploadingAppImageId, setUploadingAppImageId] = useState<string | null>(null);
 
@@ -238,6 +240,8 @@ export default function Dashboard() {
             setAppointments(a || []);
             const { data: c } = await supabase.from("clients").select("*").eq("master_id", userId).order('created_at', { ascending: false });
             setClients(c || []);
+            const { data: wl } = await supabase.from("waitlist").select("*").eq("master_id", userId).eq("notified", false).order('created_at');
+            setWaitlist(wl || []);
             if (selectedApp && a && !a.find((app: any) => app.id === selectedApp.id)) setSelectedApp(null);
         } catch (error) { console.error(error); } finally {
             if (!isSilent) setTimeout(() => setIsSyncing(false), 500);
@@ -372,7 +376,23 @@ export default function Dashboard() {
     };
     const handleDeleteEmployee = async (id: string) => { if (confirm("Удалить сотрудника?")) { await supabase.from("employees").delete().eq("id", id); await loadData(user.id); } };
 
-    const handleDeleteRecord = async (id: string) => { if (confirm("Точно удалить?")) { await supabase.from("appointments").delete().eq("id", id); await loadData(user.id); setSelectedApp(null); } };
+    const handleDeleteRecord = async (id: string) => {
+        const app = appointments.find((a: any) => a.id === id);
+        if (!confirm(app?.status === 'completed' ? "Точно удалить из архива?" : "Отменить эту запись?")) return;
+
+        await supabase.from("appointments").delete().eq("id", id);
+        await loadData(user.id);
+        setSelectedApp(null);
+
+        // Проверяем лист ожидания на день этой отмененной записи
+        if (app && app.status === 'active') {
+            const cancelledDate = new Date(app.start_time).toISOString().slice(0, 10);
+            const waitlistForDay = waitlist.filter((w: any) => w.desired_date === cancelledDate);
+            if (waitlistForDay.length > 0) {
+                setWaitlistModal({ show: true, waitlistPeople: waitlistForDay, cancelledApp: app });
+            }
+        }
+    };
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => {
         e.stopPropagation();
         if (confirm(currentStatus ? "Разблокировать?" : "В ЧС?")) {
@@ -955,6 +975,52 @@ export default function Dashboard() {
                                 <button onClick={() => handleDeleteRecord(selectedApp.id)} className={`w-full bg-white text-rose-500 font-bold py-3.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-1 border border-rose-200 hover:bg-rose-50 shadow-sm`}><Trash2 className="w-4 h-4" /> {selectedApp.status === 'completed' ? 'Удалить' : 'Отменить запись'}</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* МОДАЛКА: Умный лист ожидания */}
+            {waitlistModal.show && (
+                <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setWaitlistModal({ show: false, waitlistPeople: [], cancelledApp: null })}>
+                    <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl p-6 md:p-8 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-xl">⏰</div>
+                            <div>
+                                <h3 className="text-lg font-black text-stone-900 tracking-tight">Лист ожидания</h3>
+                                <p className="text-xs text-stone-500 font-medium">На этот день есть ожидающие клиенты</p>
+                            </div>
+                        </div>
+
+                        {waitlistModal.cancelledApp && (
+                            <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl mb-4">
+                                <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mb-1">Отменена запись</p>
+                                <p className="text-sm font-black text-stone-800">{waitlistModal.cancelledApp.client_name} — {format(new Date(waitlistModal.cancelledApp.start_time), 'HH:mm, d MMMM', { locale: ru })}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3 mb-6">
+                            {waitlistModal.waitlistPeople.map((person: any) => (
+                                <div key={person.id} className="flex items-center justify-between bg-stone-50 border border-stone-200 p-4 rounded-2xl">
+                                    <div>
+                                        <p className="text-sm font-bold text-stone-800">{person.client_name}</p>
+                                        <p className="text-xs text-stone-500 font-medium">{person.client_phone}</p>
+                                    </div>
+                                    <a
+                                        href={`https://wa.me/${person.client_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Здравствуйте, ${person.client_name}! 🎉 Освободилось окно на ${waitlistModal.cancelledApp ? format(new Date(waitlistModal.cancelledApp.start_time), 'HH:mm, d MMMM', { locale: ru }) : 'ближайшее время'}. Хотите забрать? Записывайтесь: ${typeof window !== 'undefined' ? window.location.origin : ''}/book/${username || user?.id}`)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={async () => {
+                                            await supabase.from('waitlist').update({ notified: true }).eq('id', person.id);
+                                        }}
+                                        className="bg-[#25D366] text-white px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-2 active:scale-95 transition-all shadow-sm hover:bg-emerald-600"
+                                    >
+                                        <MessageCircle className="w-3.5 h-3.5" /> Написать
+                                    </a>
+                                </div>
+                            ))}
+                        </div>
+
+                        <button onClick={() => setWaitlistModal({ show: false, waitlistPeople: [], cancelledApp: null })} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-black active:scale-95 transition-all">Закрыть</button>
                     </div>
                 </div>
             )}
