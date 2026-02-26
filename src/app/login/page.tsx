@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Loader2, ArrowRight, ArrowLeft, MailCheck } from "lucide-react";
+
+const supabase = createClient();
 
 export default function Login() {
   const router = useRouter();

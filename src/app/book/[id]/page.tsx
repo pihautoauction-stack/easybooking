@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing, Clock, Folder, FolderOpen } from "lucide-react";
 import { format, startOfToday } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
+
+const supabase = createClient();
 
 export default function BookingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -17,16 +19,16 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const [profile, setProfile] = useState<any>(null);
     const [services, setServices] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
-    
+
     const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
     const [selectedService, setSelectedService] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
-    
+
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
-    
+
     const [bookingStatus, setBookingStatus] = useState<"idle" | "submitting" | "success" | "error" | "conflict">("idle");
     const [showWaitlist, setShowWaitlist] = useState(false);
     const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "submitting" | "success">("idle");
@@ -36,7 +38,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     useEffect(() => {
         const fetchData = async () => {
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-            
+
             const { data: profileData } = await supabase
                 .from("profiles")
                 .select("*")
@@ -47,26 +49,26 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                 if (typeof profileData.portfolio_urls === 'string') {
                     profileData.portfolio_urls = JSON.parse(profileData.portfolio_urls);
                 }
-                
+
                 if (typeof profileData.weekly_settings === 'string') {
                     profileData.weekly_settings = JSON.parse(profileData.weekly_settings);
                 }
 
                 // Парсим социальные сети для вывода
                 if (typeof profileData.social_links === 'string') {
-                    try { profileData.social_links = JSON.parse(profileData.social_links); } catch(e) {}
+                    try { profileData.social_links = JSON.parse(profileData.social_links); } catch (e) { }
                 }
 
                 setProfile(profileData);
                 const { data: servicesData } = await supabase.from("services").select("*").eq("user_id", profileData.id);
                 setServices(servicesData || []);
-                
+
                 if (profileData.role === 'owner') {
                     const { data: empData } = await supabase.from("employees").select("*").eq("salon_id", profileData.id);
                     setEmployees(empData || []);
                 }
             }
-            
+
             setClientName(localStorage.getItem('nx_name') || "");
             setClientPhone(localStorage.getItem('nx_phone') || "");
             setLoading(false);
@@ -81,10 +83,10 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
         const generateSlots = async () => {
             const now = new Date();
-            const startDay = new Date(selectedDate); startDay.setHours(0,0,0,0);
-            const endDay = new Date(selectedDate); endDay.setHours(23,59,59,999);
-            const dayOfWeek = startDay.getDay(); 
-            
+            const startDay = new Date(selectedDate); startDay.setHours(0, 0, 0, 0);
+            const endDay = new Date(selectedDate); endDay.setHours(23, 59, 59, 999);
+            const dayOfWeek = startDay.getDay();
+
             let query = supabase.from("appointments").select("start_time, service:services(duration)").eq("master_id", profile.id).gte("start_time", startDay.toISOString()).lte("start_time", endDay.toISOString()).eq("status", "active");
             if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
             const { data: busy } = await query;
@@ -105,7 +107,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             });
 
             let wStartH, wStartM, wEndH, wEndM;
-            
+
             if (profile.weekly_settings && profile.weekly_settings[dayOfWeek] && profile.weekly_settings[dayOfWeek].active) {
                 [wStartH, wStartM] = profile.weekly_settings[dayOfWeek].start.split(':').map(Number);
                 [wEndH, wEndM] = profile.weekly_settings[dayOfWeek].end.split(':').map(Number);
@@ -118,7 +120,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
             const workEndMins = wEndH * 60 + wEndM;
 
             const step = profile.schedule_step || 30;
-            const serviceDuration = selectedService.duration || 60; 
+            const serviceDuration = selectedService.duration || 60;
 
             const slots: string[] = [];
             let currentMins = workStartMins;
@@ -172,7 +174,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", startTimeStr).eq("status", "active");
         if (selectedEmployee) busyQuery = busyQuery.eq("employee_id", selectedEmployee.id);
         const { data: busy } = await busyQuery.maybeSingle();
-        
+
         if (busy) { setBookingStatus("conflict"); return; }
 
         const { error } = await supabase.from("appointments").insert({
@@ -216,7 +218,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         else if (selectedEmployee) setSelectedEmployee(null);
     };
 
-    const toggleCategory = (cat: string) => setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}));
+    const toggleCategory = (cat: string) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
 
     if (loading) return <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-rose-400" /></div>;
     if (!profile) return <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-stone-500 font-bold">Профиль не найден. Возможно, ссылка устарела.</div>;
@@ -229,7 +231,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     <h1 className="text-2xl font-black mb-3 tracking-tight text-stone-900">Вы успешно записаны</h1>
                     <p className="text-stone-500 mb-8 text-sm font-bold leading-relaxed">
                         Ждем вас <span className="text-stone-900">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
-                        {selectedEmployee && <><br/><span className="text-rose-500 mt-2 block">Специалист: {selectedEmployee.name}</span></>}
+                        {selectedEmployee && <><br /><span className="text-rose-500 mt-2 block">Специалист: {selectedEmployee.name}</span></>}
                     </p>
                     <div className="space-y-3 w-full">
                         <button onClick={() => router.push('/my-bookings')} className="w-full bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-2xl active:scale-[0.97] transition-all shadow-md shadow-rose-500/20">Мои записи</button>
@@ -268,12 +270,12 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
     const sLinks = profile?.social_links || {};
 
     return (
-        <div 
+        <div
             className="min-h-screen bg-[#FAF9F6] text-stone-800 px-4 sm:px-5 pb-4 font-sans flex flex-col antialiased"
             style={{ paddingTop: 'calc(16px + env(safe-area-inset-top))' }}
         >
             <div className="max-w-md mx-auto w-full space-y-6 flex-1">
-                
+
                 {/* HEADER КЛИЕНТА (Название бизнеса) */}
                 <div className="flex items-center gap-3 pt-2">
                     {(selectedEmployee || selectedService || showWaitlist) && (
@@ -336,15 +338,15 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                     </div>
                 ) : !selectedService ? (
                     <div className="space-y-4">
-                        {selectedEmployee && <div className="bg-rose-50 p-4 rounded-2xl text-sm text-rose-600 font-bold flex items-center gap-2 border border-rose-100 shadow-sm"><User className="w-5 h-5"/> Выбран мастер: {selectedEmployee.name}</div>}
+                        {selectedEmployee && <div className="bg-rose-50 p-4 rounded-2xl text-sm text-rose-600 font-bold flex items-center gap-2 border border-rose-100 shadow-sm"><User className="w-5 h-5" /> Выбран мастер: {selectedEmployee.name}</div>}
                         <p className="text-[11px] text-stone-400 uppercase tracking-widest mb-3 ml-2 font-black">Выберите услугу</p>
-                        
-                        {Object.keys(groupedServices).length === 0 ? <p className="text-stone-400 text-sm font-bold pl-2">Услуг пока нет</p> : 
+
+                        {Object.keys(groupedServices).length === 0 ? <p className="text-stone-400 text-sm font-bold pl-2">Услуг пока нет</p> :
                             (Object.entries(groupedServices) as [string, any[]][]).map(([category, items]) => (
                                 <div key={category} className="mb-3 bg-white rounded-[28px] border border-stone-100 shadow-sm overflow-hidden">
                                     <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-5 hover:bg-stone-50 transition-colors">
                                         <div className="flex items-center gap-3">
-                                            {expandedCategories[category] ? <FolderOpen className="w-5 h-5 text-rose-400"/> : <Folder className="w-5 h-5 text-stone-400"/>}
+                                            {expandedCategories[category] ? <FolderOpen className="w-5 h-5 text-rose-400" /> : <Folder className="w-5 h-5 text-stone-400" />}
                                             <span className="font-black text-stone-900 text-lg">{category}</span>
                                         </div>
                                         <span className="bg-stone-100 text-stone-500 px-2.5 py-1 rounded-lg text-xs font-black">{items.length}</span>
@@ -379,7 +381,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         <div className="bg-white p-6 rounded-[32px] border border-stone-100 shadow-sm flex justify-between items-center gap-4">
                             <div>
                                 <h3 className="font-black text-lg text-stone-900 leading-tight">{selectedService.name}</h3>
-                                <p className="text-stone-400 text-xs font-bold mt-1.5 flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {selectedService.duration || 60} мин.</p>
+                                <p className="text-stone-400 text-xs font-bold mt-1.5 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {selectedService.duration || 60} мин.</p>
                             </div>
                             <span className="text-stone-900 font-black bg-stone-50 border border-stone-200 px-4 py-2 rounded-2xl text-base">{selectedService.price} ₽</span>
                         </div>
@@ -389,21 +391,21 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                 <p className="text-[11px] text-stone-400 uppercase tracking-widest ml-2 font-black">Выберите дату и время</p>
                                 <div className="bg-white rounded-[32px] p-5 border border-stone-100 shadow-sm overflow-x-auto w-full flex justify-center">
                                     <style>{`.rdp { --rdp-cell-size: min(12vw, 42px); --rdp-accent-color: #f43f5e; --rdp-background-color: #FAF9F6; margin: 0 auto; width: 100%; max-width: 100%; display: flex; justify-content: center; font-family: inherit; } .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: var(--rdp-accent-color); color: white; font-weight: 800; border-radius: 12px; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: var(--rdp-background-color); border-radius: 12px; color: #f43f5e; } .rdp-day { border-radius: 12px; font-size: min(4vw, 15px); font-weight: 700; color: #292524; } .rdp-caption_label { font-size: min(4.5vw, 17px); font-weight: 800; color: #292524; } .rdp-head_cell { font-size: min(3.5vw, 13px); font-weight: 800; color: #78716c; text-transform: uppercase; } .rdp-day_outside { color: #d6d3d1; } .rdp-day_disabled { color: #e7e5e4; opacity: 0.5; }`}</style>
-                                    <DayPicker 
-                                        mode="single" 
-                                        selected={selectedDate} 
-                                        onSelect={setSelectedDate} 
-                                        locale={ru} 
+                                    <DayPicker
+                                        mode="single"
+                                        selected={selectedDate}
+                                        onSelect={setSelectedDate}
+                                        locale={ru}
                                         disabled={[
-                                            { before: startOfToday() }, 
+                                            { before: startOfToday() },
                                             (date) => {
                                                 if (profile?.weekly_settings) {
                                                     const daySetting = profile.weekly_settings[date.getDay()];
-                                                    if (daySetting) return !daySetting.active; 
+                                                    if (daySetting) return !daySetting.active;
                                                 }
                                                 return profile?.disabled_days ? profile.disabled_days.split(',').map(Number).includes(date.getDay()) : false;
                                             }
-                                        ]} 
+                                        ]}
                                     />
                                 </div>
 
@@ -428,9 +430,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                             <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="Ваше имя" /></div>
                                             <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="+7 (999) 000-00-00" /></div>
                                         </div>
-                                        
+
                                         {bookingStatus === "conflict" && <p className="text-orange-500 font-bold text-sm text-center bg-orange-50 py-3 rounded-xl border border-orange-100">Это время только что заняли. Выберите другое.</p>}
-                                        
+
                                         <button type="submit" disabled={bookingStatus === "submitting"} className="w-full bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-2xl active:scale-[0.97] text-base flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 transition-all disabled:opacity-50 mt-2">{bookingStatus === "submitting" ? <Loader2 className="w-5 h-5 animate-spin" /> : "Подтвердить запись"}</button>
                                     </form>
                                 )}
@@ -447,7 +449,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                         )}
                     </div>
                 )}
-                
+
                 {/* NEXIO BRANDING FOOTER */}
                 <div className="pt-10 pb-8 flex flex-col items-center justify-center opacity-50 hover:opacity-100 transition-opacity">
                     <div className="flex flex-col items-center">

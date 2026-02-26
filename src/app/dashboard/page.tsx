@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import {
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus,
@@ -20,6 +20,8 @@ import ClientsTab from "@/components/dashboard/ClientsTab";
 import InventoryTab from "@/components/dashboard/InventoryTab";
 import AnalyticsTab from "@/components/dashboard/AnalyticsTab";
 import ProfileTab from "@/components/dashboard/ProfileTab";
+
+const supabase = createClient();
 
 type Tab = 'appointments' | 'services' | 'clients' | 'inventory' | 'analytics' | 'profile';
 type ProfileTab = 'general' | 'schedule' | 'gallery' | 'team';
@@ -514,7 +516,7 @@ export default function Dashboard() {
 
                         {/* 🟢 ЖУРНАЛ */}
                         {activeTab === 'appointments' && (
-                            <AppointmentsTab 
+                            <AppointmentsTab
                                 user={user} role={role} appointments={appointments} services={services} employees={employees}
                                 journalView={journalView} setJournalView={setJournalView} selectedApp={selectedApp} setSelectedApp={setSelectedApp}
                                 activeDailyApps={activeDailyApps} archivedApps={archivedApps} format={format} ru={ru}
