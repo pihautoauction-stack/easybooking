@@ -257,6 +257,27 @@ export default function ProfileTab({
                                 </div>
                             </div>
                         </div>
+
+                        <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6 md:p-8 rounded-[32px] shadow-lg shadow-blue-500/20 text-white relative overflow-hidden">
+                            <div className="absolute -right-8 -bottom-8 w-36 h-36 bg-white/10 rounded-full blur-2xl"></div>
+                            <div className="relative z-10">
+                                <h3 className="text-xl font-black tracking-tight mb-2 flex items-center gap-2">📅 Подписка на календарь</h3>
+                                <p className="text-blue-100 font-medium text-sm leading-relaxed mb-4 max-w-lg">Скопируйте ссылку ниже и добавьте её как подписку в Google Calendar или Apple Calendar. Ваше расписание будет обновляться автоматически.</p>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <input readOnly value={typeof window !== 'undefined' ? `${window.location.origin}/api/calendar/${username || user?.id}` : ''} className="flex-1 bg-white/10 border border-white/20 backdrop-blur rounded-xl p-3.5 text-xs font-bold text-white outline-none truncate placeholder-white/50" />
+                                    <button
+                                        onClick={() => {
+                                            const calLink = `${window.location.origin}/api/calendar/${username || user?.id}`;
+                                            navigator.clipboard.writeText(calLink);
+                                            alert("Ссылка на календарь скопирована!\n\nОткройте Google Calendar → Настройки → Добавить календарь → По URL → Вставьте ссылку.");
+                                        }}
+                                        className="bg-white text-blue-600 px-6 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all hover:bg-blue-50 shrink-0 flex items-center gap-2"
+                                    >
+                                        <Copy className="w-4 h-4" /> Копировать ссылку
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
