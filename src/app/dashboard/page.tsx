@@ -11,8 +11,20 @@ import {
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
-import InputMask from "react-input-mask";
 import { completeAppointment, adjustInventoryStock } from "@/app/actions/inventory";
+
+const formatPhoneInput = (value: string) => {
+    let input = value.replace(/\D/g, '');
+    if (!input) return '';
+    if (input[0] === '7' || input[0] === '8') input = input.slice(1);
+    let res = '+7';
+    if (input.length > 0) res += ' (' + input.substring(0, 3);
+    if (input.length >= 4) res += ') ' + input.substring(3, 6);
+    if (input.length >= 7) res += '-' + input.substring(6, 8);
+    if (input.length >= 9) res += '-' + input.substring(8, 10);
+    return res;
+};
+
 import { toggleClientBlacklist, saveClientNote, updateClientTags } from "@/app/actions/clients";
 import { addService, deleteService } from "@/app/actions/services";
 import AppointmentsTab from "@/components/dashboard/AppointmentsTab";
@@ -828,11 +840,11 @@ export default function Dashboard() {
                             <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Клиент / Задача *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
                             <div>
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label>
-                                <InputMask
-                                    mask="+7 (999) 999-99-99"
+                                <input
                                     value={manualPhone}
-                                    onChange={(e: any) => setManualPhone(e.target.value)}
+                                    onChange={(e) => setManualPhone(formatPhoneInput(e.target.value))}
                                     className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800"
+                                    placeholder="+7 (999) 000-00-00"
                                     type="tel"
                                 />
                             </div>

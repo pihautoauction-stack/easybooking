@@ -8,7 +8,18 @@ import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
-import InputMask from "react-input-mask";
+
+const formatPhoneInput = (value: string) => {
+    let input = value.replace(/\D/g, '');
+    if (!input) return '';
+    if (input[0] === '7' || input[0] === '8') input = input.slice(1);
+    let res = '+7';
+    if (input.length > 0) res += ' (' + input.substring(0, 3);
+    if (input.length >= 4) res += ') ' + input.substring(3, 6);
+    if (input.length >= 7) res += '-' + input.substring(6, 8);
+    if (input.length >= 9) res += '-' + input.substring(8, 10);
+    return res;
+};
 
 const supabase = createClient();
 
@@ -436,10 +447,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                             <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="Ваше имя" /></div>
                                             <div className="relative">
                                                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 z-10" />
-                                                <InputMask
-                                                    mask="+7 (999) 999-99-99"
+                                                <input
                                                     value={clientPhone}
-                                                    onChange={(e: any) => setClientPhone(e.target.value)}
+                                                    onChange={(e) => setClientPhone(formatPhoneInput(e.target.value))}
                                                     className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm"
                                                     placeholder="+7 (999) 000-00-00"
                                                     required
