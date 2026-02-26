@@ -28,6 +28,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
+    const [silentService, setSilentService] = useState(false);
 
     const [bookingStatus, setBookingStatus] = useState<"idle" | "submitting" | "success" | "error" | "conflict">("idle");
     const [showWaitlist, setShowWaitlist] = useState(false);
@@ -179,7 +180,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
         const { error } = await supabase.from("appointments").insert({
             master_id: profile.id, service_id: selectedService.id, employee_id: selectedEmployee?.id,
-            client_name: clientName, client_phone: clientPhone, start_time: startTimeStr, status: 'active'
+            client_name: clientName, client_phone: clientPhone, start_time: startTimeStr, status: 'active',
+            preferences: { silent: silentService }
         });
 
         if (!error) {
@@ -429,6 +431,17 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                         <div className="space-y-3">
                                             <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="Ваше имя" /></div>
                                             <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="+7 (999) 000-00-00" /></div>
+
+                                            <label className="flex items-center gap-3 p-4 bg-stone-50 border border-stone-100 rounded-2xl cursor-pointer hover:bg-rose-50/50 hover:border-rose-100 transition-colors">
+                                                <div className="relative flex items-center shrink-0">
+                                                    <input type="checkbox" checked={silentService} onChange={(e) => setSilentService(e.target.checked)} className="sr-only peer" />
+                                                    <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-black text-stone-900">🤫 Тихий сервис</p>
+                                                    <p className="text-[10px] font-bold text-stone-500 mt-0.5">Мастер не будет отвлекать вас разговорами</p>
+                                                </div>
+                                            </label>
                                         </div>
 
                                         {bookingStatus === "conflict" && <p className="text-orange-500 font-bold text-sm text-center bg-orange-50 py-3 rounded-xl border border-orange-100">Это время только что заняли. Выберите другое.</p>}

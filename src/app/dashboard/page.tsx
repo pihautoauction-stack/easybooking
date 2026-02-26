@@ -12,7 +12,7 @@ import {
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
 import { completeAppointment, adjustInventoryStock } from "@/app/actions/inventory";
-import { toggleClientBlacklist, saveClientNote } from "@/app/actions/clients";
+import { toggleClientBlacklist, saveClientNote, updateClientTags } from "@/app/actions/clients";
 import { addService, deleteService } from "@/app/actions/services";
 import AppointmentsTab from "@/components/dashboard/AppointmentsTab";
 import ServicesTab from "@/components/dashboard/ServicesTab";
@@ -65,6 +65,7 @@ export default function Dashboard() {
     const [role, setRole] = useState("solo");
     const [businessName, setBusinessName] = useState("");
     const [username, setUsername] = useState("");
+    const [newTagInput, setNewTagInput] = useState("");
     const [weeklySettings, setWeeklySettings] = useState<any>({});
     const [scheduleStep, setScheduleStep] = useState(30);
     const [breaks, setBreaks] = useState<{ start: string, end: string }[]>([]);
@@ -81,6 +82,9 @@ export default function Dashboard() {
     const [clients, setClients] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
     const [inventory, setInventory] = useState<any[]>([]);
+    const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
+    const [uploadingAppImageId, setUploadingAppImageId] = useState<string | null>(null);
+
     const [transactions, setTransactions] = useState<any[]>([]);
 
     const [saving, setSaving] = useState(false);
@@ -100,7 +104,6 @@ export default function Dashboard() {
 
     // Редактирование услуги
     const [selectedService, setSelectedService] = useState<any>(null);
-    const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
 
     // Форма сотрудника
     const [newEmpName, setNewEmpName] = useState("");
@@ -358,10 +361,19 @@ export default function Dashboard() {
     const handleToggleBlacklist = async (clientId: string, currentStatus: boolean, e: React.MouseEvent) => {
         e.stopPropagation();
         if (confirm(currentStatus ? "Разблокировать?" : "В ЧС?")) {
+            setClients(clients.map(c => c.id === clientId ? { ...c, is_blacklisted: !currentStatus } : c));
             const result = await toggleClientBlacklist(clientId, currentStatus);
             if (result.success) await loadData(user.id, true);
             else alert("Ошибка: " + result.error);
         }
+    };
+
+    const handleUpdateTags = async (clientId: string, tags: string[]) => {
+        setClients(clients.map(c => c.id === clientId ? { ...c, tags } : c));
+        if (selectedClient && selectedClient.id === clientId) {
+            setSelectedClient({ ...selectedClient, tags });
+        }
+        await updateClientTags(clientId, tags);
     };
 
     const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>, serviceId: string, currentUrls: string[]) => {
@@ -381,6 +393,27 @@ export default function Dashboard() {
         const updatedUrls = currentUrls.filter(url => url !== urlToRemove);
         await supabase.from('services').update({ image_urls: updatedUrls }).eq('id', serviceId);
         if (selectedService && selectedService.id === serviceId) setSelectedService({ ...selectedService, image_urls: updatedUrls });
+        await loadData(user.id, true);
+    };
+
+    const handleUploadAppImage = async (e: React.ChangeEvent<HTMLInputElement>, appId: string, currentUrls: string[]) => {
+        const file = e.target.files?.[0]; if (!file) return; setUploadingAppImageId(appId);
+        try {
+            const filePath = `${user.id}/apps/${Math.random()}.${file.name.split('.').pop()}`;
+            await supabase.storage.from('gallery').upload(filePath, file);
+            const { data } = supabase.storage.from('gallery').getPublicUrl(filePath);
+            const updatedUrls = [...(currentUrls || []), data.publicUrl];
+            await supabase.from('appointments').update({ photos_before_after: updatedUrls }).eq('id', appId);
+            if (selectedApp && selectedApp.id === appId) setSelectedApp({ ...selectedApp, photos_before_after: updatedUrls });
+            await loadData(user.id, true);
+        } catch (err: any) { alert("Ошибка: " + err.message); } finally { setUploadingAppImageId(null); }
+    };
+
+    const handleRemoveAppImage = async (appId: string, urlToRemove: string, currentUrls: string[]) => {
+        if (!confirm("Удалить фото визита?")) return;
+        const updatedUrls = currentUrls.filter(url => url !== urlToRemove);
+        await supabase.from('appointments').update({ photos_before_after: updatedUrls }).eq('id', appId);
+        if (selectedApp && selectedApp.id === appId) setSelectedApp({ ...selectedApp, photos_before_after: updatedUrls });
         await loadData(user.id, true);
     };
 
@@ -567,7 +600,7 @@ export default function Dashboard() {
                                 Search={Search} UserCircle={UserCircle} setSelectedClient={setSelectedClient} selectedClient={selectedClient}
                                 Ban={Ban} Trash2={Trash2} clientNote={clientNote} setClientNote={setClientNote} saveClientNote={handleSaveClientNote}
                                 handleToggleBlacklist={handleToggleBlacklist} savingNote={savingNote} getCleanPhone={getCleanPhone}
-                                Phone={Phone} MessageCircle={MessageCircle} user={user} Edit3={Edit3}
+                                Phone={Phone} MessageCircle={MessageCircle} user={user} Edit3={Edit3} handleUpdateTags={handleUpdateTags}
                             />
                         )}
 
@@ -708,7 +741,45 @@ export default function Dashboard() {
 
                         <div className="flex items-center gap-4 mb-6">
                             <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center border border-rose-100"><UserCircle className="w-8 h-8 text-rose-400" /></div>
-                            <div><h2 className="text-xl font-black text-stone-800 leading-tight">{selectedClient.name}</h2><p className="text-sm font-bold text-stone-500 mt-0.5">{selectedClient.phone}</p></div>
+                            <div>
+                                <h2 className="text-xl font-black text-stone-800 leading-tight">{selectedClient.name}</h2>
+                                <p className="text-sm font-bold text-stone-500 mt-0.5">{selectedClient.phone}</p>
+                            </div>
+                        </div>
+
+                        {/* УПРАВЛЕНИЕ ТЕГАМИ */}
+                        <div className="mb-6 space-y-3">
+                            <label className="text-[11px] text-stone-500 font-bold uppercase tracking-widest ml-1">Теги клиента</label>
+
+                            <div className="flex flex-wrap gap-2">
+                                {selectedClient.tags?.map((tag: string, idx: number) => (
+                                    <span key={idx} className="bg-rose-50 border border-rose-100 text-rose-600 text-[10px] uppercase tracking-widest font-black px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
+                                        {tag}
+                                        <button onClick={() => {
+                                            const newTags = selectedClient.tags.filter((_: any, i: number) => i !== idx);
+                                            handleUpdateTags(selectedClient.id, newTags);
+                                        }} className="hover:text-rose-800"><X className="w-3 h-3" /></button>
+                                    </span>
+                                ))}
+                            </div>
+
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                if (!newTagInput.trim()) return;
+                                const currentTags = selectedClient.tags || [];
+                                if (!currentTags.includes(newTagInput.trim().toUpperCase())) {
+                                    handleUpdateTags(selectedClient.id, [...currentTags, newTagInput.trim().toUpperCase()]);
+                                }
+                                setNewTagInput("");
+                            }} className="flex gap-2">
+                                <input
+                                    value={newTagInput}
+                                    onChange={e => setNewTagInput(e.target.value)}
+                                    placeholder="Новый тег (напр. VIP)"
+                                    className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800"
+                                />
+                                <button type="submit" disabled={!newTagInput.trim()} className="bg-stone-900 text-white font-bold px-3 py-2 rounded-xl text-xs disabled:opacity-50">Добавить</button>
+                            </form>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -807,6 +878,22 @@ export default function Dashboard() {
                                     <button onClick={() => setUsedMaterials([...usedMaterials, { id: '', qty: 1 }])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
                                 </div>
                             )}
+
+                            <div>
+                                <label className="text-[11px] font-bold uppercase tracking-widest text-stone-500 ml-1 mb-2 block flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> Фото До / После</label>
+                                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                                    {selectedApp.photos_before_after && selectedApp.photos_before_after.map((url: string, idx: number) => (
+                                        <div key={idx} className="relative shrink-0 snap-center">
+                                            <img src={url} alt="Visit Photo" className="w-24 h-24 object-cover rounded-xl shadow-sm border border-stone-200" />
+                                            <button onClick={() => handleRemoveAppImage(selectedApp.id, url, selectedApp.photos_before_after)} className="absolute -top-2 -right-2 bg-white text-rose-500 rounded-full p-1.5 shadow-md border border-rose-100 hover:bg-rose-50"><X className="w-3 h-3" /></button>
+                                        </div>
+                                    ))}
+                                    <label className="shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-stone-200 bg-stone-50 hover:bg-stone-100 flex flex-col items-center justify-center cursor-pointer transition-all">
+                                        {uploadingAppImageId === selectedApp.id ? <Loader2 className="w-5 h-5 animate-spin text-stone-400" /> : <Plus className="w-6 h-6 text-stone-400" />}
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadAppImage(e, selectedApp.id, selectedApp.photos_before_after || [])} />
+                                    </label>
+                                </div>
+                            </div>
 
                             <div className="flex flex-col gap-3 pt-2">
                                 {selectedApp.status !== 'completed' && <button onClick={() => handleCompleteRecord(selectedApp)} className="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Завершить визит</button>}

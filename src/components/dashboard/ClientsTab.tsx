@@ -19,7 +19,8 @@ export default function ClientsTab({
     Phone,
     MessageCircle,
     user,
-    Edit3
+    Edit3,
+    handleUpdateTags
 }: any) {
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-5">
@@ -41,6 +42,16 @@ export default function ClientsTab({
                             </div>
                             <button onClick={(e) => handleToggleBlacklist(client.id, client.is_blacklisted, e)} className={`p-2.5 rounded-xl active:scale-[0.92] transition-all shadow-sm ${client.is_blacklisted ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100' : 'text-stone-400 bg-stone-50 hover:bg-rose-50 hover:text-rose-500 border border-stone-100'}`}><Ban className="w-4 h-4" /></button>
                         </div>
+
+                        {client.tags && client.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                {client.tags.map((tag: string, idx: number) => (
+                                    <span key={idx} className="bg-stone-100 text-stone-600 text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded-md">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
                         {client.notes && (
                             <div className="mb-4 bg-orange-50/50 border border-orange-100 p-2.5 rounded-xl text-xs font-medium text-orange-800 line-clamp-2 leading-relaxed">
