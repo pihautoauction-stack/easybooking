@@ -10,40 +10,23 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
-  
-  // Изначально ставим loading в true, чтобы скрыть форму и показать анимацию логотипа, пока ищем сессию
-  const [loading, setLoading] = useState(true); 
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // ПАМЯТЬ АВТОРИЗАЦИИ: Проверяем, вошел ли уже юзер в систему
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Если память нашла юзера - мгновенно кидаем в кабинет
-        router.replace("/dashboard");
-      } else {
-        // Если нет - отключаем загрузку и показываем форму входа
-        setLoading(false);
-      }
-    };
-    checkSession();
-  }, [router]);
-
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({ 
+      const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          shouldCreateUser: true, 
+          shouldCreateUser: true,
         }
       });
       if (error) throw error;
-      setStep(2); 
+      setStep(2);
     } catch (err: any) {
       setError(err.message || "Ошибка отправки кода. Попробуйте позже.");
     } finally {
@@ -57,13 +40,13 @@ export default function Login() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.verifyOtp({ 
-        email, 
-        token: code, 
-        type: 'email' 
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'email'
       });
       if (error) throw error;
-      
+
       router.push("/dashboard");
     } catch (err: any) {
       setError("Неверный код. Проверьте правильность или запросите новый.");
@@ -73,24 +56,24 @@ export default function Login() {
 
   // ЭКРАН ЗАГРУЗКИ: Показываем анимированный логотип, пока проверяется память
   if (loading && step === 1) {
-      return (
-          <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 selection:bg-rose-200 antialiased relative overflow-hidden">
-              <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-rose-100/50 rounded-full blur-3xl pointer-events-none"></div>
-              <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-orange-100/40 rounded-full blur-3xl pointer-events-none"></div>
-              <img src="/logo.svg" alt="Nexio Logo" className="w-32 h-32 mb-6 drop-shadow-2xl" />
-              <Loader2 className="w-8 h-8 animate-spin text-rose-400" />
-          </div>
-      );
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4 selection:bg-rose-200 antialiased relative overflow-hidden">
+        <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-rose-100/50 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-orange-100/40 rounded-full blur-3xl pointer-events-none"></div>
+        <img src="/logo.svg" alt="Nexio Logo" className="w-32 h-32 mb-6 drop-shadow-2xl" />
+        <Loader2 className="w-8 h-8 animate-spin text-rose-400" />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center p-4 text-stone-800 font-sans selection:bg-rose-200 antialiased relative overflow-hidden">
-      
+    <div className="min-h-screen pt-safe pb-safe bg-[#FAF9F6] flex items-center justify-center p-4 text-stone-800 font-sans selection:bg-rose-200 antialiased relative overflow-hidden">
+
       <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-rose-100/50 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] bg-orange-100/40 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="w-full max-w-[420px] bg-white/80 backdrop-blur-xl p-8 md:p-10 rounded-[40px] shadow-2xl shadow-stone-200/50 border border-stone-100 relative z-10">
-        
+
         <div className="flex flex-col items-center mb-10">
           <img src="/logo.svg" alt="Nexio Logo" className="w-24 h-24 mb-6 drop-shadow-xl" />
           <h1 className="text-2xl font-black tracking-tight text-stone-900 text-center leading-tight">
@@ -105,8 +88,8 @@ export default function Login() {
           <form onSubmit={handleSendCode} className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Рабочий Email</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -121,8 +104,8 @@ export default function Login() {
               </div>
             )}
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading || !email}
               className="w-full mt-4 bg-stone-900 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-stone-900/20 hover:bg-black disabled:opacity-50"
             >
@@ -140,8 +123,8 @@ export default function Login() {
             </div>
 
             <div>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 required
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
@@ -158,15 +141,15 @@ export default function Login() {
               </div>
             )}
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading || code.length < 6}
               className="w-full bg-stone-900 text-white font-black py-4 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-stone-900/20 hover:bg-black disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Войти в систему"}
             </button>
 
-            <button 
+            <button
               type="button"
               onClick={() => {
                 setStep(1);
