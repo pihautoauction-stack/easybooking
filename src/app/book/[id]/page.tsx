@@ -173,33 +173,54 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
     const handleBooking = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Удаляем все нечисловые символы для проверки длины
+        const cleanedPhone = clientPhone.replace(/\D/g, '');
+        if (cleanedPhone.length !== 11) {
+            alert("Пожалуйста, введите корректный номер телефона (11 цифр)");
+            return;
+        }
+
         if (!selectedTime || !profile) return;
         setBookingStatus("submitting");
 
-        localStorage.setItem('nx_name', clientName);
-        localStorage.setItem('nx_phone', clientPhone);
+        try {
+            localStorage.setItem('nx_name', clientName);
+            localStorage.setItem('nx_phone', clientPhone);
 
-        const [h, m] = selectedTime.split(":").map(Number);
-        const startDateTime = new Date(selectedDate!);
-        startDateTime.setHours(h, m, 0, 0);
-        const startTimeStr = startDateTime.toISOString();
+            const [h, m] = selectedTime.split(":").map(Number);
+            const startDateTime = new Date(selectedDate!);
+            startDateTime.setHours(h, m, 0, 0);
 
-        let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", startTimeStr).eq("status", "active");
-        if (selectedEmployee) busyQuery = busyQuery.eq("employee_id", selectedEmployee.id);
-        const { data: busy } = await busyQuery.maybeSingle();
+            // Важно: Supabase timestamptz лучше воспринимает локальное ISO или формат YYYY-MM-DDTHH:mm:ss
+            // Чтобы избежать сдвигов часовых поясов при eq("start_time"), форматируем вручную под UTC, 
+            // либо используем локальное время:
+            const tzOffset = startDateTime.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(startDateTime.getTime() - tzOffset)).toISOString().slice(0, -1);
 
-        if (busy) { setBookingStatus("conflict"); return; }
+            let busyQuery = supabase.from("appointments").select("id").eq("master_id", profile.id).eq("start_time", localISOTime).eq("status", "active");
+            if (selectedEmployee) busyQuery = busyQuery.eq("employee_id", selectedEmployee.id);
+            const { data: busy, error: busyErr } = await busyQuery.maybeSingle();
 
-        const { error } = await supabase.from("appointments").insert({
-            master_id: profile.id, service_id: selectedService.id, employee_id: selectedEmployee?.id,
-            client_name: clientName, client_phone: clientPhone, start_time: startTimeStr, status: 'active',
-            preferences: { silent: silentService }
-        });
+            if (busyErr) {
+                console.error("Busy check error:", busyErr);
+                throw busyErr;
+            }
+            if (busy) { setBookingStatus("conflict"); return; }
 
-        if (!error) {
+            const { error: insertErr } = await supabase.from("appointments").insert({
+                master_id: profile.id, service_id: selectedService.id, employee_id: selectedEmployee?.id,
+                client_name: clientName, client_phone: clientPhone, start_time: localISOTime, status: 'active',
+                preferences: { silent: silentService }
+            });
+
+            if (insertErr) throw insertErr;
+
             setBookingStatus("success");
             setTimeout(() => router.push('/my-bookings'), 2000);
-        } else {
+        } catch (err: any) {
+            console.error("Booking error:", err);
+            alert("Произошла ошибка при записи: " + err.message);
             setBookingStatus("error");
         }
     };
