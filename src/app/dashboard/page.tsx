@@ -93,6 +93,7 @@ export default function Dashboard() {
     const [services, setServices] = useState<any[]>([]);
     const [appointments, setAppointments] = useState<any[]>([]);
     const [clients, setClients] = useState<any[]>([]);
+    const [clientFilterMode, setClientFilterMode] = useState<'all' | 'sleeping'>('all');
     const [employees, setEmployees] = useState<any[]>([]);
     const [inventory, setInventory] = useState<any[]>([]);
     const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
@@ -623,6 +624,7 @@ export default function Dashboard() {
                                 Ban={Ban} Trash2={Trash2} clientNote={clientNote} setClientNote={setClientNote} saveClientNote={handleSaveClientNote}
                                 handleToggleBlacklist={handleToggleBlacklist} savingNote={savingNote} getCleanPhone={getCleanPhone}
                                 Phone={Phone} MessageCircle={MessageCircle} user={user} Edit3={Edit3} handleUpdateTags={handleUpdateTags}
+                                clientFilterMode={clientFilterMode} setClientFilterMode={setClientFilterMode} appointments={appointments}
                             />
                         )}
 
@@ -630,7 +632,7 @@ export default function Dashboard() {
                             <AnalyticsTab
                                 clients={clients} archivedApps={archivedApps} totalRevenue={totalRevenue} totalPayroll={totalPayroll}
                                 totalMaterialsCost={totalMaterialsCost} employeeStats={employeeStats} BarChart3={BarChart3} role={role} Calculator={Calculator}
-                                netIncome={netIncome}
+                                netIncome={netIncome} appointments={appointments} services={services}
                             />
                         )}
 

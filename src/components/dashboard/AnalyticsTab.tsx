@@ -6,13 +6,69 @@ export default function AnalyticsTab({
     totalPayroll,
     totalMaterialsCost,
     employeeStats,
-    BarChart3,
     role,
+    BarChart3,
     Calculator,
-    netIncome
+    netIncome,
+    appointments,
+    services
 }: any) {
+    // ---- ПРЕДИКТИВНАЯ АНАЛИТИКА ----
+    const getPrediction = () => {
+        const now = new Date();
+        const nextWeek = new Date(now);
+        nextWeek.setDate(now.getDate() + 7);
+
+        // Ищем записи НА СЛЕДУЮЩИЕ 7 ДНЕЙ
+        const upcomingApps = appointments.filter((a: any) => {
+            const d = new Date(a.start_time);
+            return d > now && d < nextWeek && a.status === 'active';
+        });
+
+        // Грубый расчет свободных мест (предполагаем среднюю загрузку 5 записей в день = 35 в неделю)
+        // Если записей меньше 15 на неделю вперед — это простой
+        const IS_LOW_BOOKING = upcomingApps.length < 15;
+        const emptySlotsEstimate = 35 - upcomingApps.length;
+
+        // Если у нас нет услуг, не крашимся
+        const defaultServicePrice = services && services.length > 0 ? services[0].price : 1500;
+        const lostRevenueEstimate = emptySlotsEstimate > 0 ? emptySlotsEstimate * defaultServicePrice : 0;
+
+        return {
+            isLow: IS_LOW_BOOKING,
+            upcomingCount: upcomingApps.length,
+            lostRevenue: lostRevenueEstimate
+        };
+    };
+
+    const prediction = getPrediction();
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
+            {prediction.isLow && (
+                <div className="bg-gradient-to-r from-rose-500 to-orange-500 p-6 md:p-8 rounded-[32px] shadow-lg shadow-rose-500/20 text-white flex flex-col md:flex-row gap-6 items-center justify-between relative overflow-hidden">
+                    <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/20 rounded-full blur-3xl"></div>
+                    <div className="relative z-10 flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="bg-white/20 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl backdrop-blur-md">🔮 Прогноз на 7 дней</span>
+                            <span className="bg-rose-600 border border-rose-400 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl shadow-sm">Риск простоя</span>
+                        </div>
+                        <h3 className="text-2xl font-black tracking-tight mb-2 text-white">У вас всего {prediction.upcomingCount} записей на неделю</h3>
+                        <p className="text-rose-100 font-medium text-sm leading-relaxed mb-4 max-w-xl">
+                            Мы предсказываем недозагруженность. Возможная упущенная выгода: <span className="font-black text-white">{prediction.lostRevenue} ₽</span>. Рекомендуем срочно запустить маркетинговую активность!
+                        </p>
+
+                        <div className="bg-white/10 border border-white/20 p-4 rounded-2xl flex items-start gap-4 backdrop-blur-md">
+                            <div className="bg-white text-rose-500 p-2 rounded-xl shrink-0"><BarChart3 className="w-5 h-5" /></div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest mb-1 text-white opacity-90">Совет от ИИ</p>
+                                <p className="text-sm font-medium text-rose-50">Выложите историю в Instagram прямо сейчас: <br /><span className="italic font-bold text-white bg-black/20 px-2 py-0.5 rounded-lg mt-1 inline-block">"Освободилось пару горящих окон на этой неделе! Первым 3-м написавшим дарю скидку 15% 🚀"</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="bg-white p-6 rounded-[32px] border border-stone-200 shadow-sm flex flex-col justify-center">
                     <p className="text-xs text-stone-400 font-bold uppercase tracking-widest mb-1">Общая выручка</p>

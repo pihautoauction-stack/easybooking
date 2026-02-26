@@ -40,6 +40,7 @@ export default function ProfileTab({
                     <button onClick={() => setProfileTab('schedule')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'schedule' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Clock className="w-4 h-4" /> Расписание</button>
                     <button onClick={() => setProfileTab('gallery')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'gallery' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Camera className="w-4 h-4" /> Галерея</button>
                     {role === 'owner' && <button onClick={() => setProfileTab('team')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'team' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Users className="w-4 h-4" /> Команда</button>}
+                    <button onClick={() => setProfileTab('promo')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'promo' ? 'bg-white shadow-sm text-emerald-600' : 'text-stone-500 hover:text-emerald-600'}`}>🚀 Продвижение</button>
                 </div>
 
                 {profileTab === 'general' && (
@@ -216,6 +217,45 @@ export default function ProfileTab({
                                     <button onClick={() => handleDeleteEmployee(emp.id)} className="p-2.5 text-stone-400 hover:text-rose-500 bg-stone-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {profileTab === 'promo' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
+                        <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-8 rounded-[32px] text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div>
+                                    <h2 className="text-2xl font-black mb-2 tracking-tight">QR-код для визиток и зеркал</h2>
+                                    <p className="text-emerald-50 font-medium text-sm leading-relaxed max-w-md">Скачайте сгенерированный код, распечатайте и поставьте на рабочем месте. Клиенты смогут записываться прямо с телефона.</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-3xl shadow-lg shrink-0 flex flex-col items-center">
+                                    {/* Временно используем сторонний API для генерации QR до установки либы (по желанию пользователя не усложняем) */}
+                                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(clientLink)}`} alt="QR Code" className="w-32 h-32 rounded-xl mb-3" />
+                                    <button onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(clientLink)}`, '_blank')} className="text-xs font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl w-full uppercase tracking-widest hover:bg-emerald-100 transition-colors">Скачать</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-stone-50 p-6 rounded-[32px] border border-stone-200">
+                                <h3 className="text-sm font-black text-stone-900 flex items-center gap-2 mb-2">📸 Прямая ссылка для Instagram</h3>
+                                <p className="text-xs text-stone-500 font-medium mb-4">Вставьте эту ссылку в поле "Сайт" в настройках профиля Instagram.</p>
+                                <div className="flex gap-2">
+                                    <input readOnly value={clientLink} className="flex-1 bg-white border border-stone-200 rounded-xl p-3 text-xs font-bold text-stone-800 outline-none truncate" />
+                                    <button onClick={() => { navigator.clipboard.writeText(clientLink); alert("Ссылка скопирована!"); }} className="bg-stone-900 text-white p-3 rounded-xl hover:bg-black active:scale-95 transition-all"><Copy className="w-4 h-4" /></button>
+                                </div>
+                            </div>
+
+                            <div className="bg-stone-50 p-6 rounded-[32px] border border-stone-200">
+                                <h3 className="text-sm font-black text-stone-900 flex items-center gap-2 mb-2">📍 Кнопка для 2GIS и Яндекса</h3>
+                                <p className="text-xs text-stone-500 font-medium mb-4">Добавьте ссылку в личный кабинет Яндекс Бизнеса (в кнопку действия).</p>
+                                <div className="flex gap-2">
+                                    <input readOnly value={`${clientLink}?source=maps`} className="flex-1 bg-white border border-stone-200 rounded-xl p-3 text-xs font-bold text-stone-800 outline-none truncate" />
+                                    <button onClick={() => { navigator.clipboard.writeText(`${clientLink}?source=maps`); alert("Ссылка скопирована!"); }} className="bg-stone-900 text-white p-3 rounded-xl hover:bg-black active:scale-95 transition-all"><Copy className="w-4 h-4" /></button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
