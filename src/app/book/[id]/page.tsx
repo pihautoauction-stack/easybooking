@@ -2,12 +2,13 @@
 
 import { useEffect, useState, use } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, CheckCircle, ChevronLeft, User, Phone, CalendarDays, BellRing, Clock, Folder, FolderOpen } from "lucide-react";
+import { Loader2, CalendarIcon, Clock, ArrowLeft, CheckCircle2, User, Phone, MapPin, BellRing, ChevronLeft, CalendarDays, Folder, FolderOpen } from "lucide-react";
 import { format, startOfToday } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import { useRouter } from "next/navigation";
 import "react-day-picker/dist/style.css";
+import InputMask from "react-input-mask";
 
 const supabase = createClient();
 
@@ -229,8 +230,11 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         return (
             <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center text-stone-800 p-6 font-sans text-center antialiased">
                 <div className="w-full max-w-[340px] flex flex-col items-center bg-white p-8 rounded-[32px] shadow-sm border border-stone-100">
-                    <div className="bg-emerald-50 p-6 rounded-full mb-6 border border-emerald-100"><CheckCircle className="w-16 h-16 text-emerald-500" /></div>
-                    <h1 className="text-2xl font-black mb-3 tracking-tight text-stone-900">Вы успешно записаны</h1>
+                    <div className="bg-emerald-50 p-6 rounded-full mb-6 border border-emerald-100"><CheckCircle2 className="w-16 h-16 text-emerald-500" /></div>
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-rose-50 tracking-tight leading-[1.1] mb-6 animate-in slide-in-from-bottom-8 fade-in duration-700 delay-100 flex flex-col items-center gap-4">
+                        <CheckCircle2 className="w-20 h-20 text-emerald-400 animate-in zoom-in duration-500 delay-300 drop-shadow-xl" />
+                        Запись подтверждена!
+                    </h1>
                     <p className="text-stone-500 mb-8 text-sm font-bold leading-relaxed">
                         Ждем вас <span className="text-stone-900">{format(selectedDate!, "d MMMM", { locale: ru })} в {selectedTime}</span>
                         {selectedEmployee && <><br /><span className="text-rose-500 mt-2 block">Специалист: {selectedEmployee.name}</span></>}
@@ -430,7 +434,18 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                     <form onSubmit={handleBooking} className="space-y-4 pt-6 mt-6 border-t border-stone-200 animate-in fade-in slide-in-from-bottom-2">
                                         <div className="space-y-3">
                                             <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required value={clientName} onChange={e => setClientName(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="Ваше имя" /></div>
-                                            <div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" /><input required type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm" placeholder="+7 (999) 000-00-00" /></div>
+                                            <div className="relative">
+                                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 z-10" />
+                                                <InputMask
+                                                    mask="+7 (999) 999-99-99"
+                                                    value={clientPhone}
+                                                    onChange={(e: any) => setClientPhone(e.target.value)}
+                                                    className="w-full bg-white border border-stone-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 transition-all placeholder-stone-400 shadow-sm"
+                                                    placeholder="+7 (999) 000-00-00"
+                                                    required
+                                                    type="tel"
+                                                />
+                                            </div>
 
                                             <label className="flex items-center gap-3 p-4 bg-stone-50 border border-stone-100 rounded-2xl cursor-pointer hover:bg-rose-50/50 hover:border-rose-100 transition-colors">
                                                 <div className="relative flex items-center shrink-0">

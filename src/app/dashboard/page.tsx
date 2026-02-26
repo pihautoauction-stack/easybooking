@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
+import InputMask from "react-input-mask";
 import { completeAppointment, adjustInventoryStock } from "@/app/actions/inventory";
 import { toggleClientBlacklist, saveClientNote, updateClientTags } from "@/app/actions/clients";
 import { addService, deleteService } from "@/app/actions/services";
@@ -88,6 +89,7 @@ export default function Dashboard() {
     const [transactions, setTransactions] = useState<any[]>([]);
 
     const [saving, setSaving] = useState(false);
+    const [savingPhotoNotes, setSavingPhotoNotes] = useState(false);
     const [clientSearchQuery, setClientSearchQuery] = useState("");
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const [activeServiceFilter, setActiveServiceFilter] = useState<string | null>(null);
@@ -434,6 +436,14 @@ export default function Dashboard() {
             setSelectedClient({ ...selectedClient, notes: clientNote });
         } else alert("Ошибка: " + result.error);
         setSavingNote(false);
+    };
+
+    const handleSavePhotoNotes = async (appId: string) => {
+        if (!selectedApp) return; setSavingPhotoNotes(true);
+        try {
+            await supabase.from('appointments').update({ photo_notes: selectedApp.photo_notes }).eq('id', appId);
+            await loadData(user.id, true);
+        } catch (err: any) { alert("Ошибка: " + err.message); } finally { setSavingPhotoNotes(false); }
     };
 
     const clientLink = user && typeof window !== 'undefined' ? `${window.location.origin}/book/${username || user.id}` : "";
@@ -816,7 +826,16 @@ export default function Dashboard() {
                         <h2 className="text-2xl font-black mb-8 text-stone-800 flex items-center gap-3"><UserPlus className="w-7 h-7 text-rose-500 bg-rose-50 p-1.5 rounded-xl" /> Новая запись</h2>
                         <form onSubmit={handleAddManualBooking} className="space-y-4">
                             <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Клиент / Задача *</label><input required value={manualName} onChange={e => setManualName(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
-                            <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label><input type="tel" value={manualPhone} onChange={e => setManualPhone(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
+                            <div>
+                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Телефон</label>
+                                <InputMask
+                                    mask="+7 (999) 999-99-99"
+                                    value={manualPhone}
+                                    onChange={(e: any) => setManualPhone(e.target.value)}
+                                    className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800"
+                                    type="tel"
+                                />
+                            </div>
                             <div>
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Услуга *</label>
                                 <select value={manualService} onChange={e => setManualService(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 appearance-none"><option value="">Свое время / Без услуги</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
@@ -892,6 +911,21 @@ export default function Dashboard() {
                                         {uploadingAppImageId === selectedApp.id ? <Loader2 className="w-5 h-5 animate-spin text-stone-400" /> : <Plus className="w-6 h-6 text-stone-400" />}
                                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadAppImage(e, selectedApp.id, selectedApp.photos_before_after || [])} />
                                     </label>
+                                </div>
+                                <div className="mt-3">
+                                    <textarea
+                                        value={selectedApp.photo_notes || ""}
+                                        onChange={e => setSelectedApp({ ...selectedApp, photo_notes: e.target.value })}
+                                        placeholder="Описание результата, формулы окрашивания..."
+                                        className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 min-h-[80px] resize-none"
+                                    />
+                                    <button
+                                        onClick={() => handleSavePhotoNotes(selectedApp.id)}
+                                        disabled={savingPhotoNotes}
+                                        className="w-full mt-2 bg-stone-200 text-stone-700 font-bold py-2 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:bg-stone-300 disabled:opacity-50 text-xs"
+                                    >
+                                        {savingPhotoNotes ? <Loader2 className="w-3 h-3 animate-spin" /> : "Сохранить описание"}
+                                    </button>
                                 </div>
                             </div>
 
