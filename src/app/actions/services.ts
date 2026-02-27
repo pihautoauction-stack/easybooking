@@ -39,3 +39,30 @@ export async function deleteService(serviceId: string) {
         return { success: false, error: error.message };
     }
 }
+
+export async function saveServiceMaterials(serviceId: string, materials: { inventory_id: string, default_quantity: number }[]) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { success: false, error: 'Не авторизован' };
+
+    try {
+        // Очищаем старые материалы для этой услуги
+        await supabase.from('service_materials').delete().eq('service_id', serviceId);
+
+        // Вставляем новые, если есть
+        if (materials.length > 0) {
+            const insertData = materials.map(m => ({
+                service_id: serviceId,
+                inventory_id: m.inventory_id,
+                default_quantity: m.default_quantity
+            }));
+            const { error: insertError } = await supabase.from('service_materials').insert(insertData);
+            if (insertError) throw insertError;
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}

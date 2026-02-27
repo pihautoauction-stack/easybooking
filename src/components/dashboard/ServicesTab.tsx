@@ -22,6 +22,7 @@ export default function ServicesTab({
     Search,
     Folder,
     FolderOpen,
+    Package,
     selectedService,
     addingService,
     newName, setNewName,
@@ -35,8 +36,23 @@ export default function ServicesTab({
     existingServiceCategories,
     serviceSearchQuery,
     setServiceSearchQuery,
-    groupedServices
+    groupedServices,
+    inventory,
+    newServiceMaterials,
+    setNewServiceMaterials
 }: any) {
+    const handleAddMaterialToNewService = (invId: string) => {
+        if (!invId) return;
+        if (newServiceMaterials.find((m: any) => m.inventory_id === invId)) return;
+        setNewServiceMaterials([...newServiceMaterials, { inventory_id: invId, default_quantity: 1 }]);
+    };
+    const handleRemoveMaterialFromNewService = (invId: string) => {
+        setNewServiceMaterials(newServiceMaterials.filter((m: any) => m.inventory_id !== invId));
+    };
+    const handleUpdateMaterialQuantity = (invId: string, qty: number) => {
+        setNewServiceMaterials(newServiceMaterials.map((m: any) => m.inventory_id === invId ? { ...m, default_quantity: qty } : m));
+    };
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -65,6 +81,53 @@ export default function ServicesTab({
                                 <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase">Мин</span><input value={newDuration} onChange={e => setNewDuration(e.target.value)} type="number" placeholder="60" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-10 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
                                 <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-bold">₽</span><input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-8 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
                             </div>
+
+                            <div className="mt-4 border-t border-stone-100 pt-4">
+                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-2 mb-2"><Package className="w-3 h-3" /> Техкарта (Расходники)</label>
+                                {inventory && inventory.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <select
+                                            onChange={(e) => { handleAddMaterialToNewService(e.target.value); e.target.value = ""; }}
+                                            className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer"
+                                            value=""
+                                        >
+                                            <option value="" disabled>+ Добавить материал...</option>
+                                            {inventory.map((item: any) => (
+                                                <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>
+                                            ))}
+                                        </select>
+
+                                        {newServiceMaterials.length > 0 && (
+                                            <div className="space-y-2 mt-2">
+                                                {newServiceMaterials.map((mat: any) => {
+                                                    const invItem = inventory.find((i: any) => i.id === mat.inventory_id);
+                                                    if (!invItem) return null;
+                                                    return (
+                                                        <div key={mat.inventory_id} className="flex items-center gap-2 bg-rose-50/50 p-2 rounded-xl border border-rose-100 justify-between">
+                                                            <span className="text-xs font-bold text-stone-700 truncate">{invItem.name}</span>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0.1"
+                                                                    step="any"
+                                                                    value={mat.default_quantity}
+                                                                    onChange={(e) => handleUpdateMaterialQuantity(mat.inventory_id, Number(e.target.value))}
+                                                                    className="w-16 bg-white border border-stone-200 rounded-lg p-1.5 text-xs text-center font-bold outline-none"
+                                                                />
+                                                                <span className="text-[10px] text-stone-500 font-bold w-4">{invItem.unit}</span>
+                                                                <button onClick={() => handleRemoveMaterialFromNewService(mat.inventory_id)} className="p-1 hover:bg-white rounded-md text-stone-400 hover:text-rose-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-stone-400 font-bold bg-stone-50 p-3 rounded-xl border border-stone-100 italic">Склад пуст. Добавьте материалы в модуле Склад.</p>
+                                )}
+                            </div>
+
                             <button onClick={handleAddService} disabled={addingService || !newName || !newPrice || (serviceCategorySelect === 'NEW' && !serviceCategoryInput)} className="w-full mt-4 bg-stone-900 text-white p-4 rounded-xl font-bold active:scale-[0.98] transition-all disabled:opacity-50 shadow-md flex justify-center items-center hover:bg-black">{addingService ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить в прайс"}</button>
                         </div>
                     </div>

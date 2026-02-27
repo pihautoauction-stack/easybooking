@@ -26,7 +26,7 @@ const formatPhoneInput = (value: string) => {
 };
 
 import { toggleClientBlacklist, saveClientNote, updateClientTags } from "@/app/actions/clients";
-import { addService, deleteService } from "@/app/actions/services";
+import { addService, deleteService, saveServiceMaterials } from "@/app/actions/services";
 import AppointmentsTab from "@/components/dashboard/AppointmentsTab";
 import ServicesTab from "@/components/dashboard/ServicesTab";
 import ClientsTab from "@/components/dashboard/ClientsTab";
@@ -118,6 +118,7 @@ export default function Dashboard() {
     const [newDuration, setNewDuration] = useState("60");
     const [newServiceEmpId, setNewServiceEmpId] = useState("");
     const [addingService, setAddingService] = useState(false);
+    const [newServiceMaterials, setNewServiceMaterials] = useState<{ inventory_id: string, default_quantity: number }[]>([]);
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
     // Редактирование услуги
@@ -143,6 +144,23 @@ export default function Dashboard() {
     const [manualTime, setManualTime] = useState("12:00");
     const [addingManual, setAddingManual] = useState(false);
     const [selectedApp, setSelectedApp] = useState<any>(null);
+
+    const handleOpenApp = (app: any) => {
+        if (!app) {
+            setSelectedApp(null);
+            setUsedMaterials([]);
+            return;
+        }
+        setSelectedApp(app);
+        if (app.status === 'active' && app.service?.materials?.length > 0) {
+            setUsedMaterials(app.service.materials.map((m: any) => ({
+                id: m.inventory_id,
+                qty: Number(m.default_quantity)
+            })));
+        } else {
+            setUsedMaterials([]);
+        }
+    };
 
     // CRM
     const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -226,7 +244,7 @@ export default function Dashboard() {
                 if (p.modules_config) setModulesConfig(typeof p.modules_config === 'string' ? JSON.parse(p.modules_config) : p.modules_config);
             }
 
-            const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
+            const { data: s } = await supabase.from("services").select("*, employee:employees(name), materials:service_materials(inventory_id, default_quantity)").eq("user_id", userId).order('created_at');
             setServices(s || []);
             const { data: e } = await supabase.from("employees").select("*").eq("salon_id", userId).order('created_at');
             setEmployees(e || []);
@@ -237,7 +255,7 @@ export default function Dashboard() {
 
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
-                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, materials_retail, service:services(name, category, price, duration), employee:employees(name)")
+                .select("id, client_name, client_phone, start_time, service_id, client_id, status, employee_id, materials_cost, materials_retail, service:services(name, category, price, duration, materials:service_materials(inventory_id, default_quantity)), employee:employees(name)")
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             setAppointments(a || []);
             const { data: c } = await supabase.from("clients").select("*").eq("master_id", userId).order('created_at', { ascending: false });
@@ -295,8 +313,23 @@ export default function Dashboard() {
         const finalCategory = serviceCategorySelect === 'NEW' ? serviceCategoryInput : serviceCategorySelect;
         const insertData: any = { user_id: user.id, name: newName, category: finalCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
         if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
-        await supabase.from("services").insert(insertData);
-        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); await loadData(user.id); setAddingService(false);
+        const { data: insertedData, error } = await supabase.from("services").insert(insertData).select().single();
+        if (!error && insertedData && newServiceMaterials.length > 0) {
+            await saveServiceMaterials(insertedData.id, newServiceMaterials);
+        }
+        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); setNewServiceMaterials([]); await loadData(user.id); setAddingService(false);
+    };
+
+    const handleUpdateServiceMaterials = async (serviceId: string, materials: { inventory_id: string, default_quantity: number }[]) => {
+        const result = await saveServiceMaterials(serviceId, materials);
+        if (result.success) {
+            if (selectedService && selectedService.id === serviceId) {
+                setSelectedService({ ...selectedService, materials });
+            }
+            await loadData(user.id, true);
+        } else {
+            alert("Ошибка сохранения: " + result.error);
+        }
     };
 
     const handleDeleteService = async (id: string) => {
@@ -602,7 +635,7 @@ export default function Dashboard() {
                         {activeTab === 'appointments' && (
                             <AppointmentsTab
                                 user={user} role={role} appointments={appointments} services={services} employees={employees}
-                                journalView={journalView} setJournalView={setJournalView} selectedApp={selectedApp} setSelectedApp={setSelectedApp}
+                                journalView={journalView} setJournalView={setJournalView} selectedApp={selectedApp} setSelectedApp={handleOpenApp}
                                 activeDailyApps={activeDailyApps} archivedApps={archivedApps} format={format} ru={ru}
                                 handleCompleteRecord={handleCompleteRecord} handleDeleteRecord={handleDeleteRecord}
                                 usedMaterials={usedMaterials} setUsedMaterials={setUsedMaterials} inventory={inventory}
@@ -619,8 +652,8 @@ export default function Dashboard() {
                                 services={services} role={role} setSelectedService={setSelectedService} setAddingService={setAddingService}
                                 handleDeleteService={handleDeleteService} handleUploadImage={handleUploadImage} handleRemoveImage={handleRemoveImage}
                                 uploadingImageId={uploadingImageId} expandedCategories={expandedCategories} toggleCategory={toggleCategory}
-                                Briefcase={Briefcase} Clock={Clock} CheckCircle2={CheckCircle2} Trash2={Trash2} Plus={Plus} X={X} Camera={Camera} Loader2={Loader2}
-                                ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Search={Search} Folder={Folder} FolderOpen={FolderOpen}
+                                CheckCircle2={CheckCircle2} Trash2={Trash2} Plus={Plus} X={X} Camera={Camera} Loader2={Loader2}
+                                ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Search={Search} Folder={Folder} FolderOpen={FolderOpen} Package={Package}
                                 selectedService={selectedService} addingService={addingService} newName={newName} setNewName={setNewName}
                                 newPrice={newPrice} setNewPrice={setNewPrice} newDuration={newDuration} setNewDuration={setNewDuration}
                                 serviceCategorySelect={serviceCategorySelect} setServiceCategorySelect={setServiceCategorySelect}
@@ -628,6 +661,8 @@ export default function Dashboard() {
                                 newServiceEmpId={newServiceEmpId} setNewServiceEmpId={setNewServiceEmpId} handleAddService={handleAddService}
                                 employees={employees} existingServiceCategories={existingServiceCategories} serviceSearchQuery={serviceSearchQuery}
                                 setServiceSearchQuery={setServiceSearchQuery} groupedServices={groupedServices}
+                                inventory={inventory}
+                                newServiceMaterials={newServiceMaterials} setNewServiceMaterials={setNewServiceMaterials}
                             />
                         )}
 
@@ -785,6 +820,67 @@ export default function Dashboard() {
                                         <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadImage(e, selectedService.id, selectedService.image_urls || [])} />
                                     </label>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1 mb-2 block flex items-center gap-2"><Package className="w-3 h-3" /> Техкарта (Расходники)</label>
+                                {inventory && inventory.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <select
+                                            onChange={async (e) => {
+                                                const invId = e.target.value; e.target.value = ""; if (!invId) return;
+                                                const currentMaterials = selectedService.materials || [];
+                                                if (currentMaterials.find((m: any) => m.inventory_id === invId)) return;
+                                                await handleUpdateServiceMaterials(selectedService.id, [...currentMaterials, { inventory_id: invId, default_quantity: 1 }]);
+                                            }}
+                                            className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer"
+                                            value=""
+                                        >
+                                            <option value="" disabled>+ Добавить материал...</option>
+                                            {inventory.map((item: any) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}
+                                        </select>
+
+                                        {(selectedService.materials || []).length > 0 && (
+                                            <div className="space-y-2 mt-2">
+                                                {selectedService.materials.map((mat: any) => {
+                                                    const invItem = inventory.find((i: any) => i.id === mat.inventory_id);
+                                                    if (!invItem) return null;
+                                                    return (
+                                                        <div key={mat.inventory_id} className="flex items-center gap-2 bg-rose-50/50 p-2 rounded-xl border border-rose-100 justify-between">
+                                                            <span className="text-xs font-bold text-stone-700 truncate">{invItem.name}</span>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <input
+                                                                    type="number" min="0.1" step="any"
+                                                                    value={mat.default_quantity}
+                                                                    onBlur={async (e) => {
+                                                                        const qty = Number(e.target.value);
+                                                                        if (qty > 0 && qty !== mat.default_quantity) {
+                                                                            const updated = selectedService.materials.map((m: any) => m.inventory_id === mat.inventory_id ? { ...m, default_quantity: qty } : m);
+                                                                            await handleUpdateServiceMaterials(selectedService.id, updated);
+                                                                        }
+                                                                    }}
+                                                                    onChange={(e) => {
+                                                                        // Optimistic local update for input typing
+                                                                        const updated = selectedService.materials.map((m: any) => m.inventory_id === mat.inventory_id ? { ...m, default_quantity: Number(e.target.value) } : m);
+                                                                        setSelectedService({ ...selectedService, materials: updated });
+                                                                    }}
+                                                                    className="w-16 bg-white border border-stone-200 rounded-lg p-1.5 text-xs text-center font-bold outline-none"
+                                                                />
+                                                                <span className="text-[10px] text-stone-500 font-bold w-4">{invItem.unit}</span>
+                                                                <button onClick={() => {
+                                                                    const updated = selectedService.materials.filter((m: any) => m.inventory_id !== mat.inventory_id);
+                                                                    handleUpdateServiceMaterials(selectedService.id, updated);
+                                                                }} className="p-1 hover:bg-white rounded-md text-stone-400 hover:text-rose-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-stone-400 font-bold bg-stone-50 p-3 rounded-xl border border-stone-100 italic">Склад пуст. Добавьте материалы.</p>
+                                )}
                             </div>
 
                             <button onClick={() => handleDeleteService(selectedService.id)} className="w-full bg-white text-rose-500 border border-rose-200 font-bold py-3.5 rounded-xl hover:bg-rose-50 transition-colors flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" /> Удалить услугу</button>
