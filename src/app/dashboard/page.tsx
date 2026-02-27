@@ -678,7 +678,6 @@ export default function Dashboard() {
                                 soldItems={soldItems} setSoldItems={setSoldItems} inventory={inventory}
                                 showManualModal={showManualModal} setShowManualModal={setShowManualModal}
                                 setViewDate={setViewDate} viewDate={viewDate} addDays={addDays}
-                                CalendarIcon={CalendarIcon} Archive={Archive} ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Plus={Plus} Briefcase={Briefcase}
                                 getServiceColor={getServiceColor}
                                 modulesConfig={modulesConfig}
                             />
@@ -689,8 +688,6 @@ export default function Dashboard() {
                                 services={services} role={role} setSelectedService={setSelectedService} setAddingService={setAddingService}
                                 handleDeleteService={handleDeleteService} handleUploadImage={handleUploadImage} handleRemoveImage={handleRemoveImage}
                                 uploadingImageId={uploadingImageId} expandedCategories={expandedCategories} toggleCategory={toggleCategory}
-                                CheckCircle2={CheckCircle2} Trash2={Trash2} Plus={Plus} X={X} Camera={Camera} Loader2={Loader2}
-                                ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Search={Search} Folder={Folder} FolderOpen={FolderOpen} Package={Package}
                                 selectedService={selectedService} addingService={addingService} newName={newName} setNewName={setNewName}
                                 newPrice={newPrice} setNewPrice={setNewPrice} newDuration={newDuration} setNewDuration={setNewDuration}
                                 serviceCategorySelect={serviceCategorySelect} setServiceCategorySelect={setServiceCategorySelect}
@@ -707,25 +704,24 @@ export default function Dashboard() {
                             <InventoryTab
                                 inventory={inventory} user={user} role={role} handleAddInventory={handleAddInventory}
                                 handleAdjustInventory={handleAdjustInventory} handleDeleteInventory={handleDeleteInventory}
-                                Package={Package} Plus={Plus} Archive={Archive} History={History} AlertTriangle={AlertTriangle} Edit3={Edit3} Trash2={Trash2}
                                 newInvName={invName} setNewInvName={setInvName} newInvUnit={invUnit} setNewInvUnit={setInvUnit}
                                 newInvCost={invCost} setNewInvCost={setInvCost} newInvRetail={invRetail} setNewInvRetail={setInvRetail}
                                 newInvCategory={invCategoryInput} setNewInvCategory={setInvCategoryInput} addingInventory={addingInv} setAddingInventory={setAddingInv}
                                 inventoryTransactions={transactions} invView={invView} setInvView={setInvView} setShowInvModal={setShowInvModal}
                                 totalInventoryUnits={totalInventoryUnits} inventoryValue={inventoryValue} groupedInventory={groupedInventory}
-                                toggleInvCategory={toggleInvCategory} expandedInvCategories={expandedInvCategories} Folder={Folder} FolderOpen={FolderOpen}
+                                toggleInvCategory={toggleInvCategory} expandedInvCategories={expandedInvCategories}
                                 transactions={transactions} format={format} ru={ru}
-                                inventoryDocuments={inventoryDocuments} loadData={loadData} FileText={FileText} Loader2={Loader2} Search={Search}
+                                inventoryDocuments={inventoryDocuments} loadData={loadData}
                             />
                         )}
 
                         {activeTab === 'clients' && modulesConfig.clients && (
                             <ClientsTab
                                 filteredClients={filteredClients} clientSearchQuery={clientSearchQuery} setClientSearchQuery={setClientSearchQuery}
-                                Search={Search} UserCircle={UserCircle} setSelectedClient={setSelectedClient} selectedClient={selectedClient}
-                                Ban={Ban} Trash2={Trash2} clientNote={clientNote} setClientNote={setClientNote} saveClientNote={handleSaveClientNote}
+                                setSelectedClient={setSelectedClient} selectedClient={selectedClient}
+                                clientNote={clientNote} setClientNote={setClientNote} saveClientNote={handleSaveClientNote}
                                 handleToggleBlacklist={handleToggleBlacklist} savingNote={savingNote} getCleanPhone={getCleanPhone}
-                                Phone={Phone} MessageCircle={MessageCircle} user={user} Edit3={Edit3} handleUpdateTags={handleUpdateTags}
+                                user={user} handleUpdateTags={handleUpdateTags}
                                 clientFilterMode={clientFilterMode} setClientFilterMode={setClientFilterMode} appointments={appointments}
                             />
                         )}

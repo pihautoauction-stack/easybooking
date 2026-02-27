@@ -1,3 +1,5 @@
+import { CalendarIcon, Archive, ChevronLeft, ChevronRight, Plus, Briefcase } from "lucide-react";
+
 export default function AppointmentsTab({
     user,
     role,
@@ -19,7 +21,6 @@ export default function AppointmentsTab({
     inventory,
     showManualModal, setShowManualModal,
     setViewDate, viewDate, addDays,
-    CalendarIcon, Archive, ChevronLeft, ChevronRight, Plus, Briefcase,
     getServiceColor,
     modulesConfig
 }: any) {

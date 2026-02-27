@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Package, Plus, Archive, History, AlertTriangle, Edit3, Trash2, FileText, Loader2, Folder, FolderOpen, Search } from "lucide-react";
 
 export default function InventoryTab({
     inventory,
@@ -7,15 +8,6 @@ export default function InventoryTab({
     handleAddInventory,
     handleAdjustInventory,
     handleDeleteInventory,
-    Package,
-    Plus,
-    Archive,
-    History,
-    AlertTriangle,
-    Edit3,
-    Trash2,
-    FileText,
-    Loader2,
     newInvName, setNewInvName,
     newInvUnit, setNewInvUnit,
     newInvCost, setNewInvCost,
@@ -30,10 +22,9 @@ export default function InventoryTab({
     groupedInventory,
     toggleInvCategory,
     expandedInvCategories,
-    Folder, FolderOpen,
     transactions,
     format, ru,
-    inventoryDocuments, loadData, Search
+    inventoryDocuments, loadData
 }: any) {
     // ЛОКАЛЬНЫЕ СТЕЙТЫ ДОКУМЕНТОВ
     const [showDocModal, setShowDocModal] = useState(false);
