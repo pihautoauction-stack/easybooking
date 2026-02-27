@@ -32,7 +32,8 @@ export default function ProfileTab({
     newEmpSpec, setNewEmpSpec,
     newEmpCommission, setNewEmpCommission,
     addingEmp,
-    modulesConfig, setModulesConfig
+    modulesConfig, setModulesConfig,
+    telegramChatId, setTelegramChatId
 }: any) {
     const [settingsMode, setSettingsMode] = useState<'profile' | 'app'>('profile');
 
@@ -114,6 +115,23 @@ export default function ProfileTab({
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* НОВЫЙ БЛОК: УВЕДОМЛЕНИЯ В TELEGRAM */}
+                                <div className="pt-6 border-t border-stone-100">
+                                    <h3 className="text-sm font-black text-stone-800 flex items-center gap-2 uppercase tracking-widest mb-2">🔔 Уведомления о записях</h3>
+                                    <p className="text-xs text-stone-500 font-bold mb-4">Настройте бота, чтобы мгновенно получать уведомления в Telegram о новых онлайн-записях.</p>
+                                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 mb-4">
+                                        <p className="text-xs font-bold text-blue-800 leading-relaxed">
+                                            1. Напишите в Telegram специальному боту (например: <span className="font-black bg-white px-1.5 py-0.5 rounded shadow-sm text-stone-900 border border-stone-200">@userinfobot</span>)<br />
+                                            2. Узнайте свой числовой <span className="font-black">ID</span> (он состоит только из цифр).<br />
+                                            3. Введите его в поле ниже.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-stone-400 font-bold uppercase tracking-widest ml-1">Ваш Telegram Chat ID</label>
+                                        <input value={telegramChatId || ""} onChange={e => setTelegramChatId(e.target.value)} placeholder="Например: 123456789" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 mt-1 max-w-sm block" />
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -145,42 +163,120 @@ export default function ProfileTab({
                                             </div>
                                         )}
                                         <div className="flex gap-2 items-center bg-stone-50 p-2 rounded-2xl border border-stone-200">
-                                            <input type="time" value={newBreakStart} onChange={e => setNewBreakStart(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
+                                            <input
+                                                type="text" inputMode="numeric" maxLength={5} placeholder="12:00"
+                                                value={newBreakStart}
+                                                onChange={e => {
+                                                    let v = e.target.value.replace(/[^\d:]/g, '');
+                                                    if (v.length === 2 && !v.includes(':') && newBreakStart.length !== 3) v += ':';
+                                                    setNewBreakStart(v);
+                                                }}
+                                                onBlur={() => {
+                                                    if (newBreakStart && newBreakStart.length < 5) {
+                                                        let parts = newBreakStart.split(':');
+                                                        let h = parts[0] || '00'; let m = parts[1] || '00';
+                                                        if (h.length === 1) h = '0' + h; if (m.length === 1) m = m + '0';
+                                                        setNewBreakStart(`${h}:${m}`);
+                                                    }
+                                                }}
+                                                className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400 tracking-wider"
+                                            />
                                             <span className="text-stone-400 font-black">-</span>
-                                            <input type="time" value={newBreakEnd} onChange={e => setNewBreakEnd(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400" />
-                                            <button onClick={handleAddBreak} className="bg-stone-800 text-white p-3 rounded-xl font-bold active:scale-95 transition-all shadow-sm hover:bg-black"><Plus className="w-5 h-5" /></button>
+                                            <input
+                                                type="text" inputMode="numeric" maxLength={5} placeholder="13:00"
+                                                value={newBreakEnd}
+                                                onChange={e => {
+                                                    let v = e.target.value.replace(/[^\d:]/g, '');
+                                                    if (v.length === 2 && !v.includes(':') && newBreakEnd.length !== 3) v += ':';
+                                                    setNewBreakEnd(v);
+                                                }}
+                                                onBlur={() => {
+                                                    if (newBreakEnd && newBreakEnd.length < 5) {
+                                                        let parts = newBreakEnd.split(':');
+                                                        let h = parts[0] || '00'; let m = parts[1] || '00';
+                                                        if (h.length === 1) h = '0' + h; if (m.length === 1) m = m + '0';
+                                                        setNewBreakEnd(`${h}:${m}`);
+                                                    }
+                                                }}
+                                                className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none text-center shadow-sm focus:border-rose-400 tracking-wider"
+                                            />
+                                            <button onClick={handleAddBreak} className="bg-stone-800 text-white p-3 rounded-xl font-bold active:scale-95 transition-all shadow-sm hover:bg-black shrink-0"><Plus className="w-5 h-5" /></button>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* ВОЗВРАЩЕННЫЕ ТУМБЛЕРЫ (СВИТЧЕРЫ) */}
-                                <div className="space-y-3 border-t border-stone-100 pt-6">
+                                {/* КОМПАКТНЫЙ ВАРИАНТ ГРАФИКА */}
+                                <div className="space-y-4 border-t border-stone-100 pt-6">
                                     <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">График работы по дням</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+                                    {/* Кружки дней недели */}
+                                    <div className="flex flex-wrap gap-2">
                                         {DAYS.map((day: any) => {
                                             const config = weeklySettings[day.id] || { start: "09:00", end: "18:00", active: false };
                                             return (
-                                                <div key={day.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${config.active ? 'bg-rose-50/30 border-rose-100 shadow-sm' : 'bg-stone-50 border-stone-100 opacity-60'}`}>
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, active: !config.active } })}
-                                                            className={`w-10 h-5 rounded-full transition-all relative shrink-0 ${config.active ? 'bg-rose-400' : 'bg-stone-300'}`}
-                                                        >
-                                                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${config.active ? 'left-[22px]' : 'left-0.5'}`}></div>
-                                                        </button>
-                                                        <span className="font-black text-stone-900 text-sm">{day.label}</span>
-                                                    </div>
-                                                    {config.active && (
-                                                        <div className="flex items-center gap-1">
-                                                            <input type="time" value={config.start} onChange={e => setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, start: e.target.value } })} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center w-[70px]" />
-                                                            <span className="text-stone-300">-</span>
-                                                            <input type="time" value={config.end} onChange={e => setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, end: e.target.value } })} className="bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-black text-stone-900 outline-none focus:border-rose-400 text-center w-[70px]" />
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <button
+                                                    key={day.id}
+                                                    onClick={() => setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, active: !config.active } })}
+                                                    className={`w-12 h-12 rounded-2xl font-black text-sm flex items-center justify-center transition-all active:scale-95 ${config.active ? 'bg-rose-500 text-white shadow-md shadow-rose-200' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}
+                                                >
+                                                    {day.label}
+                                                </button>
                                             );
                                         })}
                                     </div>
+
+                                    {/* Настройка времени для активных дней */}
+                                    {DAYS.filter((d: any) => weeklySettings[d.id]?.active).length > 0 && (
+                                        <div className="bg-stone-50 border border-stone-200 rounded-3xl p-4 gap-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                            {DAYS.filter((d: any) => weeklySettings[d.id]?.active).map((day: any) => {
+                                                const config = weeklySettings[day.id];
+                                                return (
+                                                    <div key={`time-${day.id}`} className="bg-white p-3 rounded-2xl flex items-center justify-between border border-stone-100 shadow-sm">
+                                                        <span className="font-black text-stone-800 text-xs px-2">{day.label}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="text" inputMode="numeric" maxLength={5} placeholder="09:00"
+                                                                value={config.start}
+                                                                onChange={e => {
+                                                                    let v = e.target.value.replace(/[^\d:]/g, '');
+                                                                    if (v.length === 2 && !v.includes(':') && config.start.length !== 3) v += ':';
+                                                                    setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, start: v } });
+                                                                }}
+                                                                onBlur={() => {
+                                                                    if (config.start && config.start.length < 5) {
+                                                                        let parts = config.start.split(':');
+                                                                        let h = parts[0] || '00'; let m = parts[1] || '00';
+                                                                        if (h.length === 1) h = '0' + h; if (m.length === 1) m = m + '0';
+                                                                        setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, start: `${h}:${m}` } });
+                                                                    }
+                                                                }}
+                                                                className="bg-stone-50 border border-stone-100 rounded-lg py-1.5 px-1 text-xs font-black text-stone-700 outline-none focus:border-rose-300 text-center w-[54px] tracking-wider"
+                                                            />
+                                                            <span className="text-stone-300 font-black">-</span>
+                                                            <input
+                                                                type="text" inputMode="numeric" maxLength={5} placeholder="18:00"
+                                                                value={config.end}
+                                                                onChange={e => {
+                                                                    let v = e.target.value.replace(/[^\d:]/g, '');
+                                                                    if (v.length === 2 && !v.includes(':') && config.end.length !== 3) v += ':';
+                                                                    setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, end: v } });
+                                                                }}
+                                                                onBlur={() => {
+                                                                    if (config.end && config.end.length < 5) {
+                                                                        let parts = config.end.split(':');
+                                                                        let h = parts[0] || '00'; let m = parts[1] || '00';
+                                                                        if (h.length === 1) h = '0' + h; if (m.length === 1) m = m + '0';
+                                                                        setWeeklySettings({ ...weeklySettings, [day.id]: { ...config, end: `${h}:${m}` } });
+                                                                    }
+                                                                }}
+                                                                className="bg-stone-50 border border-stone-100 rounded-lg py-1.5 px-1 text-xs font-black text-stone-700 outline-none focus:border-rose-300 text-center w-[54px] tracking-wider"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -376,13 +472,12 @@ export default function ProfileTab({
                         </div>
                     </div>
                 )}
-
                 <div className="mt-8 pt-6 border-t border-stone-100 flex justify-end shrink-0">
                     <button onClick={handleSaveProfile} disabled={saving} className="bg-stone-900 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-stone-900/20 active:scale-95 transition-all hover:bg-black w-full md:w-auto flex justify-center items-center">
                         {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить настройки"}
                     </button>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

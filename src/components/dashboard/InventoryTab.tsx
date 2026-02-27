@@ -187,7 +187,15 @@ export default function InventoryTab({
                     })()}
 
                     <div className="bg-white p-2 rounded-[32px] border border-stone-200 shadow-sm">
-                        {Object.keys(groupedInventory).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Склад пуст</p> :
+                        {Object.keys(groupedInventory).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 bg-stone-50 border border-stone-200 rounded-[28px] border-dashed m-2">
+                                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                    <Package className="w-8 h-8 text-stone-300" />
+                                </div>
+                                <p className="text-stone-900 font-black text-lg mb-1">Склад пуст</p>
+                                <p className="text-stone-500 font-bold text-sm text-center max-w-sm">Добавьте новые материалы и расходники для учета.</p>
+                            </div>
+                        ) :
                             (Object.entries(groupedInventory) as [string, any[]][]).map(([category, items]) => (
                                 <div key={category} className="mb-2 last:mb-0">
                                     <button onClick={() => toggleInvCategory(category)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors">
@@ -252,7 +260,15 @@ export default function InventoryTab({
                 <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
                     <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center gap-2"><History className="w-5 h-5 text-rose-500" /> Журнал операций</h3>
                     <div className="space-y-3">
-                        {transactions.length === 0 ? <p className="text-sm text-stone-400 font-bold text-center py-10">История пуста</p> :
+                        {transactions.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 bg-stone-50 border border-stone-200 rounded-[24px] border-dashed">
+                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                    <History className="w-6 h-6 text-stone-300" />
+                                </div>
+                                <p className="text-stone-900 font-black text-base mb-1">История пуста</p>
+                                <p className="text-stone-500 font-bold text-xs text-center max-w-sm">Здесь будут отображаться операции списания и добавления.</p>
+                            </div>
+                        ) :
                             transactions.map((tx: any) => {
                                 const isAdd = tx.change_amount > 0;
                                 return (
@@ -280,7 +296,15 @@ export default function InventoryTab({
                 <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
                     <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center gap-2"><FileText className="w-5 h-5 text-rose-500" /> Документы</h3>
                     <div className="space-y-3">
-                        {(!inventoryDocuments || inventoryDocuments.length === 0) ? <p className="text-sm text-stone-400 font-bold text-center py-10">Документов пока нет</p> :
+                        {(!inventoryDocuments || inventoryDocuments.length === 0) ? (
+                            <div className="flex flex-col items-center justify-center py-16 bg-stone-50 border border-stone-200 rounded-[24px] border-dashed">
+                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                    <FileText className="w-6 h-6 text-stone-300" />
+                                </div>
+                                <p className="text-stone-900 font-black text-base mb-1">Документов пока нет</p>
+                                <p className="text-stone-500 font-bold text-xs text-center max-w-sm">Создайте приходную или расходную накладную.</p>
+                            </div>
+                        ) :
                             inventoryDocuments.map((doc: any) => {
                                 const typeColors: Record<string, string> = {
                                     receipt: 'bg-emerald-50 text-emerald-600 border-emerald-100',

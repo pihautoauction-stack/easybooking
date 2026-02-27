@@ -22,6 +22,7 @@ export default function ServicesTab({
     Search,
     Folder,
     FolderOpen,
+    ListTree,
     Package,
     selectedService,
     addingService,
@@ -79,16 +80,16 @@ export default function ServicesTab({
                             )}
                             <div className="grid grid-cols-2 gap-3 mt-1">
                                 <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[10px] font-bold uppercase">Мин</span><input value={newDuration} onChange={e => setNewDuration(e.target.value)} type="number" placeholder="60" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-10 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
-                                <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-bold">₽</span><input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-8 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" /></div>
+                                <div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 text-sm font-black">₽</span><input value={newPrice} onChange={e => setNewPrice(e.target.value)} type="number" placeholder="Цена" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 pl-10 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 transition-all font-sans" /></div>
                             </div>
 
                             <div className="mt-4 border-t border-stone-100 pt-4">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-2 mb-2"><Package className="w-3 h-3" /> Техкарта (Расходники)</label>
                                 {inventory && inventory.length > 0 ? (
-                                    <div className="space-y-2">
+                                    <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4">
                                         <select
                                             onChange={(e) => { handleAddMaterialToNewService(e.target.value); e.target.value = ""; }}
-                                            className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer"
+                                            className="w-full bg-white border border-stone-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 appearance-none cursor-pointer shadow-sm mb-3"
                                             value=""
                                         >
                                             <option value="" disabled>+ Добавить материал...</option>
@@ -98,13 +99,13 @@ export default function ServicesTab({
                                         </select>
 
                                         {newServiceMaterials.length > 0 && (
-                                            <div className="space-y-2 mt-2">
+                                            <div className="space-y-2">
                                                 {newServiceMaterials.map((mat: any) => {
                                                     const invItem = inventory.find((i: any) => i.id === mat.inventory_id);
                                                     if (!invItem) return null;
                                                     return (
-                                                        <div key={mat.inventory_id} className="flex items-center gap-2 bg-rose-50/50 p-2 rounded-xl border border-rose-100 justify-between">
-                                                            <span className="text-xs font-bold text-stone-700 truncate">{invItem.name}</span>
+                                                        <div key={mat.inventory_id} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-stone-100 justify-between shadow-sm">
+                                                            <span className="text-xs font-bold text-stone-700 truncate pl-1">{invItem.name}</span>
                                                             <div className="flex items-center gap-2 shrink-0">
                                                                 <input
                                                                     type="number"
@@ -112,10 +113,10 @@ export default function ServicesTab({
                                                                     step="any"
                                                                     value={mat.default_quantity}
                                                                     onChange={(e) => handleUpdateMaterialQuantity(mat.inventory_id, Number(e.target.value))}
-                                                                    className="w-16 bg-white border border-stone-200 rounded-lg p-1.5 text-xs text-center font-bold outline-none"
+                                                                    className="w-16 bg-stone-50 border border-stone-200 rounded-lg p-1.5 text-xs text-center font-bold outline-none focus:border-rose-300"
                                                                 />
                                                                 <span className="text-[10px] text-stone-500 font-bold w-4">{invItem.unit}</span>
-                                                                <button onClick={() => handleRemoveMaterialFromNewService(mat.inventory_id)} className="p-1 hover:bg-white rounded-md text-stone-400 hover:text-rose-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                                                                <button onClick={() => handleRemoveMaterialFromNewService(mat.inventory_id)} className="p-1.5 bg-rose-50 rounded-lg text-rose-500 hover:bg-rose-100 transition-colors"><X className="w-3.5 h-3.5" /></button>
                                                             </div>
                                                         </div>
                                                     )
@@ -124,7 +125,11 @@ export default function ServicesTab({
                                         )}
                                     </div>
                                 ) : (
-                                    <p className="text-xs text-stone-400 font-bold bg-stone-50 p-3 rounded-xl border border-stone-100 italic">Склад пуст. Добавьте материалы в модуле Склад.</p>
+                                    <div className="flex flex-col items-center justify-center p-6 bg-stone-50 border border-stone-200 rounded-2xl border-dashed">
+                                        <Package className="w-6 h-6 text-stone-300 mb-2" />
+                                        <p className="text-xs text-stone-600 font-bold text-center">Склад пуст</p>
+                                        <p className="text-[10px] text-stone-400 font-medium text-center mt-0.5">Добавьте материалы в модуле Склад.</p>
+                                    </div>
                                 )}
                             </div>
 
@@ -140,7 +145,15 @@ export default function ServicesTab({
                     </div>
 
                     <div className="bg-white rounded-[32px] border border-stone-200 shadow-sm p-2">
-                        {Object.keys(groupedServices).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Ничего не найдено</p> :
+                        {Object.keys(groupedServices).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 bg-stone-50 border border-stone-200 rounded-[28px] border-dashed m-2">
+                                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                    <ListTree className="w-8 h-8 text-stone-300" />
+                                </div>
+                                <p className="text-stone-900 font-black text-lg mb-1">Ничего не найдено</p>
+                                <p className="text-stone-500 font-bold text-sm text-center max-w-sm">Добавьте новую услугу для отображения в прайсе.</p>
+                            </div>
+                        ) :
                             (Object.entries(groupedServices) as [string, any[]][]).map(([category, items]) => (
                                 <div key={category} className="mb-2 last:mb-0">
                                     <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors">

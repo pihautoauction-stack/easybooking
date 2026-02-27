@@ -44,8 +44,7 @@ const NAV_ITEMS = [
     { id: 'services', icon: ListTree, label: 'Прайс' },
     { id: 'clients', icon: Users, label: 'Клиенты' },
     { id: 'inventory', icon: Package, label: 'Склад' },
-    { id: 'analytics', icon: BarChart3, label: 'Финансы' },
-    { id: 'profile', icon: UserCircle, label: 'Настройки' }
+    { id: 'analytics', icon: BarChart3, label: 'Финансы' }
 ];
 
 const getServiceColor = (id: string | undefined) => {
@@ -89,6 +88,7 @@ export default function Dashboard() {
     const [workStartTime, setWorkStartTime] = useState("09:00");
     const [workEndTime, setWorkEndTime] = useState("20:00");
     const [modulesConfig, setModulesConfig] = useState<{ services: boolean, clients: boolean, inventory: boolean, analytics: boolean }>({ services: true, clients: true, inventory: true, analytics: true });
+    const [telegramChatId, setTelegramChatId] = useState("");
 
     // Данные
     const [services, setServices] = useState<any[]>([]);
@@ -248,6 +248,7 @@ export default function Dashboard() {
                 if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
                 if (p.social_links) setSocialLinks(typeof p.social_links === 'string' ? JSON.parse(p.social_links) : p.social_links);
                 if (p.modules_config) setModulesConfig(typeof p.modules_config === 'string' ? JSON.parse(p.modules_config) : p.modules_config);
+                if (p.telegram_chat_id) setTelegramChatId(p.telegram_chat_id);
             }
 
             const { data: s } = await supabase.from("services").select("*, employee:employees(name), materials:service_materials(inventory_id, default_quantity)").eq("user_id", userId).order('created_at');
@@ -284,7 +285,8 @@ export default function Dashboard() {
                 id: user.id, business_name: businessName, username: cleanUsername || null,
                 schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls,
                 weekly_settings: weeklySettings, social_links: socialLinks, modules_config: modulesConfig, updated_at: new Date(),
-                disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime
+                disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime,
+                telegram_chat_id: telegramChatId || null
             });
             if (error) throw error;
             setUsername(cleanUsername);
@@ -318,14 +320,23 @@ export default function Dashboard() {
     const handleAddService = async () => {
         if (!newName || !newPrice || !newDuration) return;
         setAddingService(true);
-        const finalCategory = serviceCategorySelect === 'NEW' ? serviceCategoryInput : serviceCategorySelect;
-        const insertData: any = { user_id: user.id, name: newName, category: finalCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
-        if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
-        const { data: insertedData, error } = await supabase.from("services").insert(insertData).select().single();
-        if (!error && insertedData && newServiceMaterials.length > 0) {
-            await saveServiceMaterials(insertedData.id, newServiceMaterials);
+        try {
+            const finalCategory = serviceCategorySelect === 'NEW' ? serviceCategoryInput : serviceCategorySelect;
+            const insertData: any = { name: newName, category: finalCategory || "Общие", price: Number(newPrice), duration: Number(newDuration), image_urls: [] };
+            if (role === 'owner' && newServiceEmpId) insertData.employee_id = newServiceEmpId;
+
+            const result = await addService(insertData);
+            if (!result.success || !result.data) throw new Error(result.error || "Ошибка создания услуги");
+
+            if (newServiceMaterials.length > 0) {
+                await saveServiceMaterials(result.data.id, newServiceMaterials);
+            }
+            setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); setNewServiceMaterials([]); await loadData(user.id, true);
+        } catch (error: any) {
+            alert(error.message);
+        } finally {
+            setAddingService(false);
         }
-        setNewName(""); setNewPrice(""); setNewDuration("60"); setNewServiceEmpId(""); setServiceCategoryInput(""); setNewServiceMaterials([]); await loadData(user.id); setAddingService(false);
     };
 
     const handleUpdateServiceMaterials = async (serviceId: string, materials: { inventory_id: string, default_quantity: number }[]) => {
@@ -341,7 +352,14 @@ export default function Dashboard() {
     };
 
     const handleDeleteService = async (id: string) => {
-        if (confirm("Удалить эту услугу?")) { await supabase.from("services").delete().eq("id", id); setSelectedService(null); await loadData(user.id); }
+        if (confirm("Удалить эту услугу?")) {
+            const res = await deleteService(id);
+            if (res.success) {
+                setSelectedService(null); await loadData(user.id, true);
+            } else {
+                alert("Ошибка: " + res.error);
+            }
+        }
     };
 
     const toggleCategory = (cat: string) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
@@ -605,11 +623,12 @@ export default function Dashboard() {
                 </nav>
 
                 <div className="p-4 border-t border-stone-100" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-                    <div className="flex items-center gap-3 px-4 py-3 mb-3 bg-stone-50 rounded-2xl border border-stone-100">
+                    <div className="flex items-center gap-3 px-4 py-3 mb-3 bg-stone-50 rounded-2xl border border-stone-100 cursor-pointer hover:bg-stone-100 transition-colors" onClick={() => setActiveTab('profile')}>
                         <div className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
                             {isSyncing ? <RefreshCw className="w-3 h-3 text-stone-400 animate-spin" /> : <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"></span>}
                         </div>
-                        <span className="text-xs font-bold text-stone-600 truncate">{businessName || "Профиль"}</span>
+                        <span className="text-xs font-bold text-stone-600 truncate flex-1">{businessName || "Настройки профиля"}</span>
+                        <UserCircle className="w-4 h-4 text-stone-400" />
                     </div>
                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 transition-all shadow-sm"><LogOut className="w-4 h-4" /> Выйти</button>
                 </div>
@@ -624,13 +643,13 @@ export default function Dashboard() {
                     style={{ paddingTop: 'calc(12px + env(safe-area-inset-top))' }}
                 >
                     <div className="flex items-center gap-3">
-                        <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
-                        <div className="flex flex-col justify-center">
+                        <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-sm ml-2" />
+                        <div className="flex flex-col justify-center cursor-pointer" onClick={() => setActiveTab('profile')}>
                             <div className="flex items-center gap-2 mb-0.5">
                                 <h1 className="text-sm font-black tracking-tight text-stone-900">Управление</h1>
                                 <div className="relative flex h-2 w-2 items-center justify-center">{isSyncing ? <RefreshCw className="w-2.5 h-2.5 text-stone-400 animate-spin" /> : <span className="w-2 h-2 rounded-full bg-emerald-400"></span>}</div>
                             </div>
-                            <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none">{businessName || "Профиль"}</span>
+                            <span className="text-[10px] text-stone-400 truncate max-w-[140px] font-bold leading-none flex items-center gap-1">{businessName || "Профиль"} <ChevronRight className="w-3 h-3" /></span>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="text-stone-400 hover:text-rose-500 p-2 bg-stone-50 rounded-full active:scale-95 transition-all"><LogOut className="w-4 h-4" /></button>
@@ -733,6 +752,7 @@ export default function Dashboard() {
                                 newEmpName={newEmpName} setNewEmpName={setNewEmpName} newEmpSpec={newEmpSpec} setNewEmpSpec={setNewEmpSpec}
                                 newEmpCommission={newEmpCommission} setNewEmpCommission={setNewEmpCommission} addingEmp={addingEmp}
                                 modulesConfig={modulesConfig} setModulesConfig={setModulesConfig}
+                                telegramChatId={telegramChatId} setTelegramChatId={setTelegramChatId}
                             />
                         )}
 
@@ -1008,9 +1028,34 @@ export default function Dashboard() {
                             {role === 'owner' && (
                                 <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Специалист</label><select value={manualEmployee} onChange={e => setManualEmployee(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 appearance-none"><option value="">Выполняю я</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
                             )}
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-3">
                                 <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Дата *</label><input required type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
-                                <div><label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Время *</label><input required type="time" value={manualTime} onChange={e => setManualTime(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800" /></div>
+                                <div>
+                                    <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Время *</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        inputMode="numeric"
+                                        placeholder="10:00"
+                                        maxLength={5}
+                                        value={manualTime}
+                                        onChange={e => {
+                                            let v = e.target.value.replace(/[^\d:]/g, '');
+                                            if (v.length === 2 && !v.includes(':') && manualTime.length !== 3) v += ':';
+                                            setManualTime(v);
+                                        }}
+                                        onBlur={() => {
+                                            if (manualTime && manualTime.length < 5) {
+                                                let parts = manualTime.split(':');
+                                                let h = parts[0] || '00'; let m = parts[1] || '00';
+                                                if (h.length === 1) h = '0' + h;
+                                                if (m.length === 1) m = m + '0';
+                                                setManualTime(`${h}:${m}`);
+                                            }
+                                        }}
+                                        className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-4 text-sm font-bold outline-none focus:border-rose-400 text-stone-800 tracking-wider text-center"
+                                    />
+                                </div>
                             </div>
                             <button type="submit" disabled={addingManual} className="w-full mt-4 bg-gradient-to-r from-rose-400 to-orange-400 text-white font-black py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex justify-center">{addingManual ? <Loader2 className="w-6 h-6 animate-spin" /> : "Сохранить"}</button>
                         </form>

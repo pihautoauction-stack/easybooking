@@ -76,8 +76,8 @@ export default function Login() {
 
       <div className="w-full max-w-[420px] bg-white/80 backdrop-blur-xl p-8 md:p-10 rounded-[40px] shadow-2xl shadow-stone-200/50 border border-stone-100 relative z-10">
 
-        <div className="flex flex-col items-center mb-10">
-          <img src="/logo.svg" alt="Nexio Logo" className="w-24 h-24 mb-6 drop-shadow-xl" />
+        <div className="flex flex-col items-center mb-6">
+          <img src="/logo.svg" alt="Nexio Logo" className="w-24 h-24 mb-1 drop-shadow-xl" />
           <h1 className="text-2xl font-black tracking-tight text-stone-900 text-center leading-tight">
             Вход в систему
           </h1>
@@ -95,7 +95,7 @@ export default function Login() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full mt-1.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-base font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-900 transition-all placeholder-stone-400"
+                className="w-full mt-0.5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-base font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-900 transition-all placeholder-stone-400"
                 placeholder="name@company.com"
               />
             </div>
@@ -115,9 +115,9 @@ export default function Login() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyCode} className="space-y-5 animate-in fade-in slide-in-from-right-4">
-            <div className="flex flex-col items-center text-center mb-2">
-              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
+          <form onSubmit={handleVerifyCode} className="space-y-4 animate-in fade-in slide-in-from-right-4">
+            <div className="flex flex-col items-center text-center mb-1">
+              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mb-2">
                 <MailCheck className="w-6 h-6 text-emerald-500" />
               </div>
               <p className="text-sm font-bold text-stone-500">Код отправлен на почту</p>

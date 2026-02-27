@@ -47,7 +47,13 @@ export default function AppointmentsTab({
             {journalView === 'archive' && (
                 <>
                     {archivedApps.length === 0 ? (
-                        <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm"><div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><Archive className="w-7 h-7 text-stone-300" /></div><p className="text-stone-400 text-sm font-bold">Архив пуст</p></div>
+                        <div className="flex flex-col items-center justify-center py-20 bg-stone-50 border border-stone-200 rounded-[32px] border-dashed">
+                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                <Archive className="w-8 h-8 text-stone-300" />
+                            </div>
+                            <p className="text-stone-900 font-black text-lg mb-1">Архив пуст</p>
+                            <p className="text-stone-500 font-bold text-sm text-center max-w-sm">Здесь будут отображаться завершенные записи.</p>
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {archivedApps.map((app: any) => (
@@ -71,7 +77,13 @@ export default function AppointmentsTab({
             {journalView === 'active' && (
                 <>
                     {activeDailyApps.length === 0 ? (
-                        <div className="text-center py-20 bg-white border border-stone-200 rounded-[32px] shadow-sm"><div className="w-16 h-16 bg-stone-50 border border-stone-100 rounded-full flex items-center justify-center mx-auto mb-4"><CalendarIcon className="w-7 h-7 text-stone-300" /></div><p className="text-stone-400 text-base font-black mb-2">На этот день записей нет</p><p className="text-stone-400 text-sm font-medium">Отдохните или добавьте новую задачу вручную.</p></div>
+                        <div className="flex flex-col items-center justify-center py-20 bg-stone-50 border border-stone-200 rounded-[32px] border-dashed">
+                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                                <CalendarIcon className="w-8 h-8 text-stone-300" />
+                            </div>
+                            <p className="text-stone-900 font-black text-lg mb-1">На этот день записей нет</p>
+                            <p className="text-stone-500 font-bold text-sm text-center max-w-sm">Отдохните или добавьте новую задачу вручную.</p>
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {activeDailyApps.map((app: any) => {

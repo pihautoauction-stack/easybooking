@@ -10,10 +10,10 @@ export async function addService(data: { name: string, category: string, price: 
 
     try {
         const insertData = { ...data, user_id: user.id };
-        const { error } = await supabase.from('services').insert(insertData);
+        const { data: insertedData, error } = await supabase.from('services').insert(insertData).select().single();
         if (error) throw error;
 
-        return { success: true };
+        return { success: true, data: insertedData };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

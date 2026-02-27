@@ -13,6 +13,7 @@ export default function ClientsTab({
     clientNote,
     setClientNote,
     saveClientNote,
+    Users,
     handleToggleBlacklist,
     savingNote,
     getCleanPhone,
@@ -54,13 +55,21 @@ export default function ClientsTab({
                 <div className="flex bg-stone-100 p-1 rounded-2xl shrink-0">
                     <button onClick={() => setClientFilterMode('all')} className={`px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${clientFilterMode === 'all' ? "bg-white text-stone-800 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>Все клиенты</button>
                     <button onClick={() => setClientFilterMode('sleeping')} className={`px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${clientFilterMode === 'sleeping' ? "bg-white text-rose-500 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>
-                        Спящие <span className="bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-md text-[9px]">&gt;60дн</span>
+                        Спящие <span className={`px-1.5 py-0.5 rounded-md text-[9px] ${clientFilterMode === 'sleeping' ? 'bg-rose-100 text-rose-600' : 'bg-stone-200 text-stone-500'}`}>&gt;60дн</span>
                     </button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {finalClients.length === 0 ? <p className="text-stone-400 text-center py-10 font-bold text-sm col-span-full">Клиентов не найдено</p> : finalClients.map((client: any) => (
+                {finalClients.length === 0 ? (
+                    <div className="col-span-full flex flex-col items-center justify-center py-20 bg-stone-50 border border-stone-200 rounded-[32px] border-dashed">
+                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                            <Users className="w-8 h-8 text-stone-300" />
+                        </div>
+                        <p className="text-stone-900 font-black text-lg mb-1">Клиентов не найдено</p>
+                        <p className="text-stone-500 font-bold text-sm text-center max-w-sm">Попробуйте изменить параметры поиска или фильтрации.</p>
+                    </div>
+                ) : finalClients.map((client: any) => (
                     <div
                         key={client.id}
                         onClick={() => { setSelectedClient(client); setClientNote(client.notes || ""); }}

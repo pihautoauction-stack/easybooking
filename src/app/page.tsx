@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import { ArrowRight, CalendarDays, Package, BarChart3, Users } from "lucide-react";
 
 export default async function Home() {
@@ -7,17 +8,21 @@ export default async function Home() {
   const { data: { user } } = await supabase.auth.getUser();
   const isLoggedIn = !!user;
 
-  const targetUrl = isLoggedIn ? "/dashboard" : "/login";
-  const btnTextAuth = isLoggedIn ? "В кабинет" : "Войти";
-  const btnTextMain = isLoggedIn ? "Перейти в панель" : "Начать работу";
+  if (isLoggedIn) {
+    redirect("/dashboard");
+  }
+
+  const targetUrl = "/login";
+  const btnTextAuth = "Войти";
+  const btnTextMain = "Начать работу";
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden flex flex-col">
+    <div className="min-h-[100dvh] bg-[#FAF9F6] text-stone-800 font-sans selection:bg-rose-200 antialiased overflow-hidden flex flex-col">
       {/* Navbar */}
-      <header className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-xl border-b border-stone-200 z-50 pt-safe">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-xl border-b border-stone-200 z-50">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-sm" />
+            <img src="/logo.svg" alt="Nexio Logo" className="w-10 h-10 drop-shadow-sm ml-1" />
             <span className="text-xl font-black tracking-tight text-stone-900">Nexio</span>
           </div>
           <Link href={targetUrl} className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-md hover:bg-black transition-all active:scale-95">
