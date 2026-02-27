@@ -7,7 +7,7 @@ import {
     Trash2, LogOut, Calendar as CalendarIcon, Copy, Plus,
     Loader2, Briefcase, CalendarDays, UserCircle, Phone, X, MessageCircle,
     RefreshCw, Users, Search, Ban, BarChart3, CheckCircle2, Clock, Coffee,
-    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree, History, Link as LinkIcon
+    UserPlus, Archive, Edit3, Camera, Calculator, ChevronLeft, ChevronRight, Package, Folder, FolderOpen, AlertTriangle, ListTree, History, Link as LinkIcon, FileText
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -696,7 +696,7 @@ export default function Dashboard() {
                                 totalInventoryUnits={totalInventoryUnits} inventoryValue={inventoryValue} groupedInventory={groupedInventory}
                                 toggleInvCategory={toggleInvCategory} expandedInvCategories={expandedInvCategories} Folder={Folder} FolderOpen={FolderOpen}
                                 transactions={transactions} format={format} ru={ru}
-                                inventoryDocuments={inventoryDocuments} loadData={loadData}
+                                inventoryDocuments={inventoryDocuments} loadData={loadData} FileText={FileText} Loader2={Loader2}
                             />
                         )}
 
