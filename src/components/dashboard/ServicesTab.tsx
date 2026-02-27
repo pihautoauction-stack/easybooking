@@ -1,3 +1,5 @@
+import { Briefcase, Clock, CheckCircle2, Trash2, Plus, X, Camera, Loader2, ChevronLeft, ChevronRight, Search, Folder, FolderOpen, ListTree, Package } from "lucide-react";
+
 export default function ServicesTab({
     services,
     role,
@@ -9,21 +11,6 @@ export default function ServicesTab({
     uploadingImageId,
     expandedCategories,
     toggleCategory,
-    Briefcase,
-    Clock,
-    CheckCircle2,
-    Trash2,
-    Plus,
-    X,
-    Camera,
-    Loader2,
-    ChevronLeft,
-    ChevronRight,
-    Search,
-    Folder,
-    FolderOpen,
-    ListTree,
-    Package,
     selectedService,
     addingService,
     newName, setNewName,
