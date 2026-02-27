@@ -13,7 +13,7 @@ export default function AnalyticsTab({
     appointments,
     services
 }: any) {
-    // ---- ПРЕДИКТИВНАЯ АНАЛИТИКА ----
+    // ---- ПРЕДИКТИВНАЯ АНАЛИТИКА И СОВЕТЫ ----
     const getPrediction = () => {
         const now = new Date();
         const nextWeek = new Date(now);
@@ -25,19 +25,68 @@ export default function AnalyticsTab({
             return d > now && d < nextWeek && a.status === 'active';
         });
 
-        // Грубый расчет свободных мест (предполагаем среднюю загрузку 5 записей в день = 35 в неделю)
-        // Если записей меньше 15 на неделю вперед — это простой
-        const IS_LOW_BOOKING = upcomingApps.length < 15;
-        const emptySlotsEstimate = 35 - upcomingApps.length;
+        // Ищем записи ЗА ПРОШЛЫЕ 30 ДНЕЙ для понимания "нормального" темпа
+        const pastApps = appointments.filter((a: any) => {
+            const d = new Date(a.start_time);
+            const thirtyDaysAgo = new Date(now);
+            thirtyDaysAgo.setDate(now.getDate() - 30);
+            return d > thirtyDaysAgo && d < now && a.status === 'completed';
+        });
 
-        // Если у нас нет услуг, не крашимся
-        const defaultServicePrice = services && services.length > 0 ? services[0].price : 1500;
-        const lostRevenueEstimate = emptySlotsEstimate > 0 ? emptySlotsEstimate * defaultServicePrice : 0;
+        const hasAnyHistory = pastApps.length > 0 || appointments.length > 0;
+
+        // Среднее количество записей в неделю за прошлый месяц (грубо)
+        const avgWeeklyApps = pastApps.length > 0 ? Math.max(Math.round(pastApps.length / 4), 10) : 15;
+
+        // Считаем упущенную выгоду более реалистично
+        const emptySlotsEstimate = Math.max(avgWeeklyApps - upcomingApps.length, 0);
+
+        // Средний чек по выполненным записями (или дефолт 1500, если нет истории)
+        const avgCheck = pastApps.length > 0 && totalRevenue > 0
+            ? Math.round(totalRevenue / pastApps.length)
+            : (services && services.length > 0 ? services[0].price : 1500);
+
+        const lostRevenueEstimate = emptySlotsEstimate > 0 ? emptySlotsEstimate * avgCheck : 0;
+
+        // Определяем ситуацию для генерации совета
+        let situation = 'normal';
+        let adviceText = '';
+        let adviceHighlight = '';
+
+        if (!hasAnyHistory && upcomingApps.length === 0) {
+            situation = 'newbie';
+            adviceText = 'Добавьте базу клиентов или настройте расписание, чтобы мы могли делать прогнозы.';
+            adviceHighlight = '"Поделитесь ссылкой на онлайн-запись в соцсетях!"';
+        } else if (upcomingApps.length < avgWeeklyApps * 0.5) {
+            situation = 'low';
+            adviceText = 'Выложите историю в Instagram прямо сейчас:';
+            adviceHighlight = '"Освободилось пару горящих окон на этой неделе! Первым 3-м написавшим дарю скидку 15% 🚀"';
+        } else if (upcomingApps.length >= avgWeeklyApps * 1.2 && upcomingApps.length > 5) {
+            situation = 'high';
+            adviceText = 'У вас высокая загрузка! Это отличный момент подумать о росте.';
+            adviceHighlight = 'Возможно, стоит поднять цены на 10-15% на самые популярные услуги.';
+        } else {
+            // Спящие клиенты
+            const sleepingClients = clients.filter((c: any) => c.visits_count > 0 && !c.is_blacklisted);
+            if (sleepingClients.length > 0) {
+                situation = 'sleeping';
+                adviceText = 'У вас есть клиенты, которые давно не записывались. Сделайте рассылку:';
+                adviceHighlight = '"Давно вас не видели! Дарим скидку 10% на следующий визит ❤️"';
+            } else {
+                situation = 'steady';
+                adviceText = 'Загрузка стабильная. Отличное время попросить отзывы у постоянных клиентов!';
+                adviceHighlight = 'Отправьте им ссылку на карты (2GIS/Яндекс) после успешного визита.';
+            }
+        }
 
         return {
-            isLow: IS_LOW_BOOKING,
+            isVisible: hasAnyHistory || upcomingApps.length > 0,
+            isLow: situation === 'low',
             upcomingCount: upcomingApps.length,
-            lostRevenue: lostRevenueEstimate
+            lostRevenue: lostRevenueEstimate,
+            situation,
+            adviceText,
+            adviceHighlight
         };
     };
 
@@ -45,24 +94,35 @@ export default function AnalyticsTab({
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
-            {prediction.isLow && (
-                <div className="bg-gradient-to-r from-rose-500 to-orange-500 p-6 md:p-8 rounded-[32px] shadow-lg shadow-rose-500/20 text-white flex flex-col md:flex-row gap-6 items-center justify-between relative overflow-hidden">
+            {prediction.isVisible && (
+                <div className={`p-6 md:p-8 rounded-[32px] shadow-lg flex flex-col md:flex-row gap-6 items-center justify-between relative overflow-hidden text-white ${prediction.isLow ? 'bg-gradient-to-r from-rose-500 to-orange-500 shadow-rose-500/20' : 'bg-gradient-to-r from-indigo-500 to-blue-500 shadow-blue-500/20'}`}>
                     <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/20 rounded-full blur-3xl"></div>
-                    <div className="relative z-10 flex-1">
+                    <div className="relative z-10 flex-1 w-full">
                         <div className="flex justify-between items-center mb-2">
                             <span className="bg-white/20 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl backdrop-blur-md">🔮 Прогноз на 7 дней</span>
-                            <span className="bg-rose-600 border border-rose-400 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl shadow-sm">Риск простоя</span>
+                            {prediction.isLow && <span className="bg-rose-600 border border-rose-400 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl shadow-sm">Риск простоя</span>}
+                            {prediction.situation === 'high' && <span className="bg-blue-600 border border-blue-400 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl shadow-sm">Высокий спрос</span>}
                         </div>
-                        <h3 className="text-2xl font-black tracking-tight mb-2 text-white">У вас всего {prediction.upcomingCount} записей на неделю</h3>
-                        <p className="text-rose-100 font-medium text-sm leading-relaxed mb-4 max-w-xl">
-                            Мы предсказываем недозагруженность. Возможная упущенная выгода: <span className="font-black text-white">{prediction.lostRevenue} ₽</span>. Рекомендуем срочно запустить маркетинговую активность!
-                        </p>
+                        <h3 className="text-2xl font-black tracking-tight mb-2 text-white">У вас {prediction.upcomingCount} записей на неделю</h3>
+
+                        {prediction.isLow && prediction.lostRevenue > 0 ? (
+                            <p className="text-white/90 font-medium text-sm leading-relaxed mb-4 max-w-xl">
+                                Мы предсказываем недозагруженность. Возможная упущенная выгода: <span className="font-black text-white">{prediction.lostRevenue} ₽</span>. Рекомендуем запустить маркетинговую активность!
+                            </p>
+                        ) : (
+                            <p className="text-white/90 font-medium text-sm leading-relaxed mb-4 max-w-xl">
+                                Аналитика расписания обновлена. Ознакомьтесь с рекомендацией ниже.
+                            </p>
+                        )}
 
                         <div className="bg-white/10 border border-white/20 p-4 rounded-2xl flex items-start gap-4 backdrop-blur-md">
-                            <div className="bg-white text-rose-500 p-2 rounded-xl shrink-0"><BarChart3 className="w-5 h-5" /></div>
+                            <div className="bg-white text-stone-800 p-2 rounded-xl shrink-0"><BarChart3 className="w-5 h-5" /></div>
                             <div>
-                                <p className="text-xs font-black uppercase tracking-widest mb-1 text-white opacity-90">Совет от ИИ</p>
-                                <p className="text-sm font-medium text-rose-50">Выложите историю в Instagram прямо сейчас: <br /><span className="italic font-bold text-white bg-black/20 px-2 py-0.5 rounded-lg mt-1 inline-block">"Освободилось пару горящих окон на этой неделе! Первым 3-м написавшим дарю скидку 15% 🚀"</span></p>
+                                <p className="text-xs font-black uppercase tracking-widest mb-1 text-white opacity-90">Совет</p>
+                                <p className="text-sm font-medium text-white/90">
+                                    {prediction.adviceText} <br />
+                                    <span className="italic font-bold text-white bg-black/20 px-2 py-0.5 rounded-lg mt-1 inline-block">{prediction.adviceHighlight}</span>
+                                </p>
                             </div>
                         </div>
                     </div>

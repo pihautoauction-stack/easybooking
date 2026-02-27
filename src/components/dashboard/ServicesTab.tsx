@@ -56,7 +56,7 @@ export default function ServicesTab({
                             )}
                             <div className="space-y-1 mt-2">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название услуги</label>
-                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Например: Замена масла" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
+                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Например: Базовая услуга" className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 transition-all text-stone-800" />
                             </div>
                             {role === 'owner' && (
                                 <select value={newServiceEmpId} onChange={e => setNewServiceEmpId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none appearance-none"><option value="">Выполняют все</option>{employees.map((emp: any) => <option key={emp.id} value={emp.id}>Только: {emp.name}</option>)}</select>

@@ -49,7 +49,7 @@ export default function Login() {
       });
       if (error) throw error;
 
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err: any) {
       setError("Неверный код. Проверьте правильность или запросите новый.");
       setLoading(false);

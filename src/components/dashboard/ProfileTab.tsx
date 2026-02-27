@@ -56,7 +56,7 @@ export default function ProfileTab({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Название компании / Имя</label>
-                                <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Моя компания / Мастер Анна" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
+                                <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Например: Моя компания / Василий Иванов" className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-400 text-stone-800 transition-all" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 flex items-center gap-1">Короткая ссылка (Никнейм)</label>
@@ -193,7 +193,7 @@ export default function ProfileTab({
                             </div>
                             <div className="w-full">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Должность / Специализация</label>
-                                <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Специалист" />
+                                <input value={newEmpSpec} onChange={e => setNewEmpSpec(e.target.value)} className="w-full bg-white border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:border-rose-400 shadow-sm mt-1" placeholder="Например: Старший специалист" />
                             </div>
                             <div className="w-32 shrink-0">
                                 <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1">Ставка (%)</label>
