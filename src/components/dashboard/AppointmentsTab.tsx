@@ -20,7 +20,8 @@ export default function AppointmentsTab({
     showManualModal, setShowManualModal,
     setViewDate, viewDate, addDays,
     CalendarIcon, Archive, ChevronLeft, ChevronRight, Plus, Briefcase,
-    getServiceColor
+    getServiceColor,
+    modulesConfig
 }: any) {
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -58,7 +59,7 @@ export default function AppointmentsTab({
                                     <h3 className="text-stone-800 text-base font-black tracking-tight">{app.client_name}</h3>
                                     <div className="flex justify-between items-center text-sm text-stone-500 pt-3 mt-2 border-t border-stone-50">
                                         <span className="truncate text-xs font-bold">{app.service?.name || "Без услуги"}</span>
-                                        <span className="text-emerald-600 font-black text-xs">{app.materials_cost ? `Мат: ${app.materials_cost}₽` : ''}</span>
+                                        <span className="text-emerald-600 font-black text-xs">{(app.materials_cost && modulesConfig?.inventory !== false) ? `Мат: ${app.materials_cost}₽` : ''}</span>
                                     </div>
                                 </div>
                             ))}

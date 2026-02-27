@@ -88,6 +88,7 @@ export default function Dashboard() {
     const [disabledDays, setDisabledDays] = useState<number[]>([]);
     const [workStartTime, setWorkStartTime] = useState("09:00");
     const [workEndTime, setWorkEndTime] = useState("20:00");
+    const [modulesConfig, setModulesConfig] = useState<{ services: boolean, clients: boolean, inventory: boolean, analytics: boolean }>({ services: true, clients: true, inventory: true, analytics: true });
 
     // Данные
     const [services, setServices] = useState<any[]>([]);
@@ -222,6 +223,7 @@ export default function Dashboard() {
                 if (p.portfolio_urls) setPortfolioUrls(typeof p.portfolio_urls === 'string' ? JSON.parse(p.portfolio_urls) : p.portfolio_urls);
                 if (p.weekly_settings) setWeeklySettings(typeof p.weekly_settings === 'string' ? JSON.parse(p.weekly_settings) : p.weekly_settings);
                 if (p.social_links) setSocialLinks(typeof p.social_links === 'string' ? JSON.parse(p.social_links) : p.social_links);
+                if (p.modules_config) setModulesConfig(typeof p.modules_config === 'string' ? JSON.parse(p.modules_config) : p.modules_config);
             }
 
             const { data: s } = await supabase.from("services").select("*, employee:employees(name)").eq("user_id", userId).order('created_at');
@@ -255,7 +257,7 @@ export default function Dashboard() {
             const { error } = await supabase.from("profiles").upsert({
                 id: user.id, business_name: businessName, username: cleanUsername || null,
                 schedule_step: scheduleStep, breaks: breaks, portfolio_urls: portfolioUrls,
-                weekly_settings: weeklySettings, social_links: socialLinks, updated_at: new Date(),
+                weekly_settings: weeklySettings, social_links: socialLinks, modules_config: modulesConfig, updated_at: new Date(),
                 disabled_days: disabledDays.join(','), work_start_time: workStartTime, work_end_time: workEndTime
             });
             if (error) throw error;
@@ -539,7 +541,13 @@ export default function Dashboard() {
                 </div>
 
                 <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-                    {NAV_ITEMS.map((tab) => (
+                    {NAV_ITEMS.filter(tab => {
+                        if (tab.id === 'services') return modulesConfig.services;
+                        if (tab.id === 'clients') return modulesConfig.clients;
+                        if (tab.id === 'inventory') return modulesConfig.inventory;
+                        if (tab.id === 'analytics') return modulesConfig.analytics;
+                        return true;
+                    }).map((tab) => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as Tab)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-bold text-sm ${activeTab === tab.id ? 'bg-rose-50 text-rose-600 shadow-sm border-l-4 border-rose-400' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900 border-l-4 border-transparent'}`}>
                             <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-rose-500' : 'text-stone-400'}`} />{tab.label}
                         </button>
@@ -580,7 +588,7 @@ export default function Dashboard() {
 
                 {/* ШАПКА ДЛЯ ПК */}
                 <header className="hidden md:flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-stone-200 px-8 py-5 z-10 shrink-0">
-                    <h1 className="text-2xl font-black tracking-tight text-stone-900">{NAV_ITEMS.find(t => t.id === activeTab)?.label}</h1>
+                    <h1 className="text-2xl font-black tracking-tight text-stone-900">{NAV_ITEMS.find(t => t.id === activeTab)?.label || 'Управление'}</h1>
                     <div className="flex items-center gap-4"><span className="text-xs font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg">{format(new Date(), "d MMMM, EEEE", { locale: ru })}</span></div>
                 </header>
 
@@ -602,10 +610,11 @@ export default function Dashboard() {
                                 setViewDate={setViewDate} viewDate={viewDate} addDays={addDays}
                                 CalendarIcon={CalendarIcon} Archive={Archive} ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Plus={Plus} Briefcase={Briefcase}
                                 getServiceColor={getServiceColor}
+                                modulesConfig={modulesConfig}
                             />
                         )}
 
-                        {activeTab === 'services' && (
+                        {activeTab === 'services' && modulesConfig.services && (
                             <ServicesTab
                                 services={services} role={role} setSelectedService={setSelectedService} setAddingService={setAddingService}
                                 handleDeleteService={handleDeleteService} handleUploadImage={handleUploadImage} handleRemoveImage={handleRemoveImage}
@@ -622,7 +631,7 @@ export default function Dashboard() {
                             />
                         )}
 
-                        {activeTab === 'inventory' && (
+                        {activeTab === 'inventory' && modulesConfig.inventory && (
                             <InventoryTab
                                 inventory={inventory} user={user} role={role} handleAddInventory={handleAddInventory}
                                 handleAdjustInventory={handleAdjustInventory} handleDeleteInventory={handleDeleteInventory}
@@ -637,7 +646,7 @@ export default function Dashboard() {
                             />
                         )}
 
-                        {activeTab === 'clients' && (
+                        {activeTab === 'clients' && modulesConfig.clients && (
                             <ClientsTab
                                 filteredClients={filteredClients} clientSearchQuery={clientSearchQuery} setClientSearchQuery={setClientSearchQuery}
                                 Search={Search} UserCircle={UserCircle} setSelectedClient={setSelectedClient} selectedClient={selectedClient}
@@ -648,7 +657,7 @@ export default function Dashboard() {
                             />
                         )}
 
-                        {activeTab === 'analytics' && (
+                        {activeTab === 'analytics' && modulesConfig.analytics && (
                             <AnalyticsTab
                                 clients={clients} archivedApps={archivedApps} totalRevenue={totalRevenue} totalPayroll={totalPayroll}
                                 totalMaterialsCost={totalMaterialsCost} employeeStats={employeeStats} BarChart3={BarChart3} role={role} Calculator={Calculator}
@@ -669,6 +678,7 @@ export default function Dashboard() {
                                 weeklySettings={weeklySettings} setWeeklySettings={setWeeklySettings} DAYS={DAYS} handleSaveProfile={handleSaveProfile} saving={saving}
                                 newEmpName={newEmpName} setNewEmpName={setNewEmpName} newEmpSpec={newEmpSpec} setNewEmpSpec={setNewEmpSpec}
                                 newEmpCommission={newEmpCommission} setNewEmpCommission={setNewEmpCommission} addingEmp={addingEmp}
+                                modulesConfig={modulesConfig} setModulesConfig={setModulesConfig}
                             />
                         )}
 
@@ -680,7 +690,13 @@ export default function Dashboard() {
                     className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)]"
                     style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
                 >
-                    {NAV_ITEMS.map((tab) => {
+                    {NAV_ITEMS.filter(tab => {
+                        if (tab.id === 'services') return modulesConfig.services;
+                        if (tab.id === 'clients') return modulesConfig.clients;
+                        if (tab.id === 'inventory') return modulesConfig.inventory;
+                        if (tab.id === 'analytics') return modulesConfig.analytics;
+                        return true;
+                    }).map((tab) => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button
@@ -905,7 +921,7 @@ export default function Dashboard() {
                                 <div><p className="text-[10px] text-stone-500 font-bold uppercase tracking-widest mb-1.5">Услуга</p><p className="text-sm font-bold text-stone-800">{selectedApp.service?.name || "Без услуги"}</p></div>
                             </div>
 
-                            {selectedApp.status === 'active' && inventory.length > 0 && (
+                            {selectedApp.status === 'active' && inventory.length > 0 && modulesConfig.inventory !== false && (
                                 <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
                                     <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5" /> Использованные материалы</h4>
 
