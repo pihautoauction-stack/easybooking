@@ -58,6 +58,32 @@ export default function InventoryTab({
                         </div>
                     </div>
 
+                    {/* БЛОК: ЗАКАЧНИВАЮЩИЕСЯ ТОВАРЫ */}
+                    {(() => {
+                        const lowStockItems = inventory.filter((i: any) => i.quantity <= i.critical_level);
+                        if (lowStockItems.length === 0) return null;
+
+                        return (
+                            <div className="bg-rose-50 border border-rose-200 p-5 rounded-[24px]">
+                                <h4 className="text-sm font-black text-rose-600 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Внимание: Заканчивающиеся позиции</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                    {lowStockItems.map((item: any) => (
+                                        <div key={item.id} className="bg-white p-3 rounded-xl border border-rose-100 shadow-sm flex justify-between items-center group">
+                                            <div>
+                                                <p className="text-sm font-bold text-stone-800 line-clamp-1" title={item.name}>{item.name}</p>
+                                                <p className="text-xs text-stone-500 mt-0.5">{item.category}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-rose-600 font-black text-sm px-2 py-1 bg-rose-50 rounded-lg">{item.quantity} {item.unit}</span>
+                                                <button onClick={() => handleAdjustInventory(item, 'add')} className="p-1.5 text-rose-400 hover:text-emerald-500 hover:bg-emerald-50 bg-white border border-stone-100 rounded-lg transition-colors md:opacity-0 group-hover:opacity-100" title="Оприходовать"><Plus className="w-4 h-4" /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     <div className="bg-white p-2 rounded-[32px] border border-stone-200 shadow-sm">
                         {Object.keys(groupedInventory).length === 0 ? <p className="text-center text-stone-400 text-sm py-10 font-bold">Склад пуст</p> :
                             (Object.entries(groupedInventory) as [string, any[]][]).map(([category, items]) => (

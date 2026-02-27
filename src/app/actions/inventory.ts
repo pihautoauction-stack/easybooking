@@ -2,7 +2,11 @@
 
 import { createClient } from '@/lib/supabase/server';
 
-export async function completeAppointment(appointmentId: string, usedMaterials: { id: string; qty: number }[]) {
+export async function completeAppointment(
+    appointmentId: string,
+    usedMaterials: { id: string; qty: number }[],
+    soldItems: { id: string; qty: number }[] = []
+) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -25,32 +29,43 @@ export async function completeAppointment(appointmentId: string, usedMaterials: 
         let totalCost = 0;
         let totalRetail = 0;
 
-        for (const used of usedMaterials) {
-            if (used.id && used.qty > 0) {
-                const { data: item, error: invError } = await supabase
-                    .from('inventory')
-                    .select('*')
-                    .eq('id', used.id)
-                    .single();
+        // Вспомогательная функция для списания
+        const processItems = async (items: { id: string; qty: number }[], type: 'appointment_usage' | 'retail_sale') => {
+            for (const itemData of items) {
+                if (itemData.id && itemData.qty > 0) {
+                    const { data: item, error: invError } = await supabase
+                        .from('inventory')
+                        .select('*')
+                        .eq('id', itemData.id)
+                        .single();
 
-                if (invError || !item) continue;
-                if (item.user_id !== user.id) continue;
+                    if (invError || !item) continue;
+                    if (item.user_id !== user.id) continue;
 
-                totalCost += item.cost_price * used.qty;
-                totalRetail += (item.retail_price || item.cost_price) * used.qty;
-                const newQty = item.quantity - used.qty;
+                    totalCost += item.cost_price * itemData.qty;
+                    if (type === 'retail_sale') {
+                        // Для расхода розничная цена = 0 (уже вкл. в цену услуги), для ритейла = розничная цена
+                        totalRetail += (item.retail_price || item.cost_price) * itemData.qty;
+                    }
 
-                await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
+                    const newQty = item.quantity - itemData.qty;
+                    await supabase.from('inventory').update({ quantity: newQty }).eq('id', item.id);
 
-                await supabase.from('inventory_transactions').insert({
-                    inventory_id: item.id,
-                    user_id: user.id,
-                    appointment_id: app.id,
-                    change_amount: -used.qty,
-                    type: 'appointment_usage'
-                });
+                    await supabase.from('inventory_transactions').insert({
+                        inventory_id: item.id,
+                        user_id: user.id,
+                        appointment_id: app.id,
+                        change_amount: -itemData.qty,
+                        type: type
+                    });
+                }
             }
-        }
+        };
+
+        // Обрабатываем расходники (идут только в себестоимость)
+        await processItems(usedMaterials, 'appointment_usage');
+        // Обрабатываем продажи (идут в себестоимость + выручку)
+        await processItems(soldItems, 'retail_sale');
 
         // 3. Update appointment
         await supabase.from('appointments').update({

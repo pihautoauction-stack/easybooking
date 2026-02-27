@@ -149,6 +149,7 @@ export default function Dashboard() {
         if (!app) {
             setSelectedApp(null);
             setUsedMaterials([]);
+            setSoldItems([]);
             return;
         }
         setSelectedApp(app);
@@ -182,6 +183,10 @@ export default function Dashboard() {
     const [addingInv, setAddingInv] = useState(false);
     const [expandedInvCategories, setExpandedInvCategories] = useState<Record<string, boolean>>({});
     const [usedMaterials, setUsedMaterials] = useState<{ id: string, qty: number }[]>([]);
+    const [soldItems, setSoldItems] = useState<{ id: string, qty: number }[]>([]);
+    const [adjustInvModal, setAdjustInvModal] = useState<{ show: boolean, item: any, type: 'add' | 'deduct' }>({ show: false, item: null, type: 'add' });
+    const [adjustInvAmount, setAdjustInvAmount] = useState("1");
+    const [adjustInvLoading, setAdjustInvLoading] = useState(false);
 
     const DAYS = [
         { id: 1, label: "Пн" }, { id: 2, label: "Вт" }, { id: 3, label: "Ср" },
@@ -359,14 +364,22 @@ export default function Dashboard() {
         } catch (err) { alert("Ошибка сохранения"); } finally { setAddingInv(false); }
     };
 
-    const handleAdjustInventory = async (item: any, type: 'add' | 'deduct') => {
-        const amountStr = prompt(`Введите количество для ${type === 'add' ? 'прихода' : 'списания'} (${item.unit}):`, "1");
-        if (!amountStr) return;
-        const amount = Number(amountStr);
+    const handleAdjustInventory = (item: any, type: 'add' | 'deduct') => {
+        setAdjustInvModal({ show: true, item, type });
+        setAdjustInvAmount("1");
+    };
+
+    const submitAdjustInventory = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = Number(adjustInvAmount);
         if (isNaN(amount) || amount <= 0) return alert("Неверное количество");
 
-        const result = await adjustInventoryStock(item.id, amount, type);
+        setAdjustInvLoading(true);
+        const result = await adjustInventoryStock(adjustInvModal.item.id, amount, adjustInvModal.type);
+        setAdjustInvLoading(false);
+
         if (result.success) {
+            setAdjustInvModal({ show: false, item: null, type: 'add' });
             await loadData(user.id, true);
         } else {
             alert("Ошибка: " + result.error);
@@ -390,9 +403,10 @@ export default function Dashboard() {
     const handleCompleteRecord = async (app: any) => {
         if (!confirm("Завершить визит и списать материалы?")) return;
 
-        const result = await completeAppointment(app.id, usedMaterials);
+        const result = await completeAppointment(app.id, usedMaterials, soldItems);
         if (result.success) {
             setUsedMaterials([]);
+            setSoldItems([]);
             setSelectedApp(null);
             setJournalView('archive');
             await loadData(user.id, true);
@@ -638,7 +652,8 @@ export default function Dashboard() {
                                 journalView={journalView} setJournalView={setJournalView} selectedApp={selectedApp} setSelectedApp={handleOpenApp}
                                 activeDailyApps={activeDailyApps} archivedApps={archivedApps} format={format} ru={ru}
                                 handleCompleteRecord={handleCompleteRecord} handleDeleteRecord={handleDeleteRecord}
-                                usedMaterials={usedMaterials} setUsedMaterials={setUsedMaterials} inventory={inventory}
+                                usedMaterials={usedMaterials} setUsedMaterials={setUsedMaterials}
+                                soldItems={soldItems} setSoldItems={setSoldItems} inventory={inventory}
                                 showManualModal={showManualModal} setShowManualModal={setShowManualModal}
                                 setViewDate={setViewDate} viewDate={viewDate} addDays={addDays}
                                 CalendarIcon={CalendarIcon} Archive={Archive} ChevronLeft={ChevronLeft} ChevronRight={ChevronRight} Plus={Plus} Briefcase={Briefcase}
@@ -1018,30 +1033,56 @@ export default function Dashboard() {
                             </div>
 
                             {selectedApp.status === 'active' && inventory.length > 0 && modulesConfig.inventory !== false && (
-                                <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
-                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5" /> Использованные материалы</h4>
+                                <>
+                                    {/* БЛОК 1: РАСХОДНИКИ (Идут в себестоимость) */}
+                                    <div className="bg-orange-50/50 p-4 rounded-[24px] border border-orange-100">
+                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-orange-800 mb-3 flex items-center gap-1.5"><Package className="w-3.5 h-3.5" /> Расходники на услугу</h4>
 
-                                    {usedMaterials.map((um, idx) => (
-                                        <div key={idx} className="flex gap-2 mb-2 items-center">
-                                            <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer w-0">
-                                                <option value="" disabled>Выбрать из папок...</option>
-                                                {sortedInvCats.map(cat => (
-                                                    <optgroup key={cat} label={`📂 ${cat}`}>
-                                                        {groupedInventory[cat].map((i: any) => (
-                                                            <option key={i.id} value={i.id}>{i.name} (Остаток: {i.quantity} {i.unit})</option>
-                                                        ))}
-                                                    </optgroup>
-                                                ))}
-                                            </select>
-                                            {/* ИСПРАВЛЕННЫЙ INPUT ДЛЯ КОЛИЧЕСТВА - ТЕПЕРЬ ОН НЕ ИСЧЕЗНЕТ */}
-                                            <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 min-w-[80px] shrink-0 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                        {usedMaterials.map((um, idx) => (
+                                            <div key={idx} className="flex gap-2 mb-2 items-center">
+                                                <select value={um.id} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].id = e.target.value; setUsedMaterials(newArr); }} className="flex-1 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer w-0">
+                                                    <option value="" disabled>Выбрать со склада...</option>
+                                                    {sortedInvCats.map(cat => (
+                                                        <optgroup key={cat} label={`📂 ${cat}`}>
+                                                            {groupedInventory[cat].map((i: any) => (
+                                                                <option key={i.id} value={i.id}>{i.name} (Остаток: {i.quantity} {i.unit})</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))}
+                                                </select>
+                                                <input type="number" min="0" step="0.1" value={um.qty} onChange={(e) => { const newArr = [...usedMaterials]; newArr[idx].qty = Number(e.target.value); setUsedMaterials(newArr); }} className="w-20 min-w-[80px] shrink-0 bg-white border border-orange-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                                <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50 shrink-0"><X className="w-4 h-4" /></button>
+                                            </div>
+                                        ))}
+                                        <button onClick={() => setUsedMaterials([...usedMaterials, { id: '', qty: 1 }])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
+                                    </div>
 
-                                            <button onClick={() => setUsedMaterials(usedMaterials.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50 shrink-0"><X className="w-4 h-4" /></button>
-                                        </div>
-                                    ))}
+                                    {/* БЛОК 2: ПРОДАЖИ (Ритейл - идут в себестоимость и в выручку) */}
+                                    <div className="bg-emerald-50/50 p-4 rounded-[24px] border border-emerald-100">
+                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-emerald-800 mb-3 flex items-center gap-1.5 cursor-help" title="Эти товары добавят стоимость к чеку клиента и спишутся со склада">
+                                            🛍️ Продажа товаров (Ритейл)
+                                        </h4>
 
-                                    <button onClick={() => setUsedMaterials([...usedMaterials, { id: '', qty: 1 }])} className="w-full py-2.5 mt-1 border-2 border-dashed border-orange-200 text-orange-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-orange-100 transition-colors">+ Добавить списание</button>
-                                </div>
+                                        {soldItems.map((si, idx) => (
+                                            <div key={idx} className="flex gap-2 mb-2 items-center">
+                                                <select value={si.id} onChange={(e) => { const newArr = [...soldItems]; newArr[idx].id = e.target.value; setSoldItems(newArr); }} className="flex-1 bg-white border border-emerald-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 cursor-pointer w-0">
+                                                    <option value="" disabled>Что продаем?</option>
+                                                    {sortedInvCats.map(cat => (
+                                                        <optgroup key={cat} label={`📂 ${cat}`}>
+                                                            {groupedInventory[cat].map((i: any) => (
+                                                                <option key={i.id} value={i.id}>{i.name} ({i.retail_price || i.cost_price} ₽)</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    ))}
+                                                </select>
+                                                <input type="number" min="0" step="1" value={si.qty} onChange={(e) => { const newArr = [...soldItems]; newArr[idx].qty = Number(e.target.value); setSoldItems(newArr); }} className="w-20 min-w-[80px] shrink-0 bg-white border border-emerald-200 rounded-xl p-2 text-sm font-bold outline-none text-stone-800 text-center" placeholder="Кол-во" />
+                                                <button onClick={() => setSoldItems(soldItems.filter((_, i) => i !== idx))} className="p-2 text-rose-500 bg-white border border-rose-100 rounded-xl hover:bg-rose-50 shrink-0"><X className="w-4 h-4" /></button>
+                                            </div>
+                                        ))}
+
+                                        <button onClick={() => setSoldItems([...soldItems, { id: '', qty: 1 }])} className="w-full py-2.5 mt-1 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-100 transition-colors">+ Добавить продажу</button>
+                                    </div>
+                                </>
                             )}
 
                             <div>
@@ -1133,6 +1174,58 @@ export default function Dashboard() {
                         </div>
 
                         <button onClick={() => setWaitlistModal({ show: false, waitlistPeople: [], cancelledApp: null })} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-black active:scale-95 transition-all">Закрыть</button>
+                    </div>
+                </div>
+            )}
+            {/* МОДАЛКА: ИЗМЕНЕНИЕ ОСТАТКОВ СКЛАДА */}
+            {adjustInvModal.show && adjustInvModal.item && (
+                <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setAdjustInvModal({ show: false, item: null, type: 'add' })}>
+                    <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl p-6 md:p-8 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl ${adjustInvModal.type === 'add' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'}`}>
+                                {adjustInvModal.type === 'add' ? <Plus className="w-6 h-6" /> : <Package className="w-6 h-6" />}
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-stone-900 tracking-tight">{adjustInvModal.type === 'add' ? 'Оприходование' : 'Списание'}</h3>
+                                <p className="text-xs text-stone-500 font-medium">Складской учет</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-stone-50 border border-stone-100 p-4 rounded-2xl mb-6">
+                            <p className="font-bold text-stone-800 line-clamp-2">{adjustInvModal.item.name}</p>
+                            <p className="text-xs text-stone-500 mt-1">Текущий остаток: <span className="font-black text-stone-700">{adjustInvModal.item.quantity} {adjustInvModal.item.unit}</span></p>
+                        </div>
+
+                        <form onSubmit={submitAdjustInventory} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest ml-1 mb-1 block">Количество ({adjustInvModal.item.unit}) *</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    required
+                                    value={adjustInvAmount}
+                                    onChange={e => setAdjustInvAmount(e.target.value)}
+                                    className="w-full bg-white border border-stone-200 rounded-xl p-4 text-xl font-black text-center outline-none focus:border-stone-400 text-stone-800 focus:ring-4 focus:ring-stone-100 transition-all"
+                                    autoFocus
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={adjustInvLoading}
+                                className={`w-full text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg ${adjustInvModal.type === 'add' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-orange-500 hover:bg-orange-600'}`}
+                            >
+                                {adjustInvLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Подтвердить'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAdjustInvModal({ show: false, item: null, type: 'add' })}
+                                className="w-full bg-transparent text-stone-400 py-3 rounded-2xl font-bold text-sm hover:bg-stone-50 hover:text-stone-600 active:scale-95 transition-all"
+                            >
+                                Отмена
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}
