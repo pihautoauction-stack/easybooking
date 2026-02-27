@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { format, startOfToday, addDays, isSameDay } from "date-fns";
 import { ru } from "date-fns/locale";
-import { completeAppointment, adjustInventoryStock } from "@/app/actions/inventory";
+import { completeAppointment, adjustInventoryStock, fetchInventoryDocuments } from "@/app/actions/inventory";
 
 const formatPhoneInput = (value: string) => {
     let input = value.replace(/\D/g, '');
@@ -169,7 +169,8 @@ export default function Dashboard() {
     const [savingNote, setSavingNote] = useState(false);
 
     // СКЛАД
-    const [invView, setInvView] = useState<'stock' | 'history'>('stock');
+    const [invView, setInvView] = useState<'stock' | 'history' | 'documents'>('stock');
+    const [inventoryDocuments, setInventoryDocuments] = useState<any[]>([]);
     const [showInvModal, setShowInvModal] = useState(false);
     const [invCategorySelect, setInvCategorySelect] = useState("Расходники");
     const [invCategoryInput, setInvCategoryInput] = useState("");
@@ -257,6 +258,8 @@ export default function Dashboard() {
             setInventory(inv || []);
             const { data: tx } = await supabase.from("inventory_transactions").select("*, inventory(name, unit)").eq("user_id", userId).order('created_at', { ascending: false }).limit(50);
             setTransactions(tx || []);
+            const docsRes = await fetchInventoryDocuments(userId);
+            if (docsRes.success) setInventoryDocuments(docsRes.documents || []);
 
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
             const { data: a } = await supabase.from("appointments")
@@ -693,6 +696,7 @@ export default function Dashboard() {
                                 totalInventoryUnits={totalInventoryUnits} inventoryValue={inventoryValue} groupedInventory={groupedInventory}
                                 toggleInvCategory={toggleInvCategory} expandedInvCategories={expandedInvCategories} Folder={Folder} FolderOpen={FolderOpen}
                                 transactions={transactions} format={format} ru={ru}
+                                inventoryDocuments={inventoryDocuments} loadData={loadData}
                             />
                         )}
 

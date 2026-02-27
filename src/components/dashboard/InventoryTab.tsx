@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export default function InventoryTab({
     inventory,
     user,
@@ -12,6 +14,8 @@ export default function InventoryTab({
     AlertTriangle,
     Edit3,
     Trash2,
+    FileText,
+    Loader2,
     newInvName, setNewInvName,
     newInvUnit, setNewInvUnit,
     newInvCost, setNewInvCost,
@@ -28,18 +32,80 @@ export default function InventoryTab({
     expandedInvCategories,
     Folder, FolderOpen,
     transactions,
-    format, ru
+    format, ru,
+    inventoryDocuments, loadData
 }: any) {
+    // ЛОКАЛЬНЫЕ СТЕЙТЫ ДОКУМЕНТОВ
+    const [showDocModal, setShowDocModal] = useState(false);
+    const [docType, setDocType] = useState<'receipt' | 'write_off' | 'inventory_check'>('receipt');
+    const [docNotes, setDocNotes] = useState('');
+    const [docItems, setDocItems] = useState<{ id: string; reqQty: number; factQty: number; costPrice: number }[]>([]);
+    const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+
+    // Добавляем позицию в черновик
+    const handleAddDocItem = (invId: string) => {
+        if (!invId) return;
+        const inv = inventory.find((i: any) => i.id === invId);
+        if (!inv || docItems.some(di => di.id === invId)) return;
+        setDocItems([...docItems, { id: inv.id, reqQty: inv.quantity, factQty: inv.quantity, costPrice: inv.cost_price }]);
+    };
+
+    // Обновляем факт
+    const updateDocItem = (id: string, field: 'factQty' | 'costPrice', value: number) => {
+        setDocItems(docItems.map(di => di.id === id ? { ...di, [field]: value } : di));
+    };
+
+    const handleProcessDoc = async () => {
+        if (docItems.length === 0) return alert('Добавьте позиции в документ');
+        setIsProcessingDoc(true);
+
+        const itemsPayload = docItems.map((di: any) => {
+            let change = 0;
+            if (docType === 'receipt') change = di.factQty; // Если приход, то factQty = сколько пришло
+            if (docType === 'write_off') change = -di.factQty; // Если списание, то factQty = сколько списать
+            if (docType === 'inventory_check') change = di.factQty - di.reqQty; // Разница факта с учетным для инвент-ции
+            return {
+                id: di.id,
+                change_amount: change,
+                cost_price: docType === 'receipt' ? di.costPrice : undefined
+            };
+        });
+
+        // Считаем сумму (для прихода это factQty * costPrice)
+        let totalAmount = 0;
+        if (docType === 'receipt') {
+            docItems.forEach((di: any) => totalAmount += (di.factQty * di.costPrice));
+        }
+
+        const { processInventoryDocument } = await import('@/app/actions/inventory');
+        const res = await processInventoryDocument(docType, totalAmount, docNotes, itemsPayload);
+
+        if (res.success) {
+            setShowDocModal(false);
+            setDocItems([]);
+            setDocNotes('');
+            loadData(user.id, true);
+        } else {
+            alert('Ошибка проведения документа: ' + res.error);
+        }
+        setIsProcessingDoc(false);
+    };
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div className="flex bg-stone-200/60 p-1 rounded-xl w-max shadow-inner">
                     <button onClick={() => setInvView('stock')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all ${invView === 'stock' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>Остатки</button>
                     <button onClick={() => setInvView('history')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${invView === 'history' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><History className="w-4 h-4" /> История</button>
+                    <button onClick={() => setInvView('documents')} className={`px-5 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${invView === 'documents' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}><FileText className="w-4 h-4" /> Документы</button>
                 </div>
                 {invView === 'stock' && (
                     <button onClick={() => setShowInvModal(true)} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black">
                         <Plus className="w-4 h-4" /> Новый товар
+                    </button>
+                )}
+                {invView === 'documents' && (
+                    <button onClick={() => { setDocType('inventory_check'); setDocItems(inventory.map((i: any) => ({ id: i.id, reqQty: i.quantity, factQty: i.quantity, costPrice: i.cost_price }))); setShowDocModal(true); }} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black">
+                        <Plus className="w-4 h-4" /> Сверка (Инвентаризация)
                     </button>
                 )}
             </div>
@@ -171,6 +237,115 @@ export default function InventoryTab({
                                 )
                             })
                         }
+                    </div>
+                </div>
+            )}
+            {invView === 'documents' && (
+                <div className="bg-white p-6 md:p-8 rounded-[32px] border border-stone-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+                    <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center gap-2"><FileText className="w-5 h-5 text-rose-500" /> Документы</h3>
+                    <div className="space-y-3">
+                        {(!inventoryDocuments || inventoryDocuments.length === 0) ? <p className="text-sm text-stone-400 font-bold text-center py-10">Документов пока нет</p> :
+                            inventoryDocuments.map((doc: any) => {
+                                const typeColors: Record<string, string> = {
+                                    receipt: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+                                    write_off: 'bg-rose-50 text-rose-600 border-rose-100',
+                                    inventory_check: 'bg-amber-50 text-amber-600 border-amber-100'
+                                };
+                                const typeLabels: Record<string, string> = {
+                                    receipt: 'Приход',
+                                    write_off: 'Списание',
+                                    inventory_check: 'Инвентаризация'
+                                };
+                                return (
+                                    <div key={doc.id} className="flex justify-between items-center p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:border-stone-200 transition-colors">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest ${typeColors[doc.type]}`}>{typeLabels[doc.type]}</span>
+                                                <span className="font-bold text-stone-400 text-xs">от {format(new Date(doc.created_at), "d MMMM yyyy", { locale: ru })}</span>
+                                            </div>
+                                            {doc.notes && <p className="text-sm font-bold text-stone-600 mt-2">«{doc.notes}»</p>}
+                                            <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">Транзакций: {doc.transactions?.length || 0}</p>
+                                        </div>
+                                        {doc.type === 'receipt' && <span className="font-black text-sm text-stone-800 shrink-0">{doc.total_amount} ₽</span>}
+                                    </div>
+                                )
+                            })
+                        }
+                    </div>
+                </div>
+            )}
+
+            {/* МОДАЛКА ДОКУМЕНТА (Инвентаризация/Приход) */}
+            {showDocModal && (
+                <div className="fixed inset-0 z-[70] flex justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200 pt-10 sm:pt-20 items-start overflow-y-auto">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-4xl shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setShowDocModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><Trash2 className="w-5 h-5 hidden" /> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                        <h2 className="text-2xl font-black mb-6 text-stone-900 flex items-center gap-2">
+                            {docType === 'inventory_check' ? 'Сверка остатков (Инвентаризация)' : 'Новый документ'}
+                        </h2>
+
+                        <div className="space-y-4">
+                            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 flex gap-3 text-amber-800 text-sm font-bold">
+                                <AlertTriangle className="w-5 h-5 shrink-0" />
+                                <p>Укажите фактическое наличие товаров на полках. Система сама подсчитает разницу с учетными данными, спишет недостачу или оприходует излишки.</p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Комментарий к проверке</label>
+                                <input value={docNotes} onChange={e => setDocNotes(e.target.value)} placeholder="Например: Ежемесячная ревизия за март..." className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                            </div>
+
+                            <div className="border border-stone-200 rounded-2xl overflow-hidden mt-4">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-stone-50 border-b border-stone-200 text-[10px] uppercase tracking-widest text-stone-500 font-black">
+                                        <tr>
+                                            <th className="p-3">Товар</th>
+                                            <th className="p-3 text-center">По учету</th>
+                                            <th className="p-3 px-6 text-center">Фактически есть</th>
+                                            <th className="p-3 text-center">Разница</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100 font-bold">
+                                        {docItems.map(item => {
+                                            const invItem = inventory.find((i: any) => i.id === item.id);
+                                            if (!invItem) return null;
+                                            const diff = item.factQty - item.reqQty;
+                                            let diffStr = diff > 0 ? `+${diff}` : diff.toString();
+                                            let diffColor = diff === 0 ? 'text-stone-300' : diff > 0 ? 'text-emerald-500' : 'text-rose-500';
+
+                                            return (
+                                                <tr key={item.id} className="hover:bg-stone-50/50">
+                                                    <td className="p-3">
+                                                        <p className="text-stone-900 line-clamp-1">{invItem.name}</p>
+                                                        <p className="text-xs text-stone-400 font-medium">{invItem.category}</p>
+                                                    </td>
+                                                    <td className="p-3 text-center text-stone-500 font-mono">{item.reqQty}</td>
+                                                    <td className="p-3 max-w-[120px]">
+                                                        <div className="flex items-center gap-1 justify-center">
+                                                            <input
+                                                                type="number" min="0" step="any"
+                                                                value={item.factQty}
+                                                                onChange={e => updateDocItem(item.id, 'factQty', Number(e.target.value))}
+                                                                className="w-20 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner"
+                                                            />
+                                                            <span className="text-[10px] text-stone-400 uppercase tracking-widest">{invItem.unit}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className={`p-3 text-center font-black ${diffColor}`}>{diffStr}</td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="pt-4 flex justify-end gap-3">
+                                <button onClick={() => setShowDocModal(false)} className="px-6 py-3 rounded-xl font-bold text-stone-500 hover:bg-stone-50 transition-colors">Отмена</button>
+                                <button onClick={handleProcessDoc} disabled={isProcessingDoc} className="bg-stone-900 hover:bg-black text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                    {isProcessingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Провести инвентаризацию'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

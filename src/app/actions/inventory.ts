@@ -25,7 +25,27 @@ export async function completeAppointment(
         if (appError || !app) throw new Error('Запись не найдена');
         if (app.master_id !== user.id) throw new Error('Нет доступа');
 
-        // 2. Process materials
+        // 2. Валидация остатков (Защита от списания в минус)
+        const requestedQtys: Record<string, number> = {};
+        const allItems = [
+            ...(usedMaterials || []).map((m) => ({ ...m, type: 'appointment_usage' as const })),
+            ...(soldItems || []).map((m) => ({ ...m, type: 'retail_sale' as const }))
+        ];
+
+        for (const reqItem of allItems) {
+            if (!reqItem.id || reqItem.qty <= 0) continue;
+            requestedQtys[reqItem.id] = (requestedQtys[reqItem.id] || 0) + reqItem.qty;
+        }
+
+        for (const itemId of Object.keys(requestedQtys)) {
+            const reqQty = requestedQtys[itemId];
+            const { data: invItem } = await supabase.from('inventory').select('name, quantity, unit').eq('id', itemId).single();
+            if (invItem && invItem.quantity < reqQty) {
+                return { success: false, error: `Недостаточно позиций: "${invItem.name}". На складе: ${invItem.quantity} ${invItem.unit}. Требуется: ${reqQty} ${invItem.unit}.` };
+            }
+        }
+
+        // 3. Process materials
         let totalCost = 0;
         let totalRetail = 0;
 
@@ -142,3 +162,80 @@ export async function adjustInventoryStock(itemId: string, amount: number, type:
         return { success: false, error: err.message };
     }
 }
+
+export async function fetchInventoryDocuments(userId: string) {
+    const supabase = await createClient();
+    try {
+        const { data, error } = await supabase
+            .from('inventory_documents')
+            .select('*, transactions:inventory_transactions(*, inventory:inventory(name, unit, sku, category))')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { success: true, documents: data };
+    } catch (err: any) {
+        return { success: false, error: err.message };
+    }
+}
+
+export async function processInventoryDocument(
+    type: 'receipt' | 'write_off' | 'inventory_check',
+    totalAmount: number,
+    notes: string,
+    items: { id: string; change_amount: number; cost_price?: number }[]
+) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Не авторизован' };
+
+    try {
+        // 1. Создание документа
+        const { data: doc, error: docError } = await supabase
+            .from('inventory_documents')
+            .insert({
+                user_id: user.id,
+                type,
+                status: 'completed',
+                total_amount: totalAmount,
+                notes
+            })
+            .select()
+            .single();
+
+        if (docError || !doc) throw new Error('Ошибка создания документа: ' + docError?.message);
+
+        // 2. Обработка позиций документа и обновление инвентаря
+        for (const item of items) {
+            if (item.change_amount === 0) continue;
+
+            const { data: invItem } = await supabase.from('inventory').select('*').eq('id', item.id).single();
+            if (!invItem || invItem.user_id !== user.id) continue;
+
+            // Для прихода (receipt) можно обновлять цену закупки
+            const updates: any = { quantity: invItem.quantity + item.change_amount };
+            if (type === 'receipt' && item.cost_price !== undefined && item.cost_price > 0) {
+                updates.cost_price = item.cost_price;
+            }
+
+            await supabase.from('inventory').update(updates).eq('id', item.id);
+
+            // Тип транзакции простая конвертация в плюс или минус
+            const txType = item.change_amount > 0 ? 'manual_add' : 'manual_deduct';
+
+            await supabase.from('inventory_transactions').insert({
+                inventory_id: item.id,
+                user_id: user.id,
+                change_amount: item.change_amount,
+                type: txType,
+                document_id: doc.id
+            });
+        }
+
+        return { success: true, document: doc };
+    } catch (err: any) {
+        console.error("Doc Processing Error:", err);
+        return { success: false, error: err.message };
+    }
+}
+
