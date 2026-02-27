@@ -33,7 +33,7 @@ export default function InventoryTab({
     Folder, FolderOpen,
     transactions,
     format, ru,
-    inventoryDocuments, loadData
+    inventoryDocuments, loadData, Search
 }: any) {
     // ЛОКАЛЬНЫЕ СТЕЙТЫ ДОКУМЕНТОВ
     const [showDocModal, setShowDocModal] = useState(false);
