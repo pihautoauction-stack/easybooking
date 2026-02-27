@@ -696,7 +696,7 @@ export default function Dashboard() {
                                 totalInventoryUnits={totalInventoryUnits} inventoryValue={inventoryValue} groupedInventory={groupedInventory}
                                 toggleInvCategory={toggleInvCategory} expandedInvCategories={expandedInvCategories} Folder={Folder} FolderOpen={FolderOpen}
                                 transactions={transactions} format={format} ru={ru}
-                                inventoryDocuments={inventoryDocuments} loadData={loadData} FileText={FileText} Loader2={Loader2}
+                                inventoryDocuments={inventoryDocuments} loadData={loadData} FileText={FileText} Loader2={Loader2} Search={Search}
                             />
                         )}
 

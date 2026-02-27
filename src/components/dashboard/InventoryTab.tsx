@@ -39,20 +39,48 @@ export default function InventoryTab({
     const [showDocModal, setShowDocModal] = useState(false);
     const [docType, setDocType] = useState<'receipt' | 'write_off' | 'inventory_check'>('receipt');
     const [docNotes, setDocNotes] = useState('');
-    const [docItems, setDocItems] = useState<{ id: string; reqQty: number; factQty: number; costPrice: number }[]>([]);
+    const [docItems, setDocItems] = useState<{ id: string; reqQty: number; factQty: number; costPrice: number; packCount?: number; packVolume?: number; packPrice?: number }[]>([]);
     const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+    const [docItemSearch, setDocItemSearch] = useState('');
+    const [showDocItemDropdown, setShowDocItemDropdown] = useState(false);
+    const [selectedDoc, setSelectedDoc] = useState<any>(null);
 
     // Добавляем позицию в черновик
     const handleAddDocItem = (invId: string) => {
         if (!invId) return;
         const inv = inventory.find((i: any) => i.id === invId);
         if (!inv || docItems.some(di => di.id === invId)) return;
-        setDocItems([...docItems, { id: inv.id, reqQty: inv.quantity, factQty: inv.quantity, costPrice: inv.cost_price }]);
+        setDocItems([...docItems, {
+            id: inv.id,
+            reqQty: inv.quantity,
+            factQty: inv.quantity,
+            costPrice: inv.cost_price,
+            packCount: 1,
+            packVolume: inv.unit === 'шт' ? 1 : (inv.unit === 'л' ? 1000 : 100),
+            packPrice: 0
+        }]);
+        setDocItemSearch('');
+        setShowDocItemDropdown(false);
     };
 
     // Обновляем факт
-    const updateDocItem = (id: string, field: 'factQty' | 'costPrice', value: number) => {
-        setDocItems(docItems.map(di => di.id === id ? { ...di, [field]: value } : di));
+    const updateDocItem = (id: string, field: string, value: number) => {
+        setDocItems(docItems.map(di => {
+            if (di.id !== id) return di;
+            const updated: any = { ...di, [field]: value };
+
+            if (docType === 'receipt') {
+                if (field === 'packCount' || field === 'packVolume') {
+                    // Пересчет факта (сколько всего пришло в базовых единицах)
+                    updated.factQty = (updated.packCount || 0) * (updated.packVolume || 1);
+                }
+                if (field === 'packPrice' || field === 'packVolume') {
+                    // Пересчет себестоимости базовой единицы
+                    updated.costPrice = (updated.packVolume || 1) > 0 ? (updated.packPrice || 0) / (updated.packVolume || 1) : 0;
+                }
+            }
+            return updated;
+        }));
     };
 
     const handleProcessDoc = async () => {
@@ -74,7 +102,7 @@ export default function InventoryTab({
         // Считаем сумму (для прихода это factQty * costPrice)
         let totalAmount = 0;
         if (docType === 'receipt') {
-            docItems.forEach((di: any) => totalAmount += (di.factQty * di.costPrice));
+            docItems.forEach((di: any) => totalAmount += ((di.packCount || 0) * (di.packPrice || 0)));
         }
 
         const { processInventoryDocument } = await import('@/app/actions/inventory');
@@ -104,9 +132,17 @@ export default function InventoryTab({
                     </button>
                 )}
                 {invView === 'documents' && (
-                    <button onClick={() => { setDocType('inventory_check'); setDocItems(inventory.map((i: any) => ({ id: i.id, reqQty: i.quantity, factQty: i.quantity, costPrice: i.cost_price }))); setShowDocModal(true); }} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black">
-                        <Plus className="w-4 h-4" /> Сверка (Инвентаризация)
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => { setDocType('receipt'); setDocItems([]); setShowDocModal(true); }} className="bg-stone-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-black border border-stone-800">
+                            <Plus className="w-4 h-4" /> Приход
+                        </button>
+                        <button onClick={() => { setDocType('write_off'); setDocItems([]); setShowDocModal(true); }} className="bg-white text-stone-800 px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm border border-stone-200 hover:bg-stone-50 transition-colors">
+                            Списание
+                        </button>
+                        <button onClick={() => { setDocType('inventory_check'); setDocItems(inventory.map((i: any) => ({ id: i.id, reqQty: i.quantity, factQty: i.quantity, costPrice: i.cost_price }))); setShowDocModal(true); }} className="bg-white text-stone-800 px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm border border-stone-200 hover:bg-stone-50 transition-colors">
+                            Сверка
+                        </button>
+                    </div>
                 )}
             </div>
             {invView === 'stock' && (
@@ -257,7 +293,7 @@ export default function InventoryTab({
                                     inventory_check: 'Инвентаризация'
                                 };
                                 return (
-                                    <div key={doc.id} className="flex justify-between items-center p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:border-stone-200 transition-colors">
+                                    <div key={doc.id} onClick={() => setSelectedDoc(doc)} className="flex justify-between items-center p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:border-stone-300 hover:shadow-sm cursor-pointer transition-all">
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest ${typeColors[doc.type]}`}>{typeLabels[doc.type]}</span>
@@ -281,59 +317,171 @@ export default function InventoryTab({
                     <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-4xl shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => setShowDocModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><Trash2 className="w-5 h-5 hidden" /> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                         <h2 className="text-2xl font-black mb-6 text-stone-900 flex items-center gap-2">
-                            {docType === 'inventory_check' ? 'Сверка остатков (Инвентаризация)' : 'Новый документ'}
+                            {docType === 'inventory_check' ? 'Сверка остатков (Инвентаризация)' : docType === 'receipt' ? 'Приход товара от поставщика' : 'Списание товара'}
                         </h2>
 
                         <div className="space-y-4">
-                            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 flex gap-3 text-amber-800 text-sm font-bold">
-                                <AlertTriangle className="w-5 h-5 shrink-0" />
-                                <p>Укажите фактическое наличие товаров на полках. Система сама подсчитает разницу с учетными данными, спишет недостачу или оприходует излишки.</p>
-                            </div>
+                            {docType === 'inventory_check' && (
+                                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 flex gap-3 text-amber-800 text-sm font-bold">
+                                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                                    <p>Укажите фактическое наличие товаров на полках. Система сама подсчитает разницу с учетными данными, спишет недостачу или оприходует излишки.</p>
+                                </div>
+                            )}
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Комментарий к проверке</label>
-                                <input value={docNotes} onChange={e => setDocNotes(e.target.value)} placeholder="Например: Ежемесячная ревизия за март..." className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Комментарий к {docType === 'receipt' ? 'приходу' : docType === 'write_off' ? 'списанию' : 'проверке'}</label>
+                                <input value={docNotes} onChange={e => setDocNotes(e.target.value)} placeholder={docType === 'receipt' ? "Например: Накладная №... от ООО Ромашка" : docType === 'write_off' ? "Укажите причину списания: порча, использование на хоз. нужды..." : "Ежемесячная ревизия за март..."} className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
                             </div>
+
+                            {docType !== 'inventory_check' && (
+                                <div className="relative z-20">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Добавить товар в документ</label>
+                                    <div className="relative mt-1">
+                                        <Search className="w-5 h-5 absolute left-3.5 top-3.5 text-stone-400" />
+                                        <input
+                                            value={docItemSearch}
+                                            onChange={e => { setDocItemSearch(e.target.value); setShowDocItemDropdown(true); }}
+                                            onFocus={() => setShowDocItemDropdown(true)}
+                                            placeholder="Поиск по складу..."
+                                            className="w-full bg-white border border-stone-200 rounded-xl pl-11 pr-4 py-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800 focus:border-rose-400"
+                                        />
+                                        {(showDocItemDropdown && docItemSearch) && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-stone-100 shadow-xl rounded-2xl overflow-hidden max-h-60 overflow-y-auto">
+                                                {inventory.filter((i: any) => i.name.toLowerCase().includes(docItemSearch.toLowerCase()) && !docItems.some(di => di.id === i.id)).length === 0 ? (
+                                                    <div className="p-4 text-center text-stone-400 text-sm font-bold">Ничего не найдено</div>
+                                                ) : (
+                                                    inventory.filter((i: any) => i.name.toLowerCase().includes(docItemSearch.toLowerCase()) && !docItems.some(di => di.id === i.id)).map((item: any) => (
+                                                        <button key={item.id} onClick={() => handleAddDocItem(item.id)} className="w-full text-left p-3 hover:bg-stone-50 border-b border-stone-50 last:border-0 flex justify-between items-center group">
+                                                            <div>
+                                                                <p className="font-bold text-stone-800 text-sm group-hover:text-rose-600 transition-colors">{item.name}</p>
+                                                                <p className="text-xs text-stone-400">{item.category} • В наличии: {item.quantity} {item.unit}</p>
+                                                            </div>
+                                                            <Plus className="w-4 h-4 text-stone-300 group-hover:text-rose-500" />
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="border border-stone-200 rounded-2xl overflow-hidden mt-4">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-stone-50 border-b border-stone-200 text-[10px] uppercase tracking-widest text-stone-500 font-black">
                                         <tr>
                                             <th className="p-3">Товар</th>
-                                            <th className="p-3 text-center">По учету</th>
-                                            <th className="p-3 px-6 text-center">Фактически есть</th>
-                                            <th className="p-3 text-center">Разница</th>
+                                            {docType === 'inventory_check' && <th className="p-3 text-center">По учету</th>}
+                                            {docType === 'inventory_check' && <th className="p-3 px-6 text-center">Фактически есть</th>}
+                                            {docType === 'inventory_check' && <th className="p-3 text-center">Разница</th>}
+
+                                            {docType === 'write_off' && <th className="p-3 px-6 text-center">Списать</th>}
+
+                                            {docType === 'receipt' && <th className="p-3 text-center">Кол-во (упак.)</th>}
+                                            {docType === 'receipt' && <th className="p-3 text-center">Объем (1 упак.)</th>}
+                                            {docType === 'receipt' && <th className="p-3 text-center">Цена (1 упак.)</th>}
+                                            {docType === 'receipt' && <th className="p-3 text-center">Итого приход</th>}
+                                            {docType !== 'inventory_check' && <th className="p-3 text-right"></th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100 font-bold">
-                                        {docItems.map(item => {
+                                        {docItems.length === 0 && docType !== 'inventory_check' ? (
+                                            <tr>
+                                                <td colSpan={6} className="p-6 text-center text-stone-400 text-sm font-bold">Добавьте товары через поиск выше</td>
+                                            </tr>
+                                        ) : docItems.map(item => {
                                             const invItem = inventory.find((i: any) => i.id === item.id);
                                             if (!invItem) return null;
-                                            const diff = item.factQty - item.reqQty;
-                                            let diffStr = diff > 0 ? `+${diff}` : diff.toString();
-                                            let diffColor = diff === 0 ? 'text-stone-300' : diff > 0 ? 'text-emerald-500' : 'text-rose-500';
 
-                                            return (
-                                                <tr key={item.id} className="hover:bg-stone-50/50">
-                                                    <td className="p-3">
-                                                        <p className="text-stone-900 line-clamp-1">{invItem.name}</p>
-                                                        <p className="text-xs text-stone-400 font-medium">{invItem.category}</p>
-                                                    </td>
-                                                    <td className="p-3 text-center text-stone-500 font-mono">{item.reqQty}</td>
-                                                    <td className="p-3 max-w-[120px]">
-                                                        <div className="flex items-center gap-1 justify-center">
-                                                            <input
-                                                                type="number" min="0" step="any"
-                                                                value={item.factQty}
-                                                                onChange={e => updateDocItem(item.id, 'factQty', Number(e.target.value))}
-                                                                className="w-20 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner"
-                                                            />
-                                                            <span className="text-[10px] text-stone-400 uppercase tracking-widest">{invItem.unit}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className={`p-3 text-center font-black ${diffColor}`}>{diffStr}</td>
-                                                </tr>
-                                            )
+                                            if (docType === 'inventory_check') {
+                                                const diff = item.factQty - item.reqQty;
+                                                let diffStr = diff > 0 ? `+${diff}` : diff.toString();
+                                                let diffColor = diff === 0 ? 'text-stone-300' : diff > 0 ? 'text-emerald-500' : 'text-rose-500';
+
+                                                return (
+                                                    <tr key={item.id} className="hover:bg-stone-50/50">
+                                                        <td className="p-3">
+                                                            <p className="text-stone-900 line-clamp-1">{invItem.name}</p>
+                                                            <p className="text-xs text-stone-400 font-medium">{invItem.category}</p>
+                                                        </td>
+                                                        <td className="p-3 text-center text-stone-500 font-mono">{item.reqQty}</td>
+                                                        <td className="p-3 max-w-[120px]">
+                                                            <div className="flex items-center gap-1 justify-center">
+                                                                <input
+                                                                    type="number" min="0" step="any"
+                                                                    value={item.factQty}
+                                                                    onChange={e => updateDocItem(item.id, 'factQty', Number(e.target.value))}
+                                                                    className="w-20 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner"
+                                                                />
+                                                                <span className="text-[10px] text-stone-400 uppercase tracking-widest">{invItem.unit}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className={`p-3 text-center font-black ${diffColor}`}>{diffStr}</td>
+                                                    </tr>
+                                                )
+                                            }
+
+                                            if (docType === 'receipt') {
+                                                const isPack = invItem.unit === 'шт';
+                                                return (
+                                                    <tr key={item.id} className="hover:bg-stone-50/50">
+                                                        <td className="p-3">
+                                                            <p className="text-stone-900 line-clamp-1">{invItem.name}</p>
+                                                            <p className="text-xs text-stone-400 font-medium">{invItem.category}</p>
+                                                        </td>
+                                                        <td className="p-3 max-w-[100px]">
+                                                            <div className="flex items-center gap-1 justify-center">
+                                                                <input type="number" min="0" step="any" value={item.packCount || ''} onChange={e => updateDocItem(item.id, 'packCount', Number(e.target.value))} className="w-16 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner" />
+                                                                <span className="text-[10px] text-stone-400 uppercase tracking-widest">шт</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3 max-w-[120px]">
+                                                            {!isPack ? (
+                                                                <div className="flex items-center gap-1 justify-center">
+                                                                    <input type="number" min="0" step="any" value={item.packVolume || ''} onChange={e => updateDocItem(item.id, 'packVolume', Number(e.target.value))} className="w-20 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner" />
+                                                                    <span className="text-[10px] text-stone-400 uppercase tracking-widest">{invItem.unit}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center text-stone-400 text-xs">1 шт</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3 max-w-[120px]">
+                                                            <div className="flex items-center gap-1 justify-center">
+                                                                <input type="number" min="0" step="any" value={item.packPrice || ''} onChange={e => updateDocItem(item.id, 'packPrice', Number(e.target.value))} className="w-20 bg-white border border-stone-300 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-400 font-black text-stone-800 shadow-inner" />
+                                                                <span className="text-[10px] text-stone-400 uppercase tracking-widest">₽</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className="text-center font-black text-emerald-600">+{item.factQty} {invItem.unit}</div>
+                                                            <div className="text-center text-[10px] text-stone-500 uppercase tracking-widest">{Number(item.costPrice).toFixed(2)} ₽ / {invItem.unit}</div>
+                                                        </td>
+                                                        <td className="p-3 text-right">
+                                                            <button onClick={() => setDocItems(docItems.filter(di => di.id !== item.id))} className="p-2 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            }
+
+                                            if (docType === 'write_off') {
+                                                return (
+                                                    <tr key={item.id} className="hover:bg-stone-50/50">
+                                                        <td className="p-3">
+                                                            <p className="text-stone-900 line-clamp-1">{invItem.name}</p>
+                                                            <p className="text-xs text-stone-400 font-medium">В наличии: {invItem.quantity} {invItem.unit}</p>
+                                                        </td>
+                                                        <td className="p-3 max-w-[150px]">
+                                                            <div className="flex items-center gap-1 justify-center">
+                                                                <input type="number" min="0" max={invItem.quantity} step="any" value={item.factQty || ''} onChange={e => updateDocItem(item.id, 'factQty', Number(e.target.value))} className="w-24 bg-rose-50 border border-rose-200 rounded-lg p-2 text-center text-sm outline-none focus:border-rose-500 focus:bg-white font-black text-rose-600 shadow-inner placeholder:text-rose-300" placeholder="Списать" />
+                                                                <span className="text-[10px] text-stone-400 uppercase tracking-widest">{invItem.unit}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3 text-right">
+                                                            <button onClick={() => setDocItems(docItems.filter(di => di.id !== item.id))} className="p-2 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            }
+                                            return null;
                                         })}
                                     </tbody>
                                 </table>
@@ -342,9 +490,80 @@ export default function InventoryTab({
                             <div className="pt-4 flex justify-end gap-3">
                                 <button onClick={() => setShowDocModal(false)} className="px-6 py-3 rounded-xl font-bold text-stone-500 hover:bg-stone-50 transition-colors">Отмена</button>
                                 <button onClick={handleProcessDoc} disabled={isProcessingDoc} className="bg-stone-900 hover:bg-black text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                    {isProcessingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Провести инвентаризацию'}
+                                    {isProcessingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : docType === 'receipt' ? 'Оприходовать товары' : docType === 'write_off' ? 'Провести списание' : 'Провести инвентаризацию'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* МОДАЛКА ПРОСМОТРА ДОКУМЕНТА */}
+            {selectedDoc && (
+                <div className="fixed inset-0 z-[70] flex justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200 pt-10 sm:pt-20 items-start overflow-y-auto">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-3xl shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setSelectedDoc(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><Trash2 className="w-5 h-5 hidden" /> <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-black text-stone-900 flex items-center gap-2">
+                                {selectedDoc.type === 'receipt' ? 'Приходная накладная' : selectedDoc.type === 'write_off' ? 'Акт списания' : 'Инвентаризационная ведомость'}
+                            </h2>
+                            <p className="text-sm font-bold text-stone-400 mt-1">от {format(new Date(selectedDoc.created_at), "d MMMM yyyy, HH:mm", { locale: ru })}</p>
+                        </div>
+
+                        {selectedDoc.notes && (
+                            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 mb-6">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1">Комментарий</p>
+                                <p className="text-sm font-bold text-stone-800">{selectedDoc.notes}</p>
+                            </div>
+                        )}
+
+                        <div className="border border-stone-200 rounded-2xl overflow-hidden mb-6">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-stone-50 border-b border-stone-200 text-[10px] uppercase tracking-widest text-stone-500 font-black">
+                                    <tr>
+                                        <th className="p-3">Товар</th>
+                                        <th className="p-3 text-center">Изменение</th>
+                                        {selectedDoc.type === 'receipt' && <th className="p-3 text-right">Итого списано / оприходовано базовых ед.</th>}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100 font-bold">
+                                    {selectedDoc.transactions?.map((tx: any) => {
+                                        const isAdd = tx.change_amount > 0;
+                                        return (
+                                            <tr key={tx.id} className="hover:bg-stone-50/50">
+                                                <td className="p-3">
+                                                    <p className="text-stone-900 line-clamp-1">{tx.inventory?.name || 'Удаленный товар'}</p>
+                                                    {tx.inventory?.category && <p className="text-xs text-stone-400">{tx.inventory.category}</p>}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black ${isAdd ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                                        {isAdd ? '+' : ''}{tx.change_amount} {tx.inventory?.unit || 'шт'}
+                                                    </span>
+                                                </td>
+                                                {selectedDoc.type === 'receipt' && (
+                                                    <td className="p-3 text-right font-black text-stone-800">
+                                                        {tx.cost_price ? `${(tx.change_amount * tx.cost_price).toFixed(2)} ₽` : '—'}
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {selectedDoc.type === 'receipt' && (
+                            <div className="flex justify-end pt-4 border-t border-stone-100">
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1">Итого сумма</p>
+                                    <p className="text-2xl font-black text-stone-900">{selectedDoc.total_amount} ₽</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-6 flex justify-end">
+                            <button onClick={() => setSelectedDoc(null)} className="bg-stone-900 hover:bg-black text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all">Закрыть</button>
                         </div>
                     </div>
                 </div>
