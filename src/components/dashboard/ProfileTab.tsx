@@ -64,7 +64,7 @@ export default function ProfileTab({
                             <button onClick={() => setProfileTab('general')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${profileTab === 'general' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}>Основное</button>
                             <button onClick={() => setProfileTab('schedule')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'schedule' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Clock className="w-4 h-4" /> Расписание</button>
                             <button onClick={() => setProfileTab('gallery')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'gallery' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Camera className="w-4 h-4" /> Галерея</button>
-                            {role === 'owner' && <button onClick={() => setProfileTab('team')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'team' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Users className="w-4 h-4" /> Команда</button>}
+                            <button onClick={() => setProfileTab('team')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'team' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'}`}><Users className="w-4 h-4" /> Команда</button>
                             <button onClick={() => setProfileTab('promo')} className={`px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${profileTab === 'promo' ? 'bg-white shadow-sm text-emerald-600' : 'text-stone-500 hover:text-emerald-600'}`}>🚀 Продвижение</button>
                         </div>
 
@@ -209,7 +209,7 @@ export default function ProfileTab({
                             </div>
                         )}
 
-                        {profileTab === 'team' && role === 'owner' && (
+                        {profileTab === 'team' && (
                             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-200 flex-1">
                                 <div className="bg-stone-50 p-5 rounded-[24px] border border-stone-200 flex flex-col sm:flex-row gap-3 items-end">
                                     <div className="w-full">
