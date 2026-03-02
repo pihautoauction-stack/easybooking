@@ -1,18 +1,65 @@
+import { BarChart3, Calculator } from "lucide-react";
+import { useClientsStore } from "@/store/useClientsStore";
+import { useAppointmentsStore } from "@/store/useAppointmentsStore";
+import { useServicesStore } from "@/store/useServicesStore";
+import { useProfileStore } from "@/store/useProfileStore";
+import { useMemo } from "react";
+
 export default function AnalyticsTab({
-    clients,
     activeAppsThisMonth,
     archivedApps,
-    totalRevenue,
-    totalPayroll,
-    totalMaterialsCost,
-    employeeStats,
-    role,
-    BarChart3,
-    Calculator,
-    netIncome,
-    appointments,
-    services
 }: any) {
+    const { clients } = useClientsStore();
+    const { appointments } = useAppointmentsStore();
+    const { services } = useServicesStore();
+    const { employees, role } = useProfileStore();
+
+    // Recomputing analytics since they are highly derived and were passed as props before.
+    const { totalRevenue, totalPayroll, totalMaterialsCost, employeeStats, netIncome } = useMemo(() => {
+        let revenue = 0;
+        let payroll = 0;
+        let materials = 0;
+        const eStats: any = {};
+
+        employees.forEach(emp => {
+            eStats[emp.id] = { name: emp.name, earned: 0, visits: 0 };
+        });
+
+        archivedApps.forEach((app: any) => {
+            if (app.status === 'completed') {
+                const price = app.final_price ?? (app.service?.price || 0);
+                revenue += price;
+                if (app.materials_cost) {
+                    materials += app.materials_cost;
+                }
+
+                if (app.employee_id && eStats[app.employee_id]) {
+                    eStats[app.employee_id].visits += 1;
+                    const empObj = employees.find(e => e.id === app.employee_id);
+                    if (empObj) {
+                        if (empObj.salary_type === 'percentage' && empObj.salary_value) {
+                            const earned = (price * empObj.salary_value) / 100;
+                            eStats[app.employee_id].earned += earned;
+                            payroll += earned;
+                        } else if (empObj.salary_type === 'fixed' && empObj.salary_value) {
+                            eStats[app.employee_id].earned += empObj.salary_value;
+                            payroll += empObj.salary_value;
+                        }
+                    }
+                }
+            }
+        });
+
+        return {
+            totalRevenue: revenue,
+            totalPayroll: payroll,
+            totalMaterialsCost: materials,
+            employeeStats: eStats,
+            netIncome: revenue - payroll - materials
+        };
+    }, [archivedApps, employees]);
+
+
     // ---- ПРЕДИКТИВНАЯ АНАЛИТИКА И СОВЕТЫ ----
     const getPrediction = () => {
         const now = new Date();

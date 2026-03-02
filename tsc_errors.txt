@@ -1,0 +1,6 @@
+tmp_old_page.tsx(673,33): error TS2322: Type '{ user: any; role: string; appointments: any[]; services: any[]; employees: any[]; journalView: "active" | "archive"; setJournalView: Dispatch<SetStateAction<"active" | "archive">>; ... 19 more ...; modulesConfig: { ...; }; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'user' does not exist on type 'IntrinsicAttributes'.
+tmp_old_page.tsx(688,33): error TS2322: Type '{ services: any[]; role: string; setSelectedService: Dispatch<any>; setAddingService: Dispatch<SetStateAction<boolean>>; handleDeleteService: (id: string) => Promise<...>; ... 27 more ...; setNewServiceMaterials: Dispatch<...>; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'services' does not exist on type 'IntrinsicAttributes'.
+tmp_old_page.tsx(720,33): error TS2322: Type '{ filteredClients: any[]; clientSearchQuery: string; setClientSearchQuery: Dispatch<SetStateAction<string>>; setSelectedClient: Dispatch<any>; ... 11 more ...; appointments: any[]; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'filteredClients' does not exist on type 'IntrinsicAttributes'.

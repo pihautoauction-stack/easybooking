@@ -1,41 +1,54 @@
 import { useState } from "react";
+import { Clock, Camera, Users, LinkIcon, Copy, Loader2, Trash2, Plus, X, Coffee } from "lucide-react";
+import { useProfileStore } from "@/store/useProfileStore";
+
+// Local days array
+const DAYS = [
+    { id: 'mon', label: 'Пн' },
+    { id: 'tue', label: 'Вт' },
+    { id: 'wed', label: 'Ср' },
+    { id: 'thu', label: 'Чт' },
+    { id: 'fri', label: 'Пт' },
+    { id: 'sat', label: 'Сб' },
+    { id: 'sun', label: 'Вс' }
+];
 
 export default function ProfileTab({
-    profileTab,
-    setProfileTab,
     handleSetCustomLink,
     customLinkInput, setCustomLinkInput,
-    username,
-    user,
-    role,
-    employees,
     handleAddEmployee,
     handleDeleteEmployee,
-    portfolioUrls,
     handleUploadPortfolioImage,
     handleRemovePortfolioImage,
     uploadingPortfolio,
-    clientLink,
-    breaks,
-    setBreaks,
-    newBreakStart, setNewBreakStart,
-    newBreakEnd, setNewBreakEnd,
     handleAddBreak,
     handleDeleteBreak,
-    Clock, Camera, Users, LinkIcon, Copy, Loader2, Trash2, Plus, X, Coffee,
-    businessName, setBusinessName,
-    setUsername, socialLinks, setSocialLinks,
-    scheduleStep, setScheduleStep,
-    handleRemoveBreak, weeklySettings, setWeeklySettings,
-    DAYS, handleSaveProfile, saving,
+    handleRemoveBreak,
+    handleSaveProfile, saving,
     newEmpName, setNewEmpName,
     newEmpSpec, setNewEmpSpec,
     newEmpCommission, setNewEmpCommission,
     addingEmp,
-    modulesConfig, setModulesConfig,
-    telegramChatId, setTelegramChatId
 }: any) {
+    const {
+        user, role,
+        businessName, setBusinessName,
+        username, setUsername,
+        socialLinks, setSocialLinks,
+        telegramChatId, setTelegramChatId,
+        scheduleStep, setScheduleStep,
+        breaks, setBreaks,
+        newBreakStart, setNewBreakStart,
+        newBreakEnd, setNewBreakEnd,
+        weeklySettings, setWeeklySettings,
+        portfolioUrls,
+        employees,
+        modulesConfig, setModulesConfig,
+        clientLink
+    } = useProfileStore();
+
     const [settingsMode, setSettingsMode] = useState<'profile' | 'app'>('profile');
+    const [profileTab, setProfileTab] = useState<'general' | 'schedule' | 'gallery' | 'team' | 'promo'>('general');
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">

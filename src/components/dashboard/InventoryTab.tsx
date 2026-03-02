@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Package, Plus, Archive, History, AlertTriangle, Edit3, Trash2, FileText, Loader2, Folder, FolderOpen, Search } from "lucide-react";
+import { useInventoryStore } from "@/store/useInventoryStore";
+import { useProfileStore } from "@/store/useProfileStore";
+import { format as dateFnsFormat } from "date-fns";
+import { ru } from "date-fns/locale";
 
 export default function InventoryTab({
-    inventory,
-    user,
-    role,
     handleAddInventory,
     handleAdjustInventory,
     handleDeleteInventory,
@@ -14,18 +15,34 @@ export default function InventoryTab({
     newInvRetail, setNewInvRetail,
     newInvCategory, setNewInvCategory,
     addingInventory, setAddingInventory,
-    inventoryTransactions,
-    invView, setInvView,
     setShowInvModal,
-    totalInventoryUnits,
-    inventoryValue,
-    groupedInventory,
-    toggleInvCategory,
-    expandedInvCategories,
-    transactions,
-    format, ru,
-    inventoryDocuments, loadData
+    loadData
 }: any) {
+    const { inventory, transactions: inventoryTransactions, documents: inventoryDocuments } = useInventoryStore();
+    const { user, role } = useProfileStore();
+
+    const [invView, setInvView] = useState('stock');
+    const [expandedInvCategories, setExpandedInvCategories] = useState<{ [key: string]: boolean }>({});
+
+    const totalInventoryUnits = useMemo(() => inventory.reduce((sum: number, item: any) => sum + item.quantity, 0), [inventory]);
+    const inventoryValue = useMemo(() => Math.round(inventory.reduce((sum: number, item: any) => sum + (item.quantity * item.cost_price), 0)), [inventory]);
+
+    const toggleInvCategory = (category: string) => {
+        setExpandedInvCategories(prev => ({ ...prev, [category]: !prev[category] }));
+    };
+
+    const groupedInventory = useMemo(() => {
+        return inventory.reduce((acc: any, item: any) => {
+            const cat = item.category || 'Без категории';
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(item);
+            return acc;
+        }, {});
+    }, [inventory]);
+
+    // Only sort here if the backend doesn't return sorted, or simply map it from the state
+    const transactions = [...inventoryTransactions].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
     // ЛОКАЛЬНЫЕ СТЕЙТЫ ДОКУМЕНТОВ
     const [showDocModal, setShowDocModal] = useState(false);
     const [docType, setDocType] = useState<'receipt' | 'write_off' | 'inventory_check'>('receipt');
@@ -270,7 +287,7 @@ export default function InventoryTab({
                                                 {tx.type === 'manual_add' ? <span className="text-emerald-600">Ручной приход</span> :
                                                     tx.type === 'manual_deduct' ? <span className="text-orange-500">Ручное списание</span> :
                                                         <span className="text-violet-500">Расход на заказ</span>}
-                                                <span className="text-stone-300">•</span> {format(new Date(tx.created_at), "d MMM HH:mm", { locale: ru })}
+                                                <span className="text-stone-300">•</span> {dateFnsFormat(new Date(tx.created_at), "d MMM HH:mm", { locale: ru })}
                                             </p>
                                         </div>
                                         <span className={`font-black text-sm px-3 py-1.5 rounded-xl border shrink-0 ${isAdd ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
@@ -312,7 +329,7 @@ export default function InventoryTab({
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest ${typeColors[doc.type]}`}>{typeLabels[doc.type]}</span>
-                                                <span className="font-bold text-stone-400 text-xs">от {format(new Date(doc.created_at), "d MMMM yyyy", { locale: ru })}</span>
+                                                <span className="font-bold text-stone-400 text-xs">от {dateFnsFormat(new Date(doc.created_at), "d MMMM yyyy", { locale: ru })}</span>
                                             </div>
                                             {doc.notes && <p className="text-sm font-bold text-stone-600 mt-2">«{doc.notes}»</p>}
                                             <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">Транзакций: {doc.transactions?.length || 0}</p>
@@ -523,7 +540,7 @@ export default function InventoryTab({
                             <h2 className="text-2xl font-black text-stone-900 flex items-center gap-2">
                                 {selectedDoc.type === 'receipt' ? 'Приходная накладная' : selectedDoc.type === 'write_off' ? 'Акт списания' : 'Инвентаризационная ведомость'}
                             </h2>
-                            <p className="text-sm font-bold text-stone-400 mt-1">от {format(new Date(selectedDoc.created_at), "d MMMM yyyy, HH:mm", { locale: ru })}</p>
+                            <p className="text-sm font-bold text-stone-400 mt-1">от {dateFnsFormat(new Date(selectedDoc.created_at), "d MMMM yyyy, HH:mm", { locale: ru })}</p>
                         </div>
 
                         {selectedDoc.notes && (
