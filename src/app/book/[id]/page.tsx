@@ -23,6 +23,9 @@ const formatPhoneInput = (value: string) => {
 
 const supabase = createClient();
 
+// Map JS getDay() (0=Sun) to ProfileTab keys ('mon','tue',...)
+const DAY_KEY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
 export default function BookingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
@@ -121,9 +124,15 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
             let wStartH, wStartM, wEndH, wEndM;
 
-            if (profile.weekly_settings && profile.weekly_settings[dayOfWeek] && profile.weekly_settings[dayOfWeek].active) {
-                [wStartH, wStartM] = profile.weekly_settings[dayOfWeek].start.split(':').map(Number);
-                [wEndH, wEndM] = profile.weekly_settings[dayOfWeek].end.split(':').map(Number);
+            const dayKey = DAY_KEY_MAP[dayOfWeek];
+            const daySetting = profile.weekly_settings?.[dayKey];
+            if (daySetting && daySetting.active) {
+                [wStartH, wStartM] = daySetting.start.split(':').map(Number);
+                [wEndH, wEndM] = daySetting.end.split(':').map(Number);
+            } else if (daySetting && !daySetting.active) {
+                // Day is explicitly disabled — no slots
+                setAvailableSlots([]);
+                return;
             } else {
                 [wStartH, wStartM] = (profile.work_start_time || "09:00").split(':').map(Number);
                 [wEndH, wEndM] = (profile.work_end_time || "20:00").split(':').map(Number);
@@ -438,8 +447,9 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
                                             { before: startOfToday() },
                                             (date) => {
                                                 if (profile?.weekly_settings) {
-                                                    const daySetting = profile.weekly_settings[date.getDay()];
-                                                    if (daySetting) return !daySetting.active;
+                                                    const dk = DAY_KEY_MAP[date.getDay()];
+                                                    const ds = profile.weekly_settings[dk];
+                                                    if (ds) return !ds.active;
                                                 }
                                                 return profile?.disabled_days ? profile.disabled_days.split(',').map(Number).includes(date.getDay()) : false;
                                             }

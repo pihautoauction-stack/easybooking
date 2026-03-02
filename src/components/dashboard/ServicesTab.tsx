@@ -267,8 +267,8 @@ export default function ServicesTab() {
 
                 {/* 2. РЕДАКТИРОВАНИЕ УСЛУГИ */}
                 {selectedService && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedService(null)}>
-                        <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200" onClick={(e) => e.stopPropagation()}>
+                    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-10 sm:pt-20 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto" onClick={() => setSelectedService(null)}>
+                        <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-md shadow-2xl relative border border-stone-200 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => setSelectedService(null)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full"><X className="w-5 h-5" /></button>
                             <h2 className="text-xl font-black mb-6 text-stone-900 leading-tight pr-10">{selectedService.name}</h2>
 

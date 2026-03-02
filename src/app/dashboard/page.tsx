@@ -38,6 +38,7 @@ export default function Dashboard() {
     const [user, setUser] = useState<any>(null);
 
     const [activeTab, setActiveTab] = useState<Tab>('appointments');
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
 
     // Профиль
     const { username, businessName, modulesConfig } = useProfileStore();
@@ -60,6 +61,25 @@ export default function Dashboard() {
         };
         init();
     }, [router]);
+
+    // Detect mobile keyboard open/close to avoid bottom nav bug
+    useEffect(() => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+
+        const handleResize = () => {
+            // If viewport height significantly smaller than window height, keyboard is open
+            const isKeyboard = vv.height < window.innerHeight * 0.75;
+            setKeyboardVisible(isKeyboard);
+        };
+
+        vv.addEventListener('resize', handleResize);
+        vv.addEventListener('scroll', handleResize);
+        return () => {
+            vv.removeEventListener('resize', handleResize);
+            vv.removeEventListener('scroll', handleResize);
+        };
+    }, []);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -174,7 +194,7 @@ export default function Dashboard() {
 
                 {/* НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ (ДЛЯ МОБИЛОК) */}
                 <nav
-                    className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)]"
+                    className={`md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-stone-200 z-40 px-2 pt-2 flex justify-around items-center shadow-[0_-4px_24px_rgba(0,0,0,0.02)] transition-transform duration-200 ${keyboardVisible ? 'translate-y-full' : 'translate-y-0'}`}
                     style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
                 >
                     {NAV_ITEMS.filter(tab => {
