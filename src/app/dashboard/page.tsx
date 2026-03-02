@@ -54,6 +54,7 @@ export default function Dashboard() {
                 return;
             }
             setUser(session.user);
+            useProfileStore.getState().setUser(session.user);
             await fetchAllData(session.user.id);
             setLoading(false);
         };
