@@ -234,7 +234,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
         localStorage.setItem('nx_phone', clientPhone);
 
         const { error } = await supabase.from('waitlist').insert({
-            master_id: profile.id, date: selectedDate.toISOString(), client_name: clientName, client_phone: clientPhone
+            master_id: profile.id, desired_date: selectedDate.toISOString(), client_name: clientName, client_phone: clientPhone
         });
 
         if (!error) setWaitlistStatus("success");

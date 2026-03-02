@@ -2,30 +2,87 @@ import { useState, useMemo } from 'react';
 import { Package, Plus, Archive, History, AlertTriangle, Edit3, Trash2, FileText, Loader2, Folder, FolderOpen, Search } from "lucide-react";
 import { useInventoryStore } from "@/store/useInventoryStore";
 import { useProfileStore } from "@/store/useProfileStore";
+import { useAppActions } from "@/store/actions";
+import { createClient } from "@/lib/supabase/client";
 import { format as dateFnsFormat } from "date-fns";
 import { ru } from "date-fns/locale";
 
-export default function InventoryTab({
-    handleAddInventory,
-    handleAdjustInventory,
-    handleDeleteInventory,
-    newInvName, setNewInvName,
-    newInvUnit, setNewInvUnit,
-    newInvCost, setNewInvCost,
-    newInvRetail, setNewInvRetail,
-    newInvCategory, setNewInvCategory,
-    addingInventory, setAddingInventory,
-    setShowInvModal,
-    loadData
-}: any) {
+const supabase = createClient();
+
+export default function InventoryTab() {
     const { inventory, transactions: inventoryTransactions, documents: inventoryDocuments } = useInventoryStore();
     const { user, role } = useProfileStore();
+    const { fetchAllData } = useAppActions();
+
+    // Form state for adding new inventory item
+    const [showInvModal, setShowInvModal] = useState(false);
+    const [newInvName, setNewInvName] = useState('');
+    const [newInvUnit, setNewInvUnit] = useState('мл');
+    const [newInvCost, setNewInvCost] = useState('');
+    const [newInvRetail, setNewInvRetail] = useState('');
+    const [newInvCategory, setNewInvCategory] = useState('');
+    const [addingInventory, setAddingInventory] = useState(false);
+
+    const loadData = async (userId: string, silent?: boolean) => {
+        await fetchAllData(userId, silent);
+    };
+
+    const handleAddInventory = async () => {
+        if (!user || !newInvName) return;
+        setAddingInventory(true);
+        try {
+            const { error } = await supabase.from('inventory').insert({
+                user_id: user.id,
+                name: newInvName,
+                unit: newInvUnit || 'шт',
+                cost_price: Number(newInvCost) || 0,
+                retail_price: Number(newInvRetail) || 0,
+                category: newInvCategory || 'Без категории',
+                quantity: 0,
+                critical_level: 0
+            });
+            if (error) throw error;
+            setNewInvName('');
+            setNewInvUnit('мл');
+            setNewInvCost('');
+            setNewInvRetail('');
+            setNewInvCategory('');
+            setShowInvModal(false);
+            await loadData(user.id, true);
+        } catch (err: any) {
+            alert('Ошибка: ' + err.message);
+        } finally {
+            setAddingInventory(false);
+        }
+    };
+
+    const handleAdjustInventory = async (item: any, type: 'add' | 'deduct') => {
+        const amount = Number(prompt(`Сколько ${type === 'add' ? 'добавить' : 'списать'} (${item.unit})?`, '1'));
+        if (!amount || amount <= 0) return;
+        const { adjustInventoryStock } = await import('@/app/actions/inventory');
+        const res = await adjustInventoryStock(item.id, amount, type);
+        if (res.success) {
+            await loadData(user.id, true);
+        } else {
+            alert('Ошибка: ' + res.error);
+        }
+    };
+
+    const handleDeleteInventory = async (itemId: string) => {
+        if (!confirm('Удалить эту позицию со склада?')) return;
+        const { error } = await supabase.from('inventory').delete().eq('id', itemId);
+        if (!error) {
+            await loadData(user.id, true);
+        } else {
+            alert('Ошибка удаления: ' + error.message);
+        }
+    };
 
     const [invView, setInvView] = useState('stock');
     const [expandedInvCategories, setExpandedInvCategories] = useState<{ [key: string]: boolean }>({});
 
-    const totalInventoryUnits = useMemo(() => inventory.reduce((sum: number, item: any) => sum + item.quantity, 0), [inventory]);
-    const inventoryValue = useMemo(() => Math.round(inventory.reduce((sum: number, item: any) => sum + (item.quantity * item.cost_price), 0)), [inventory]);
+    const totalInventoryUnits = useMemo(() => inventory.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0), [inventory]);
+    const inventoryValue = useMemo(() => Math.round(inventory.reduce((sum: number, item: any) => sum + ((Number(item.quantity) || 0) * (Number(item.cost_price) || 0)), 0)), [inventory]);
 
     const toggleInvCategory = (category: string) => {
         setExpandedInvCategories(prev => ({ ...prev, [category]: !prev[category] }));
@@ -596,6 +653,52 @@ export default function InventoryTab({
 
                         <div className="pt-6 flex justify-end">
                             <button onClick={() => setSelectedDoc(null)} className="bg-stone-900 hover:bg-black text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all">Закрыть</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* МОДАЛКА ДОБАВЛЕНИЯ НОВОГО ТОВАРА */}
+            {showInvModal && (
+                <div className="fixed inset-0 z-[70] flex justify-center items-start p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200 pt-10 sm:pt-20 overflow-y-auto">
+                    <div className="bg-white p-6 md:p-8 rounded-[32px] w-full max-w-lg shadow-2xl relative border border-stone-200" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setShowInvModal(false)} className="absolute top-6 right-6 text-stone-400 hover:text-stone-800 bg-stone-50 p-2.5 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                        <h2 className="text-2xl font-black mb-6 text-stone-900">Добавить товар на склад</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Название *</label>
+                                <input value={newInvName} onChange={e => setNewInvName(e.target.value)} placeholder="Например: Краска для волос" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Единица измерения</label>
+                                    <select value={newInvUnit} onChange={e => setNewInvUnit(e.target.value)} className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800">
+                                        <option value="мл">мл</option>
+                                        <option value="г">г</option>
+                                        <option value="шт">шт</option>
+                                        <option value="л">л</option>
+                                        <option value="кг">кг</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Категория</label>
+                                    <input value={newInvCategory} onChange={e => setNewInvCategory(e.target.value)} placeholder="Краски" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Закупочная цена (₽)</label>
+                                    <input type="number" value={newInvCost} onChange={e => setNewInvCost(e.target.value)} placeholder="0" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Розничная цена (₽)</label>
+                                    <input type="number" value={newInvRetail} onChange={e => setNewInvRetail(e.target.value)} placeholder="0" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                </div>
+                            </div>
+                            <button onClick={handleAddInventory} disabled={addingInventory || !newInvName} className="w-full bg-stone-900 hover:bg-black text-white py-4 rounded-2xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2">
+                                {addingInventory ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Добавить на склад'}
+                            </button>
                         </div>
                     </div>
                 </div>

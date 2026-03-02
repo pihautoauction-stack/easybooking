@@ -10,9 +10,9 @@ export async function POST(request: Request) {
 
     if (isTest) return NextResponse.json({ success: true });
 
-    let busyQuery = supabase.from("appointments").select("id").eq("master_id", masterId).eq("start_time", startTime);
+    let busyQuery = supabase.from("appointments").select("id").eq("master_id", masterId).eq("start_time", startTime).eq("status", "active");
     if (employeeId) busyQuery = busyQuery.eq("employee_id", employeeId);
-    
+
     const { data: busy } = await busyQuery.maybeSingle();
     if (busy) return NextResponse.json({ error: "Busy" }, { status: 409 });
 
@@ -20,10 +20,10 @@ export async function POST(request: Request) {
     const { data: existingClient } = await supabase.from("clients").select("id").eq("master_id", masterId).eq("phone", clientPhone).maybeSingle();
 
     if (existingClient) {
-        clientId = existingClient.id;
+      clientId = existingClient.id;
     } else {
-        const { data: newClient } = await supabase.from("clients").insert({ master_id: masterId, name: clientName, phone: clientPhone, telegram_id: clientTgId }).select("id").single();
-        if (newClient) clientId = newClient.id;
+      const { data: newClient } = await supabase.from("clients").insert({ master_id: masterId, name: clientName, phone: clientPhone, telegram_id: clientTgId }).select("id").single();
+      if (newClient) clientId = newClient.id;
     }
 
     const { error: insertError } = await supabase.from("appointments")
@@ -36,9 +36,9 @@ export async function POST(request: Request) {
 
     if (m?.telegram_chat_id && botToken) {
       const formattedDate = new Date(startTime).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' });
-      
+
       let msg = `🔔 *НОВАЯ ЗАПИСЬ!*\n\n👤 ${clientName}\n📞 ${clientPhone}\n📅 ${formattedDate}`;
-      if (employeeName) msg += `\n👤 Специалист: ${employeeName}`; 
+      if (employeeName) msg += `\n👤 Специалист: ${employeeName}`;
 
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST", headers: { "Content-Type": "application/json" },

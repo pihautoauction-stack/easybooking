@@ -59,7 +59,7 @@ export const useAppActions = create<FetchActions>((set) => ({
                 .eq("master_id", userId).gte('start_time', ninetyDaysAgo.toISOString()).order('start_time', { ascending: true });
             appointmentsStore.setAppointments(a || []);
 
-            const { data: wl } = await supabase.from("waitlist").select("*").eq("master_id", userId).eq("notified", false).order('created_at');
+            const { data: wl } = await supabase.from("waitlist").select("*").eq("master_id", userId).order('created_at');
             appointmentsStore.setWaitlist(wl || []);
 
             // Clients

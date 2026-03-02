@@ -22,7 +22,7 @@ export async function GET(request: Request) {
             .select("start_time, client_tg_id, service:services(name), master:profiles(business_name)")
             .gte("start_time", tomorrowStart.toISOString())
             .lte("start_time", tomorrowEnd.toISOString())
-            .eq("status", "pending")
+            .eq("status", "active")
             .not("client_tg_id", "is", null);
 
         if (!appointments || appointments.length === 0) {
@@ -33,10 +33,10 @@ export async function GET(request: Request) {
 
         for (const app of appointments as any[]) {
             const time = new Date(app.start_time).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
-            
+
             const serviceName = Array.isArray(app.service) ? app.service[0]?.name : app.service?.name;
             const masterName = Array.isArray(app.master) ? app.master[0]?.business_name : app.master?.business_name;
-            
+
             const msg = `🔔 *Напоминание о записи!*\n\nЖдем вас завтра в *${time}*.\n📌 Услуга: ${serviceName || 'Услуга'}\n🏢 Место: ${masterName || 'Компания'}\n\n_Если ваши планы изменились, пожалуйста, отмените запись в Личном кабинете._`;
 
             await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

@@ -43,15 +43,10 @@ export default function AnalyticsTab() {
                 if (app.employee_id && eStats[app.employee_id]) {
                     eStats[app.employee_id].visits += 1;
                     const empObj = employees.find(e => e.id === app.employee_id);
-                    if (empObj) {
-                        if (empObj.salary_type === 'percentage' && empObj.salary_value) {
-                            const earned = (price * Number(empObj.salary_value)) / 100;
-                            eStats[app.employee_id].earned += earned;
-                            payroll += earned;
-                        } else if (empObj.salary_type === 'fixed' && empObj.salary_value) {
-                            eStats[app.employee_id].earned += Number(empObj.salary_value);
-                            payroll += Number(empObj.salary_value);
-                        }
+                    if (empObj && empObj.commission_rate) {
+                        const earned = (price * Number(empObj.commission_rate)) / 100;
+                        eStats[app.employee_id].earned += earned;
+                        payroll += earned;
                     }
                 }
             }
