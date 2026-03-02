@@ -51,12 +51,16 @@ export default function ServicesTab() {
         const result = await createServiceData({
             name: newName,
             price: Number(newPrice),
-            duration: newDuration ? Number(newDuration) : 0,
+            duration: newDuration ? Number(newDuration) : 60,
             category: cat,
             employee_id: newServiceEmpId || undefined,
-            materials: newServiceMaterials,
         } as any);
         if (result.success && result.data) {
+            // Save materials for the new service if any were selected
+            if (newServiceMaterials.length > 0 && result.data.id) {
+                const { saveServiceMaterials } = await import('@/app/actions/services');
+                await saveServiceMaterials(result.data.id, newServiceMaterials);
+            }
             addService(result.data);
             setNewName(""); setNewPrice(""); setNewDuration("");
             setServiceCategorySelect(""); setServiceCategoryInput("");

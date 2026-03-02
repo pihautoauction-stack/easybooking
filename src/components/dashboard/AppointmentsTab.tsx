@@ -152,14 +152,23 @@ export default function AppointmentsTab() {
 
     const handleDeleteRecord = async (id: string) => {
         const app = appointments.find((a: any) => a.id === id);
-        if (!confirm(app?.status === 'completed' ? "Точно удалить из архива?" : "Отменить эту запись?")) return;
+        if (!app) return;
 
-        await supabase.from("appointments").delete().eq("id", id);
+        if (app.status === 'active') {
+            // Cancel active appointment (preserve for analytics)
+            if (!confirm("Отменить эту запись?")) return;
+            await supabase.from("appointments").update({ status: 'cancelled' }).eq("id", id);
+        } else {
+            // Delete completed/cancelled from archive
+            if (!confirm("Точно удалить из архива?")) return;
+            await supabase.from("appointments").delete().eq("id", id);
+        }
+
         if (user?.id) await fetchAllData(user.id, true);
         setSelectedApp(null);
 
-        // Проверяем лист ожидания на день этой отмененной записи
-        if (app && app.status === 'active') {
+        // Check waitlist for the freed slot
+        if (app.status === 'active') {
             const cancelledDate = new Date(app.start_time).toISOString().slice(0, 10);
             const waitlistForDay = waitlist.filter((w: any) => w.desired_date === cancelledDate);
             if (waitlistForDay.length > 0) {

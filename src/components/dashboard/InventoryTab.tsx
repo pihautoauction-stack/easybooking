@@ -21,6 +21,8 @@ export default function InventoryTab() {
     const [newInvCost, setNewInvCost] = useState('');
     const [newInvRetail, setNewInvRetail] = useState('');
     const [newInvCategory, setNewInvCategory] = useState('');
+    const [newInvQty, setNewInvQty] = useState('');
+    const [newInvCritical, setNewInvCritical] = useState('');
     const [addingInventory, setAddingInventory] = useState(false);
 
     const loadData = async (userId: string, silent?: boolean) => {
@@ -38,8 +40,8 @@ export default function InventoryTab() {
                 cost_price: Number(newInvCost) || 0,
                 retail_price: Number(newInvRetail) || 0,
                 category: newInvCategory || 'Без категории',
-                quantity: 0,
-                critical_level: 0
+                quantity: Number(newInvQty) || 0,
+                critical_level: Number(newInvCritical) || 5
             });
             if (error) throw error;
             setNewInvName('');
@@ -47,6 +49,8 @@ export default function InventoryTab() {
             setNewInvCost('');
             setNewInvRetail('');
             setNewInvCategory('');
+            setNewInvQty('');
+            setNewInvCritical('');
             setShowInvModal(false);
             await loadData(user.id, true);
         } catch (err: any) {
@@ -694,6 +698,16 @@ export default function InventoryTab() {
                                 <div>
                                     <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Розничная цена (₽)</label>
                                     <input type="number" value={newInvRetail} onChange={e => setNewInvRetail(e.target.value)} placeholder="0" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Начальное количество</label>
+                                    <input type="number" value={newInvQty} onChange={e => setNewInvQty(e.target.value)} placeholder="0" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500 ml-1">Минимальный остаток</label>
+                                    <input type="number" value={newInvCritical} onChange={e => setNewInvCritical(e.target.value)} placeholder="5" className="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3.5 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-400/30 text-stone-800" />
                                 </div>
                             </div>
                             <button onClick={handleAddInventory} disabled={addingInventory || !newInvName} className="w-full bg-stone-900 hover:bg-black text-white py-4 rounded-2xl font-black shadow-lg shadow-stone-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2">
