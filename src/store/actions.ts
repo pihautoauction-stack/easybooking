@@ -36,6 +36,11 @@ export const useAppActions = create<FetchActions>((set) => ({
                 if (p.social_links) profileStore.setSocialLinks(typeof p.social_links === 'string' ? JSON.parse(p.social_links) : p.social_links);
                 if (p.modules_config) profileStore.setModulesConfig(typeof p.modules_config === 'string' ? JSON.parse(p.modules_config) : p.modules_config);
                 if (p.telegram_chat_id) profileStore.setTelegramChatId(p.telegram_chat_id);
+                // Compute client booking link
+                if (typeof window !== 'undefined') {
+                    const bookingUsername = p.username || userId;
+                    profileStore.setClientLink(`${window.location.origin}/book/${bookingUsername}`);
+                }
             }
 
             // Services and Employees
