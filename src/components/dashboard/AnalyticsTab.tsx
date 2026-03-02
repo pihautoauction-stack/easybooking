@@ -5,16 +5,21 @@ import { useServicesStore } from "@/store/useServicesStore";
 import { useProfileStore } from "@/store/useProfileStore";
 import { useMemo } from "react";
 
-export default function AnalyticsTab({
-    activeAppsThisMonth,
-    archivedApps,
-}: any) {
+export default function AnalyticsTab() {
     const { clients } = useClientsStore();
     const { appointments } = useAppointmentsStore();
     const { services } = useServicesStore();
     const { employees, role } = useProfileStore();
 
     // Recomputing analytics since they are highly derived and were passed as props before.
+    const { activeAppsThisMonth, archivedApps } = useMemo(() => {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const active = appointments.filter((a: any) => new Date(a.start_time) >= startOfMonth && a.status === 'active');
+        const archived = appointments.filter((a: any) => a.status === 'completed' || a.status === 'cancelled');
+        return { activeAppsThisMonth: active, archivedApps: archived };
+    }, [appointments]);
+
     const { totalRevenue, totalPayroll, totalMaterialsCost, employeeStats, netIncome } = useMemo(() => {
         let revenue = 0;
         let payroll = 0;
@@ -27,10 +32,12 @@ export default function AnalyticsTab({
 
         archivedApps.forEach((app: any) => {
             if (app.status === 'completed') {
-                const price = app.final_price ?? (app.service?.price || 0);
+                const priceMatch = (app.final_price ?? app.service?.price ?? 0);
+                const price = Number(priceMatch) || 0;
+
                 revenue += price;
                 if (app.materials_cost) {
-                    materials += app.materials_cost;
+                    materials += Number(app.materials_cost) || 0;
                 }
 
                 if (app.employee_id && eStats[app.employee_id]) {
@@ -38,12 +45,12 @@ export default function AnalyticsTab({
                     const empObj = employees.find(e => e.id === app.employee_id);
                     if (empObj) {
                         if (empObj.salary_type === 'percentage' && empObj.salary_value) {
-                            const earned = (price * empObj.salary_value) / 100;
+                            const earned = (price * Number(empObj.salary_value)) / 100;
                             eStats[app.employee_id].earned += earned;
                             payroll += earned;
                         } else if (empObj.salary_type === 'fixed' && empObj.salary_value) {
-                            eStats[app.employee_id].earned += empObj.salary_value;
-                            payroll += empObj.salary_value;
+                            eStats[app.employee_id].earned += Number(empObj.salary_value);
+                            payroll += Number(empObj.salary_value);
                         }
                     }
                 }

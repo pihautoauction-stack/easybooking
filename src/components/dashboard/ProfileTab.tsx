@@ -13,23 +13,12 @@ const DAYS = [
     { id: 'sun', label: 'Вс' }
 ];
 
-export default function ProfileTab({
-    handleSetCustomLink,
-    customLinkInput, setCustomLinkInput,
-    handleAddEmployee,
-    handleDeleteEmployee,
-    handleUploadPortfolioImage,
-    handleRemovePortfolioImage,
-    uploadingPortfolio,
-    handleAddBreak,
-    handleDeleteBreak,
-    handleRemoveBreak,
-    handleSaveProfile, saving,
-    newEmpName, setNewEmpName,
-    newEmpSpec, setNewEmpSpec,
-    newEmpCommission, setNewEmpCommission,
-    addingEmp,
-}: any) {
+import { createClient } from "@/lib/supabase/client";
+import { useAppActions } from "@/store/actions";
+
+const supabase = createClient();
+
+export default function ProfileTab() {
     const {
         user, role,
         businessName, setBusinessName,
@@ -47,8 +36,101 @@ export default function ProfileTab({
         clientLink
     } = useProfileStore();
 
+    const { fetchAllData } = useAppActions();
+
     const [settingsMode, setSettingsMode] = useState<'profile' | 'app'>('profile');
     const [profileTab, setProfileTab] = useState<'general' | 'schedule' | 'gallery' | 'team' | 'promo'>('general');
+
+    const [customLinkInput, setCustomLinkInput] = useState("");
+    const [addingEmp, setAddingEmp] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
+    const [newEmpName, setNewEmpName] = useState("");
+    const [newEmpSpec, setNewEmpSpec] = useState("");
+    const [newEmpCommission, setNewEmpCommission] = useState("");
+
+    const handleSaveProfile = async () => {
+        if (!user) return;
+        setSaving(true);
+        try {
+            const { error } = await supabase.from('profiles').update({
+                business_name: businessName,
+                username: username,
+                schedule_step: scheduleStep,
+                breaks: breaks ? JSON.stringify(breaks) : "[]",
+                weekly_settings: weeklySettings ? JSON.stringify(weeklySettings) : "{}",
+                social_links: socialLinks ? JSON.stringify(socialLinks) : "{}",
+                telegram_chat_id: telegramChatId,
+                modules_config: modulesConfig ? JSON.stringify(modulesConfig) : "{}"
+            }).eq('id', user.id);
+            if (error) throw error;
+            alert("Настройки успешно сохранены!");
+            await fetchAllData(user.id, true);
+        } catch (err: any) {
+            alert("Ошибка: " + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleAddBreak = () => {
+        if (!newBreakStart || !newBreakEnd) return;
+        setBreaks([...(breaks || []), { start: newBreakStart, end: newBreakEnd }]);
+        setNewBreakStart('');
+        setNewBreakEnd('');
+    };
+
+    const handleRemoveBreak = (idx: number) => {
+        setBreaks((breaks || []).filter((_: any, i: number) => i !== idx));
+    };
+
+    const handleAddEmployee = async () => {
+        if (!user || !newEmpName) return;
+        setAddingEmp(true);
+        const { error } = await supabase.from('employees').insert({
+            salon_id: user.id,
+            name: newEmpName,
+            specialty: newEmpSpec,
+            commission_rate: newEmpCommission ? Number(newEmpCommission) : 0
+        });
+        if (!error) {
+            setNewEmpName("");
+            setNewEmpSpec("");
+            setNewEmpCommission("");
+            await fetchAllData(user.id, true);
+        }
+        setAddingEmp(false);
+    };
+
+    const handleDeleteEmployee = async (id: string) => {
+        if (!confirm("Удалить сотрудника? Все его/её записи останутся.")) return;
+        await supabase.from('employees').delete().eq('id', id);
+        await fetchAllData(user.id, true);
+    };
+
+    const handleUploadPortfolioImage = async (e: any) => {
+        if (!user || !e.target.files || e.target.files.length === 0) return;
+        setUploadingPortfolio(true);
+        const file = e.target.files[0];
+        const ext = file.name.split('.').pop();
+        const fname = `${user.id}/${Date.now()}.${ext}`;
+        const { data, error } = await supabase.storage.from("portfolio").upload(fname, file);
+        if (!error && data) {
+            const { data: { publicUrl } } = supabase.storage.from("portfolio").getPublicUrl(data.path);
+            const newUrls = [...(portfolioUrls || []), publicUrl];
+            await supabase.from("profiles").update({ portfolio_urls: JSON.stringify(newUrls) }).eq("id", user.id);
+            alert("Фото успешно добавлено");
+            await fetchAllData(user.id, true);
+        }
+        setUploadingPortfolio(false);
+    };
+
+    const handleRemovePortfolioImage = async (url: string) => {
+        if (!confirm("Удалить фото?")) return;
+        const newUrls = (portfolioUrls || []).filter((u: string) => u !== url);
+        await supabase.from("profiles").update({ portfolio_urls: JSON.stringify(newUrls) }).eq("id", user.id);
+        await fetchAllData(user.id, true);
+    };
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-6">
